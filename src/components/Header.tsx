@@ -13,7 +13,10 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
+import PersonIcon from '@mui/icons-material/Person';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import Link from 'next/link';
+import { useWallet } from '@solana/wallet-adapter-react';
 
 const GAMES = [
   { label: 'Checkers', value: 'checkers', maxPlayers: 2 },
@@ -23,6 +26,7 @@ const GAMES = [
 ];
 
 export default function Header() {
+  const { publicKey } = useWallet();
   const [open, setOpen] = useState(false);
   const [selectedGame, setSelectedGame] = useState('checkers');
   const [maxPlayers, setMaxPlayers] = useState(2);
@@ -49,6 +53,16 @@ export default function Header() {
           Crypto Boards
         </Typography>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {publicKey && (
+            <Button
+              component={Link}
+              href="/profile"
+              startIcon={<PersonIcon />}
+              sx={{ color: 'text.primary' }}
+            >
+              Profile
+            </Button>
+          )}
           <WalletMultiButton />
           <Button
             variant="contained"
@@ -57,7 +71,7 @@ export default function Header() {
             onClick={handleOpen}
             sx={{ ml: 2 }}
           >
-            Create Gamer
+            Create Game
           </Button>
         </div>
       </Toolbar>
