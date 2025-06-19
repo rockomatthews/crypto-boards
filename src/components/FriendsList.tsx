@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import {
   Box,
@@ -40,13 +40,7 @@ export const FriendsList: FC = () => {
   const [isAddingFriend, setIsAddingFriend] = useState(false);
   const [newFriendAddress, setNewFriendAddress] = useState('');
 
-  useEffect(() => {
-    if (publicKey) {
-      fetchFriends();
-    }
-  }, [publicKey]);
-
-  const fetchFriends = async () => {
+  const fetchFriends = useCallback(async () => {
     if (!publicKey) return;
 
     try {
@@ -62,7 +56,13 @@ export const FriendsList: FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [publicKey]);
+
+  useEffect(() => {
+    if (publicKey) {
+      fetchFriends();
+    }
+  }, [publicKey, fetchFriends]);
 
   const addFriend = async () => {
     if (!publicKey || !newFriendAddress) return;

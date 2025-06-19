@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Dialog,
@@ -51,13 +51,7 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
   const [friends, setFriends] = useState<Array<{ id: string; username: string; wallet_address: string }>>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (open && publicKey) {
-      fetchFriends();
-    }
-  }, [open, publicKey]);
-
-  const fetchFriends = async () => {
+  const fetchFriends = useCallback(async () => {
     if (!publicKey) return;
 
     try {
@@ -69,7 +63,13 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
     } catch (error) {
       console.error('Error fetching friends:', error);
     }
-  };
+  }, [publicKey]);
+
+  useEffect(() => {
+    if (open && publicKey) {
+      fetchFriends();
+    }
+  }, [open, publicKey, fetchFriends]);
 
   const handleCreateLobby = async () => {
     if (!publicKey || !game || !entryFee) return;

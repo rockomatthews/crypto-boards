@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Box, Typography, Alert, Button, CircularProgress } from '@mui/material';
@@ -32,16 +32,7 @@ export default function MultiplayerCheckersPage() {
 
   const gameId = params.id as string;
 
-  useEffect(() => {
-    if (gameId) {
-      fetchGame();
-      // Poll for updates every 3 seconds
-      const interval = setInterval(fetchGame, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [gameId]);
-
-  const fetchGame = async () => {
+  const fetchGame = useCallback(async () => {
     try {
       const response = await fetch(`/api/games/${gameId}`);
       if (response.ok) {
@@ -56,7 +47,16 @@ export default function MultiplayerCheckersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [gameId]);
+
+  useEffect(() => {
+    if (gameId) {
+      fetchGame();
+      // Poll for updates every 3 seconds
+      const interval = setInterval(fetchGame, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [gameId, fetchGame]);
 
   const currentPlayer = game?.players.find(p => p.wallet_address === publicKey?.toString());
   const isPlayerInGame = currentPlayer && currentPlayer.game_status === 'active';

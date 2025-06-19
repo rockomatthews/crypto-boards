@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useEffect, useRef } from 'react';
+import { FC, useState, useEffect, useRef, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import {
   Box,
@@ -36,13 +36,7 @@ export const Profile: FC = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (publicKey) {
-      fetchProfile();
-    }
-  }, [publicKey]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (!publicKey) return;
 
     try {
@@ -58,7 +52,13 @@ export const Profile: FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [publicKey]);
+
+  useEffect(() => {
+    if (publicKey) {
+      fetchProfile();
+    }
+  }, [publicKey, fetchProfile]);
 
   const updateUsername = async () => {
     if (!publicKey || !newUsername) return;

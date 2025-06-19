@@ -47,19 +47,15 @@ const initializeBoard = (): BoardState => {
   return board;
 };
 
-export const CheckersBoard: FC<CheckersBoardProps> = ({ 
-  gameId, 
-  currentPlayer: playerData, 
-  isMultiplayer = false 
-}) => {
+export const CheckersBoard: FC<CheckersBoardProps> = () => {
+  // TODO: Use gameId, currentPlayer, and isMultiplayer props for multiplayer functionality in the future
+
   const [board, setBoard] = useState<BoardState>(initializeBoard());
   const [currentPlayer, setCurrentPlayer] = useState<'black' | 'white'>('black');
   const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
   const [validMoves, setValidMoves] = useState<Position[]>([]);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState<'black' | 'white' | null>(null);
-
-  // TODO: Implement multiplayer functionality using gameId, playerData, and isMultiplayer
 
   const getValidMoves = useCallback((row: number, col: number): Position[] => {
     const piece = board[row][col];

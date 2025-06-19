@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useRouter } from 'next/navigation';
 import {
@@ -36,13 +36,7 @@ export const LobbyList: FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (publicKey) {
-      fetchLobbies();
-    }
-  }, [publicKey]);
-
-  const fetchLobbies = async () => {
+  const fetchLobbies = useCallback(async () => {
     if (!publicKey) return;
 
     try {
@@ -61,7 +55,13 @@ export const LobbyList: FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [publicKey]);
+
+  useEffect(() => {
+    if (publicKey) {
+      fetchLobbies();
+    }
+  }, [publicKey, fetchLobbies]);
 
   const handleJoinLobby = async (lobby: Lobby) => {
     if (!publicKey) return;

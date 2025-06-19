@@ -1,13 +1,14 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: any
 ) {
   try {
     const { walletAddress } = await request.json();
-    const lobbyId = params.id;
+    const lobbyId = context?.params?.id;
 
     if (!walletAddress || !lobbyId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });

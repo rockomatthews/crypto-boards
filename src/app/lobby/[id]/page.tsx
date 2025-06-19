@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
 import {
@@ -61,16 +61,7 @@ export default function LobbyPage() {
 
   const lobbyId = params.id as string;
 
-  useEffect(() => {
-    if (lobbyId) {
-      fetchLobby();
-      // Poll for updates every 5 seconds
-      const interval = setInterval(fetchLobby, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [lobbyId]);
-
-  const fetchLobby = async () => {
+  const fetchLobby = useCallback(async () => {
     try {
       const response = await fetch(`/api/lobbies/${lobbyId}`);
       if (response.ok) {
@@ -85,7 +76,16 @@ export default function LobbyPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [lobbyId]);
+
+  useEffect(() => {
+    if (lobbyId) {
+      fetchLobby();
+      // Poll for updates every 5 seconds
+      const interval = setInterval(fetchLobby, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [lobbyId, fetchLobby]);
 
   const handlePayEntryFee = async () => {
     if (!publicKey || !lobby) return;
