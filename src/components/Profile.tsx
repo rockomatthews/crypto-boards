@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import {
   Box,
@@ -15,7 +15,9 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
+  Fab,
 } from '@mui/material';
+import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
 
 interface ProfileData {
   username: string;
@@ -31,6 +33,8 @@ export const Profile: FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [loading, setLoading] = useState(true);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (publicKey) {
@@ -88,6 +92,58 @@ export const Profile: FC = () => {
     }
   };
 
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !publicKey) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB');
+      return;
+    }
+
+    setUploadingImage(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('walletAddress', publicKey.toString());
+
+      const response = await fetch('/api/profile/avatar', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (profile) {
+          setProfile({
+            ...profile,
+            avatar_url: data.avatar_url,
+          });
+        }
+      } else {
+        console.error('Error uploading image:', response.statusText);
+        alert('Failed to upload image');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert('Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
   if (!publicKey) {
     return (
       <Card sx={{ maxWidth: 600, mx: 'auto', mt: 4 }}>
@@ -112,10 +168,39 @@ export const Profile: FC = () => {
     <Card sx={{ maxWidth: 600, mx: 'auto', mt: 4 }}>
       <CardContent>
         <Box display="flex" alignItems="center" mb={3}>
-          <Avatar
-            src={profile?.avatar_url}
-            sx={{ width: 80, height: 80, mr: 2 }}
-          />
+          <Box position="relative">
+            <Avatar
+              src={profile?.avatar_url}
+              sx={{ 
+                width: 80, 
+                height: 80, 
+                mr: 2,
+                bgcolor: profile?.avatar_url ? 'transparent' : 'grey.300'
+              }}
+            >
+              {!profile?.avatar_url && <AddIcon />}
+            </Avatar>
+            <Fab
+              size="small"
+              color="primary"
+              sx={{
+                position: 'absolute',
+                bottom: 0,
+                right: 16,
+                width: 32,
+                height: 32,
+                minHeight: 32,
+              }}
+              onClick={triggerFileUpload}
+              disabled={uploadingImage}
+            >
+              {uploadingImage ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <EditIcon sx={{ fontSize: 16 }} />
+              )}
+            </Fab>
+          </Box>
           <Box>
             <Typography variant="h5" gutterBottom>
               {profile?.username}
@@ -160,6 +245,15 @@ export const Profile: FC = () => {
           </Box>
         </Box>
       </CardContent>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleImageUpload}
+      />
 
       <Dialog open={isEditing} onClose={() => setIsEditing(false)}>
         <DialogTitle>Edit Username</DialogTitle>

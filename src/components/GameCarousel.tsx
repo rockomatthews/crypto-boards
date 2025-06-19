@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import Slider from 'react-slick';
 import { Box, Card, CardContent, CardMedia, Typography, Button } from '@mui/material';
 import 'slick-carousel/slick/slick.css';
@@ -14,7 +15,8 @@ const games = [
     image: '/images/checkers.jpg',
     minPlayers: 2,
     maxPlayers: 2,
-    entryFee: '0.1 SOL'
+    entryFee: '0.1 SOL',
+    route: '/checkers'
   },
   {
     id: 2,
@@ -23,7 +25,8 @@ const games = [
     image: '/images/chess.jpg',
     minPlayers: 2,
     maxPlayers: 2,
-    entryFee: '0.2 SOL'
+    entryFee: '0.2 SOL',
+    route: '/chess'
   },
   {
     id: 3,
@@ -32,7 +35,8 @@ const games = [
     image: '/images/go.jpg',
     minPlayers: 2,
     maxPlayers: 2,
-    entryFee: '0.15 SOL'
+    entryFee: '0.15 SOL',
+    route: '/go'
   },
   {
     id: 4,
@@ -41,11 +45,18 @@ const games = [
     image: '/images/poker.jpg',
     minPlayers: 2,
     maxPlayers: 6,
-    entryFee: '0.5 SOL'
+    entryFee: '0.5 SOL',
+    route: '/poker'
   }
 ];
 
 export default function GameCarousel() {
+  const router = useRouter();
+
+  const handlePlayNow = (route: string) => {
+    router.push(route);
+  };
+
   const settings = {
     dots: true,
     infinite: true,
@@ -182,6 +193,7 @@ export default function GameCarousel() {
                 <Button 
                   variant="contained" 
                   size="medium"
+                  onClick={() => handlePlayNow(game.route)}
                   sx={{ 
                     alignSelf: 'flex-start',
                     px: 3,
