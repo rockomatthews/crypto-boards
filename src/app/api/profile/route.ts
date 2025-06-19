@@ -10,27 +10,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // First, try to get the basic profile
     const result = await db`
       SELECT 
         p.username,
-        p.avatar_url,
-        COUNT(DISTINCT gp.game_id) as games_played,
-        COUNT(DISTINCT CASE WHEN gp.is_winner = true THEN gp.game_id END) as games_won,
-        COALESCE(SUM(CASE WHEN gp.is_winner = true THEN g.entry_fee * g.max_players ELSE 0 END), 0) as total_winnings
+        p.avatar_url
       FROM players p
-      LEFT JOIN game_players gp ON p.id = gp.player_id
-      LEFT JOIN games g ON gp.game_id = g.id
       WHERE p.wallet_address = ${walletAddress}
-      GROUP BY p.id, p.username, p.avatar_url
     `;
 
     if (result.length > 0) {
       return NextResponse.json({
         username: result[0].username,
         avatar_url: result[0].avatar_url,
-        games_played: Number(result[0].games_played),
-        games_won: Number(result[0].games_won),
-        total_winnings: Number(result[0].total_winnings),
+        games_played: 0,
+        games_won: 0,
+        total_winnings: 0,
       });
     } else {
       // Create new profile if it doesn't exist

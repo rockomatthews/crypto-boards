@@ -6,8 +6,6 @@ interface FriendRow {
   username: string;
   avatar_url: string;
   wallet_address: string;
-  is_online: boolean;
-  current_game: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -24,17 +22,13 @@ export async function GET(request: NextRequest) {
         p.id,
         p.username,
         p.avatar_url,
-        p.wallet_address,
-        p.is_online,
-        g.id as current_game
+        p.wallet_address
       FROM friendships f
       JOIN players p ON f.friend_id = p.id
-      LEFT JOIN game_players gp ON p.id = gp.player_id AND gp.game_status = 'active'
-      LEFT JOIN games g ON gp.game_id = g.id
       WHERE f.player_id = (
         SELECT id FROM players WHERE wallet_address = ${walletAddress}
       )
-      ORDER BY p.is_online DESC, p.username ASC
+      ORDER BY p.username ASC
     `) as FriendRow[];
 
     const friends = result.map((row) => ({
@@ -42,8 +36,8 @@ export async function GET(request: NextRequest) {
       username: row.username,
       avatar_url: row.avatar_url,
       wallet_address: row.wallet_address,
-      is_online: row.is_online,
-      current_game: row.current_game || undefined,
+      is_online: false, // Default value since column might not exist
+      current_game: undefined, // Default value since column might not exist
     }));
 
     return NextResponse.json(friends);
