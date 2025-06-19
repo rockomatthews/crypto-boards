@@ -16,7 +16,6 @@ import {
   DialogActions,
   CircularProgress,
 } from '@mui/material';
-import { db } from '../lib/db/schema';
 
 interface ProfileData {
   username: string;
@@ -43,32 +42,12 @@ export const Profile: FC = () => {
     if (!publicKey) return;
 
     try {
-      const result = await db`
-        SELECT 
-          p.username,
-          p.avatar_url,
-          COUNT(DISTINCT gp.game_id) as games_played,
-          COUNT(DISTINCT CASE WHEN gp.is_winner = true THEN gp.game_id END) as games_won,
-          COALESCE(SUM(CASE WHEN gp.is_winner = true THEN g.entry_fee * g.max_players ELSE 0 END), 0) as total_winnings
-        FROM players p
-        LEFT JOIN game_players gp ON p.id = gp.player_id
-        LEFT JOIN games g ON gp.game_id = g.id
-        WHERE p.wallet_address = ${publicKey.toString()}
-        GROUP BY p.id, p.username, p.avatar_url
-      `;
-
-      if (result.length > 0) {
-        const profileData: ProfileData = {
-          username: result[0].username,
-          avatar_url: result[0].avatar_url,
-          games_played: Number(result[0].games_played),
-          games_won: Number(result[0].games_won),
-          total_winnings: Number(result[0].total_winnings),
-        };
-        setProfile(profileData);
+      const response = await fetch(`/api/profile?walletAddress=${publicKey.toString()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setProfile(data);
       } else {
-        // Create new profile if it doesn't exist
-        await createProfile();
+        console.error('Error fetching profile:', response.statusText);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -77,48 +56,32 @@ export const Profile: FC = () => {
     }
   };
 
-  const createProfile = async () => {
-    if (!publicKey) return;
-
-    try {
-      const result = await db`
-        INSERT INTO players (wallet_address, username, avatar_url)
-        VALUES (${publicKey.toString()}, ${`Player${publicKey.toString().slice(0, 4)}`}, '')
-        RETURNING username, avatar_url
-      `;
-
-      if (result.length > 0) {
-        const newProfile: ProfileData = {
-          username: result[0].username,
-          avatar_url: result[0].avatar_url,
-          games_played: 0,
-          games_won: 0,
-          total_winnings: 0,
-        };
-        setProfile(newProfile);
-      }
-    } catch (error) {
-      console.error('Error creating profile:', error);
-    }
-  };
-
   const updateUsername = async () => {
     if (!publicKey || !newUsername) return;
 
     try {
-      const result = await db`
-        UPDATE players
-        SET username = ${newUsername}
-        WHERE wallet_address = ${publicKey.toString()}
-        RETURNING username
-      `;
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: publicKey.toString(),
+          username: newUsername,
+        }),
+      });
 
-      if (result.length > 0 && profile) {
-        setProfile({
-          ...profile,
-          username: result[0].username,
-        });
+      if (response.ok) {
+        const data = await response.json();
+        if (profile) {
+          setProfile({
+            ...profile,
+            username: data.username,
+          });
+        }
         setIsEditing(false);
+      } else {
+        console.error('Error updating username:', response.statusText);
       }
     } catch (error) {
       console.error('Error updating username:', error);

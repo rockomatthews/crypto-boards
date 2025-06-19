@@ -23,16 +23,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
-import { db } from '../lib/db/schema';
-
-interface FriendRow {
-  id: string;
-  username: string;
-  avatar_url: string;
-  wallet_address: string;
-  is_online: boolean;
-  current_game: string | null;
-}
 
 interface Friend {
   id: string;
@@ -60,32 +50,13 @@ export const FriendsList: FC = () => {
     if (!publicKey) return;
 
     try {
-      const result = (await db`
-        SELECT 
-          p.id,
-          p.username,
-          p.avatar_url,
-          p.wallet_address,
-          p.is_online,
-          g.id as current_game
-        FROM friendships f
-        JOIN players p ON f.friend_id = p.id
-        LEFT JOIN game_players gp ON p.id = gp.player_id AND gp.game_status = 'active'
-        LEFT JOIN games g ON gp.game_id = g.id
-        WHERE f.player_id = (
-          SELECT id FROM players WHERE wallet_address = ${publicKey.toString()}
-        )
-        ORDER BY p.is_online DESC, p.username ASC
-      `) as FriendRow[];
-
-      setFriends(result.map((row) => ({
-        id: row.id,
-        username: row.username,
-        avatar_url: row.avatar_url,
-        wallet_address: row.wallet_address,
-        is_online: row.is_online,
-        current_game: row.current_game || undefined,
-      })));
+      const response = await fetch(`/api/friends?walletAddress=${publicKey.toString()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setFriends(data);
+      } else {
+        console.error('Error fetching friends:', response.statusText);
+      }
     } catch (error) {
       console.error('Error fetching friends:', error);
     } finally {
@@ -97,27 +68,23 @@ export const FriendsList: FC = () => {
     if (!publicKey || !newFriendAddress) return;
 
     try {
-      // First, ensure the friend exists in the players table
-      const friendResult = await db`
-        INSERT INTO players (wallet_address, username, avatar_url)
-        VALUES (${newFriendAddress}, ${`Player${newFriendAddress.slice(0, 4)}`}, '')
-        ON CONFLICT (wallet_address) DO NOTHING
-        RETURNING id
-      `;
+      const response = await fetch('/api/friends', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: publicKey.toString(),
+          friendAddress: newFriendAddress,
+        }),
+      });
 
-      if (friendResult.length > 0) {
-        // Add the friendship
-        await db`
-          INSERT INTO friendships (player_id, friend_id)
-          SELECT 
-            (SELECT id FROM players WHERE wallet_address = ${publicKey.toString()}),
-            ${friendResult[0].id}
-          ON CONFLICT (player_id, friend_id) DO NOTHING
-        `;
-
+      if (response.ok) {
         await fetchFriends();
         setIsAddingFriend(false);
         setNewFriendAddress('');
+      } else {
+        console.error('Error adding friend:', response.statusText);
       }
     } catch (error) {
       console.error('Error adding friend:', error);
@@ -128,13 +95,15 @@ export const FriendsList: FC = () => {
     if (!publicKey) return;
 
     try {
-      await db`
-        DELETE FROM friendships
-        WHERE player_id = (SELECT id FROM players WHERE wallet_address = ${publicKey.toString()})
-        AND friend_id = ${friendId}
-      `;
+      const response = await fetch(`/api/friends?walletAddress=${publicKey.toString()}&friendId=${friendId}`, {
+        method: 'DELETE',
+      });
 
-      await fetchFriends();
+      if (response.ok) {
+        await fetchFriends();
+      } else {
+        console.error('Error removing friend:', response.statusText);
+      }
     } catch (error) {
       console.error('Error removing friend:', error);
     }
