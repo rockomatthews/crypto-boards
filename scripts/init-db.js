@@ -1,69 +1,10 @@
-import { neon } from '@neondatabase/serverless';
+const { neon } = require('@neondatabase/serverless');
 
 // Database connection
-export const db = neon(process.env.DATABASE_URL!);
-
-// Types
-export interface Player {
-  id: string;
-  wallet_address: string;
-  username: string;
-  avatar_url: string;
-  is_online: boolean;
-  created_at: Date;
-  last_login: Date;
-}
-
-export interface Game {
-  id: string;
-  game_type: 'checkers' | 'chess' | 'go' | 'poker';
-  status: 'waiting' | 'in_progress' | 'completed';
-  created_at: Date;
-  started_at: Date | null;
-  ended_at: Date | null;
-  max_players: number;
-  entry_fee: number;
-  is_private: boolean;
-  creator_id: string;
-}
-
-export interface GamePlayer {
-  id: string;
-  game_id: string;
-  player_id: string;
-  game_status: 'active' | 'completed' | 'left';
-  joined_at: Date;
-  left_at: Date | null;
-  is_winner: boolean | null;
-}
-
-// Types for game states
-export interface CheckersGameState {
-  board: Array<Array<'empty' | 'black' | 'white' | 'black-king' | 'white-king'>>;
-  currentTurn: 'black' | 'white';
-  selectedPiece: { row: number; col: number } | null;
-  validMoves: Array<{ row: number; col: number }>;
-  lastMove: { from: { row: number; col: number }; to: { row: number; col: number } } | null;
-}
-
-export interface GameState {
-  id: string;
-  game_id: string;
-  current_state: CheckersGameState; // Now using the specific type
-  last_updated: Date;
-}
-
-export interface Friendship {
-  id: string;
-  player_id: string;
-  friend_id: string;
-  status: 'pending' | 'accepted';
-  created_at: Date;
-  updated_at: Date;
-}
+const db = neon(process.env.DATABASE_URL);
 
 // Database initialization
-export async function initializeDatabase() {
+async function initializeDatabase() {
   try {
     // Create players table
     await db`
@@ -136,4 +77,17 @@ export async function initializeDatabase() {
     console.error('Error initializing database:', error);
     throw error;
   }
-} 
+}
+
+async function main() {
+  try {
+    await initializeDatabase();
+    console.log('Database initialization completed successfully');
+    process.exit(0);
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    process.exit(1);
+  }
+}
+
+main(); 
