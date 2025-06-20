@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "init-db": "ts-node scripts/init-db.ts",
-    "init-db-js": "node scripts/init-db.js"
+    "init-db-js": "node scripts/init-db.js",
+    "setup-env": "node scripts/setup-env.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
