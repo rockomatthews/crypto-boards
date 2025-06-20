@@ -62,6 +62,15 @@ export interface Friendship {
   updated_at: Date;
 }
 
+export interface GamePayout {
+  id: string;
+  game_id: string;
+  winner_wallet: string;
+  amount: number;
+  transaction_signature: string;
+  created_at: Date;
+}
+
 // Database initialization
 export async function initializeDatabase() {
   try {
@@ -115,6 +124,18 @@ export async function initializeDatabase() {
         game_id UUID REFERENCES games(id),
         current_state JSONB NOT NULL,
         last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Create game_payouts table
+    await db`
+      CREATE TABLE IF NOT EXISTS game_payouts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID REFERENCES games(id),
+        winner_wallet TEXT NOT NULL,
+        amount DECIMAL NOT NULL,
+        transaction_signature TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
 

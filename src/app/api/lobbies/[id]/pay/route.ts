@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
+import { processSolPayment } from '@/lib/solana';
 
 export async function POST(
   request: NextRequest,
@@ -56,12 +57,17 @@ export async function POST(
       return NextResponse.json({ error: 'Already paid' }, { status: 400 });
     }
 
-    // TODO: In a real implementation, this would:
-    // 1. Create a Solana transaction to transfer SOL to an escrow account
-    // 2. Wait for transaction confirmation
-    // 3. Update the database with payment confirmation
+    // Process real SOL payment
+    const paymentResult = await processSolPayment(walletAddress, lobby.entry_fee);
     
-    // For now, we'll simulate the payment by updating the player status
+    if (!paymentResult.success) {
+      return NextResponse.json({ 
+        error: 'Payment failed', 
+        details: paymentResult.error 
+      }, { status: 400 });
+    }
+
+    // Update the database with payment confirmation
     await db`
       UPDATE game_players 
       SET game_status = 'ready'
@@ -71,7 +77,8 @@ export async function POST(
     return NextResponse.json({ 
       success: true, 
       message: 'Payment successful! You are now ready to play.',
-      entryFee: lobby.entry_fee
+      entryFee: lobby.entry_fee,
+      transactionSignature: paymentResult.signature
     });
   } catch (error) {
     console.error('Error processing payment:', error);

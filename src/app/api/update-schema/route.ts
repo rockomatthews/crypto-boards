@@ -27,6 +27,18 @@ export async function POST() {
       CHECK (status IN ('waiting', 'in_progress', 'completed'));
     `;
 
+    // Create game_payouts table
+    await db`
+      CREATE TABLE IF NOT EXISTS game_payouts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID REFERENCES games(id),
+        winner_wallet TEXT NOT NULL,
+        amount DECIMAL NOT NULL,
+        transaction_signature TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     return NextResponse.json({ 
       success: true, 
       message: 'Database schema updated successfully' 
