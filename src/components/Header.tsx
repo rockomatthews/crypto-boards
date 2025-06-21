@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
-import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -17,6 +16,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import Link from 'next/link';
 import { useWallet } from '@solana/wallet-adapter-react';
+import Image from 'next/image';
 
 const GAMES = [
   { label: 'Checkers', value: 'checkers', maxPlayers: 2 },
@@ -49,9 +49,15 @@ export default function Header() {
   return (
     <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid #222' }}>
       <Toolbar sx={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Typography variant="h5" sx={{ fontWeight: 700, letterSpacing: 1 }}>
-          Crypto Boards
-        </Typography>
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+          <Image
+            src="/logo.png"
+            alt="Crypto Boards"
+            width={50}
+            height={50}
+            style={{ cursor: 'pointer' }}
+          />
+        </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           {publicKey && (
             <Button
