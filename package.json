@@ -9,7 +9,8 @@
     "lint": "next lint",
     "init-db": "ts-node scripts/init-db.ts",
     "init-db-js": "node scripts/init-db.js",
-    "setup-env": "node scripts/setup-env.js"
+    "setup-env": "node scripts/setup-env.js",
+    "add-missing-table": "node scripts/add-missing-table.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

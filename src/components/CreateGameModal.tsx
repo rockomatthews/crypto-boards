@@ -19,30 +19,61 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   IconButton,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
 } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { useWallet } from '@solana/wallet-adapter-react';
 
-interface Game {
-  id: number;
-  title: string;
-  description: string;
-  image: string;
-  minPlayers: number;
-  maxPlayers: number;
-  route: string;
-}
-
 interface CreateGameModalProps {
   open: boolean;
   onClose: () => void;
-  game: Game | null;
 }
+
+const GAME_OPTIONS = [
+  {
+    id: 1,
+    title: 'Checkers',
+    description: 'Classic strategy game with a crypto twist. Play and earn!',
+    image: '/images/checkers.jpg',
+    minPlayers: 2,
+    maxPlayers: 2,
+    route: '/checkers'
+  },
+  {
+    id: 2,
+    title: 'Chess',
+    description: 'The ultimate battle of wits. Stake your SOL and prove your mastery.',
+    image: '/images/chess.jpg',
+    minPlayers: 2,
+    maxPlayers: 2,
+    route: '/chess'
+  },
+  {
+    id: 3,
+    title: 'Go',
+    description: 'Ancient strategy game meets modern crypto gaming.',
+    image: '/images/go.jpg',
+    minPlayers: 2,
+    maxPlayers: 2,
+    route: '/go'
+  },
+  {
+    id: 4,
+    title: 'Poker',
+    description: 'Texas Hold\'em with crypto stakes. Play with friends or join public tables.',
+    image: '/images/poker.jpg',
+    minPlayers: 2,
+    maxPlayers: 6,
+    route: '/poker'
+  }
+];
 
 export const CreateGameModal: FC<CreateGameModalProps> = ({
   open,
   onClose,
-  game,
 }) => {
   const { publicKey } = useWallet();
   const router = useRouter();
@@ -50,6 +81,8 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [friends, setFriends] = useState<Array<{ id: string; username: string; wallet_address: string }>>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedGameId, setSelectedGameId] = useState<number>(GAME_OPTIONS[0].id);
+  const selectedGame = GAME_OPTIONS.find(g => g.id === selectedGameId)!;
 
   const fetchFriends = useCallback(async () => {
     if (!publicKey) return;
@@ -72,8 +105,7 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
   }, [open, publicKey, fetchFriends]);
 
   const handleCreateLobby = async () => {
-    if (!publicKey || !game || !entryFee) return;
-
+    if (!publicKey || !selectedGame || !entryFee) return;
     setLoading(true);
     try {
       const response = await fetch('/api/lobbies', {
@@ -82,11 +114,11 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          gameType: game.title.toLowerCase(),
+          gameType: selectedGame.title.toLowerCase(),
           entryFee: parseFloat(entryFee),
           creatorWalletAddress: publicKey.toString(),
           invitedPlayers: selectedFriends,
-          maxPlayers: game.maxPlayers,
+          maxPlayers: selectedGame.maxPlayers,
         }),
       });
 
@@ -118,7 +150,7 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">
-            Create {game?.title} Lobby
+            Create Game Lobby
           </Typography>
           <IconButton onClick={onClose} size="small">
             <CloseIcon />
@@ -127,6 +159,20 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
       </DialogTitle>
       
       <DialogContent>
+        <FormControl fullWidth sx={{ mb: 3 }}>
+          <InputLabel id="game-type-label">Game Type</InputLabel>
+          <Select
+            labelId="game-type-label"
+            value={selectedGameId}
+            label="Game Type"
+            onChange={e => setSelectedGameId(Number(e.target.value))}
+          >
+            {GAME_OPTIONS.map(game => (
+              <MenuItem key={game.id} value={game.id}>{game.title}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
         <Box sx={{ mb: 3 }}>
           <Typography variant="body2" color="text.secondary" gutterBottom>
             Set the entry fee for this game. All players must pay this amount to join.
@@ -183,13 +229,13 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
             Game Summary
           </Typography>
           <Typography variant="body2">
-            • Game: {game?.title}
+            • Game: {selectedGame.title}
           </Typography>
           <Typography variant="body2">
             • Entry Fee: {entryFee || '0'} SOL
           </Typography>
           <Typography variant="body2">
-            • Players: {selectedFriends.length + 1}/{game?.maxPlayers}
+            • Players: {selectedFriends.length + 1}/{selectedGame.maxPlayers}
           </Typography>
           <Typography variant="body2">
             • Type: {selectedFriends.length > 0 ? 'Private' : 'Public'}

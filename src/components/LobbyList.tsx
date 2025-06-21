@@ -173,10 +173,13 @@ export const LobbyList: FC = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 transition: 'transform 0.2s',
+                cursor: 'pointer',
                 '&:hover': {
                   transform: 'translateY(-2px)',
+                  boxShadow: 6,
                 }
               }}
+              onClick={() => handleJoinLobby(lobby)}
             >
               <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
