@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -90,7 +90,7 @@ export default function GameHistory({ playerId }: GameHistoryProps) {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
 
-  const fetchGameHistory = async (newOffset = 0) => {
+  const fetchGameHistory = useCallback(async (newOffset = 0) => {
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -119,11 +119,11 @@ export default function GameHistory({ playerId }: GameHistoryProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [playerId]);
 
   useEffect(() => {
     fetchGameHistory();
-  }, [playerId]);
+  }, [fetchGameHistory]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);

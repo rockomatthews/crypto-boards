@@ -52,16 +52,13 @@ const games = [
 
 export default function GameCarousel() {
   const [modalOpen, setModalOpen] = useState(false);
-  const [selectedGame, setSelectedGame] = useState<typeof games[0] | null>(null);
 
-  const handlePlayNow = (game: typeof games[0]) => {
-    setSelectedGame(game);
+  const handlePlayNow = () => {
     setModalOpen(true);
   };
 
   const handleCloseModal = () => {
     setModalOpen(false);
-    setSelectedGame(null);
   };
 
   const settings = {
@@ -201,7 +198,7 @@ export default function GameCarousel() {
                   <Button 
                     variant="contained" 
                     size="medium"
-                    onClick={() => handlePlayNow(game)}
+                    onClick={() => handlePlayNow()}
                     sx={{ 
                       alignSelf: 'flex-start',
                       px: 3,
@@ -225,7 +222,6 @@ export default function GameCarousel() {
       <CreateGameModal
         open={modalOpen}
         onClose={handleCloseModal}
-        game={selectedGame}
       />
     </>
   );
