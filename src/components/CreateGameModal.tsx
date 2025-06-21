@@ -224,20 +224,20 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
           )}
         </Box>
 
-        <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-          <Typography variant="subtitle2" gutterBottom>
+        <Box sx={{ p: 2, bgcolor: 'grey.800', borderRadius: 1 }}>
+          <Typography variant="subtitle2" gutterBottom sx={{ color: 'white', fontWeight: 'bold' }}>
             Game Summary
           </Typography>
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ color: 'grey.300' }}>
             • Game: {selectedGame.title}
           </Typography>
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ color: 'grey.300' }}>
             • Entry Fee: {entryFee || '0'} SOL
           </Typography>
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ color: 'grey.300' }}>
             • Players: {selectedFriends.length + 1}/{selectedGame.maxPlayers}
           </Typography>
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ color: 'grey.300' }}>
             • Type: {selectedFriends.length > 0 ? 'Private' : 'Public'}
           </Typography>
         </Box>

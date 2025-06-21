@@ -13,6 +13,7 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import AddCircleIcon from '@mui/icons-material/AddCircle';
 import PersonIcon from '@mui/icons-material/Person';
+import ChatIcon from '@mui/icons-material/Chat';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import Link from 'next/link';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -25,7 +26,11 @@ const GAMES = [
   { label: 'Poker', value: 'poker', maxPlayers: 6 },
 ];
 
-export default function Header() {
+interface HeaderProps {
+  onChatToggle?: () => void;
+}
+
+export default function Header({ onChatToggle }: HeaderProps = {}) {
   const { publicKey } = useWallet();
   const [open, setOpen] = useState(false);
   const [selectedGame, setSelectedGame] = useState('checkers');
@@ -60,14 +65,23 @@ export default function Header() {
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           {publicKey && (
-            <Button
-              component={Link}
-              href="/profile"
-              startIcon={<PersonIcon />}
-              sx={{ color: 'text.primary' }}
-            >
-              Profile
-            </Button>
+            <>
+              <Button
+                component={Link}
+                href="/profile"
+                startIcon={<PersonIcon />}
+                sx={{ color: 'text.primary' }}
+              >
+                Profile
+              </Button>
+              <Button
+                startIcon={<ChatIcon />}
+                onClick={onChatToggle}
+                sx={{ color: 'text.primary' }}
+              >
+                Chat
+              </Button>
+            </>
           )}
           <WalletMultiButton />
           <Button

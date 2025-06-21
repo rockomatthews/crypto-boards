@@ -80,6 +80,23 @@ export interface GameRefund {
   created_at: Date;
 }
 
+export interface ChatMessage {
+  id: string;
+  sender_id: string;
+  content: string;
+  message_type: 'text' | 'game_invite' | 'friend_request';
+  created_at: Date;
+  is_global: boolean;
+  recipient_id?: string;
+}
+
+export interface OnlineUser {
+  id: string;
+  player_id: string;
+  last_seen: Date;
+  is_online: boolean;
+}
+
 // Database initialization
 export async function initializeDatabase() {
   try {
@@ -157,6 +174,29 @@ export async function initializeDatabase() {
         amount DECIMAL NOT NULL,
         transaction_signature TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Create chat_messages table
+    await db`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        sender_id UUID REFERENCES players(id),
+        content TEXT NOT NULL,
+        message_type TEXT NOT NULL DEFAULT 'text',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        is_global BOOLEAN NOT NULL DEFAULT true,
+        recipient_id UUID REFERENCES players(id)
+      );
+    `;
+
+    // Create online_users table
+    await db`
+      CREATE TABLE IF NOT EXISTS online_users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        player_id UUID REFERENCES players(id) UNIQUE,
+        last_seen TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        is_online BOOLEAN NOT NULL DEFAULT true
       );
     `;
 
