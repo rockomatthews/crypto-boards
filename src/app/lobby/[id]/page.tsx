@@ -94,11 +94,19 @@ export default function LobbyPage() {
 
     setPaying(true);
     try {
-      // Create Solana connection
-      const connection = new Connection(
-        process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
-        'confirmed'
-      );
+      // Create Solana connection with the correct RPC URL
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
+      console.log('Using RPC URL:', rpcUrl);
+      
+      const connection = new Connection(rpcUrl, 'confirmed');
+
+      // Test the connection first
+      try {
+        await connection.getSlot();
+      } catch (connectionError) {
+        console.error('RPC connection failed:', connectionError);
+        throw new Error('Unable to connect to Solana network. Please check your internet connection and try again.');
+      }
 
       // Create the transaction
       const transaction = new Transaction();
@@ -114,16 +122,40 @@ export default function LobbyPage() {
 
       transaction.add(transferInstruction);
 
-      // Get recent blockhash
-      const { blockhash } = await connection.getLatestBlockhash();
+      // Get recent blockhash with retry logic
+      let blockhash;
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
+        try {
+          const latestBlockhash = await connection.getLatestBlockhash('finalized');
+          blockhash = latestBlockhash.blockhash;
+          break;
+        } catch (blockhashError) {
+          attempts++;
+          console.error(`Blockhash attempt ${attempts} failed:`, blockhashError);
+          if (attempts >= maxAttempts) {
+            throw new Error('Unable to get latest blockhash. Please try again.');
+          }
+          // Wait 1 second before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
       // Send transaction
       const signature = await sendTransaction(transaction, connection);
       
-      // Wait for confirmation
-      await connection.confirmTransaction(signature, 'confirmed');
+      // Wait for confirmation with timeout
+      const confirmationPromise = connection.confirmTransaction(signature, 'confirmed');
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 30000)
+      );
+      
+      await Promise.race([confirmationPromise, timeoutPromise]);
 
       // Send signature to API for verification
       const response = await fetch(`/api/lobbies/${lobbyId}/pay`, {

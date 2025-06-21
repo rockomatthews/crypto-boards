@@ -69,9 +69,10 @@ In Vercel dashboard, go to your project → Settings → Environment Variables:
 ```env
 DATABASE_URL=your_neon_connection_string
 SOLANA_RPC_URL=your_quicknode_endpoint
+NEXT_PUBLIC_SOLANA_RPC_URL=your_quicknode_endpoint
 ESCROW_PUBLIC_KEY=11111111111111111111111111111111
-NEXT_PUBLIC_SOCKET_URL=https://your-app.vercel.app
 NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
+NEXT_PUBLIC_SOCKET_URL=https://your-app.vercel.app
 ```
 
 ### 3.3 Deploy Settings

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     // Add creator to the game
     await db`
       INSERT INTO game_players (game_id, player_id, game_status)
-      VALUES (${gameId}, ${creatorId}, 'ready')
+      VALUES (${gameId}, ${creatorId}, 'waiting')
     `;
 
     // Create invitations for invited players
