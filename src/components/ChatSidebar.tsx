@@ -230,25 +230,73 @@ export default function ChatSidebar({ isVisible, onClose }: ChatSidebarProps) {
                   </Typography>
                 </Box>
               ) : (
-                messages.map((message) => (
-                  <Box
-                    key={message.id}
-                    sx={{
-                      mb: 1,
-                      p: 1,
-                      borderRadius: 1,
-                      bgcolor: message.sender_id === publicKey?.toString() ? 'primary.light' : 'grey.100',
-                      alignSelf: message.sender_id === publicKey?.toString() ? 'flex-end' : 'flex-start',
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary">
-                      {message.sender_username} • {new Date(message.created_at).toLocaleTimeString()}
-                    </Typography>
-                    <Typography variant="body2">
-                      {message.content}
-                    </Typography>
-                  </Box>
-                ))
+                messages.map((message) => {
+                  const isOwnMessage = message.sender_id === publicKey?.toString();
+                  return (
+                    <Box
+                      key={message.id}
+                      sx={{
+                        mb: 1,
+                        p: 2,
+                        borderRadius: 2,
+                        maxWidth: '85%',
+                        alignSelf: isOwnMessage ? 'flex-end' : 'flex-start',
+                        bgcolor: isOwnMessage 
+                          ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                          : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                        background: isOwnMessage
+                          ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                          : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                        color: 'white',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                        position: 'relative',
+                        '&::before': isOwnMessage ? {
+                          content: '""',
+                          position: 'absolute',
+                          right: -8,
+                          top: 10,
+                          width: 0,
+                          height: 0,
+                          borderLeft: '8px solid #764ba2',
+                          borderTop: '8px solid transparent',
+                          borderBottom: '8px solid transparent',
+                        } : {
+                          content: '""',
+                          position: 'absolute',
+                          left: -8,
+                          top: 10,
+                          width: 0,
+                          height: 0,
+                          borderRight: '8px solid #00f2fe',
+                          borderTop: '8px solid transparent',
+                          borderBottom: '8px solid transparent',
+                        }
+                      }}
+                    >
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          color: 'rgba(255,255,255,0.9)',
+                          fontWeight: 'bold',
+                          display: 'block',
+                          mb: 0.5
+                        }}
+                      >
+                        {message.sender_username} • {new Date(message.created_at).toLocaleTimeString()}
+                      </Typography>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: 'white',
+                          fontWeight: '500',
+                          lineHeight: 1.4
+                        }}
+                      >
+                        {message.content}
+                      </Typography>
+                    </Box>
+                  );
+                })
               )}
               <div ref={messagesEndRef} />
             </Box>
