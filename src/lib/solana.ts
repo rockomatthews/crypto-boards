@@ -120,6 +120,49 @@ export async function processWinnerPayout(
 }
 
 /**
+ * Process refund for canceled game
+ */
+export async function processRefund(
+  toWalletAddress: string,
+  amount: number
+): Promise<PayoutResult> {
+  try {
+    // Convert SOL amount to lamports
+    const lamports = amount * LAMPORTS_PER_SOL;
+    
+    // Create a new transaction
+    const transaction = new Transaction();
+    
+    // Add transfer instruction from escrow back to player
+    const transferInstruction = SystemProgram.transfer({
+      fromPubkey: getEscrowPublicKey(),
+      toPubkey: new PublicKey(toWalletAddress),
+      lamports: lamports,
+    });
+    
+    transaction.add(transferInstruction);
+    
+    // Note: In a real implementation, you would:
+    // 1. Use your escrow account's private key to sign
+    // 2. Send and confirm the transaction
+    
+    console.log(`Simulated refund: ${amount} SOL to ${toWalletAddress}`);
+    
+    return {
+      success: true,
+      signature: 'simulated_refund_signature_' + Date.now(),
+      amount: amount,
+    };
+  } catch (error) {
+    console.error('Error processing refund:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
  * Get SOL balance for a wallet address
  */
 export async function getSolBalance(walletAddress: string): Promise<number> {

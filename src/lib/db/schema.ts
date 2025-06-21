@@ -71,6 +71,15 @@ export interface GamePayout {
   created_at: Date;
 }
 
+export interface GameRefund {
+  id: string;
+  game_id: string;
+  player_wallet: string;
+  amount: number;
+  transaction_signature: string;
+  created_at: Date;
+}
+
 // Database initialization
 export async function initializeDatabase() {
   try {
@@ -133,6 +142,18 @@ export async function initializeDatabase() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         game_id UUID REFERENCES games(id),
         winner_wallet TEXT NOT NULL,
+        amount DECIMAL NOT NULL,
+        transaction_signature TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Create game_refunds table
+    await db`
+      CREATE TABLE IF NOT EXISTS game_refunds (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID REFERENCES games(id),
+        player_wallet TEXT NOT NULL,
         amount DECIMAL NOT NULL,
         transaction_signature TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

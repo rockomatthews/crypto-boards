@@ -21,12 +21,19 @@ import {
   Alert,
   Divider,
   Paper,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
 } from '@mui/material';
 import { 
   PlayArrow as PlayIcon, 
   Payment as PaymentIcon,
   Lock as LockIcon,
-  Public as PublicIcon 
+  Public as PublicIcon,
+  Cancel as CancelIcon,
+  ExitToApp as LeaveIcon 
 } from '@mui/icons-material';
 
 interface LobbyPlayer {
@@ -60,6 +67,8 @@ export default function LobbyPage() {
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [canceling, setCanceling] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
 
   const lobbyId = params.id as string;
 
@@ -204,6 +213,54 @@ export default function LobbyPage() {
       setError('Failed to start game');
     } finally {
       setStarting(false);
+    }
+  };
+
+  const handleCancelOrLeaveGame = async () => {
+    if (!publicKey || !lobby) return;
+
+    setShowCancelDialog(false);
+    setCanceling(true);
+    try {
+      const response = await fetch(`/api/lobbies/${lobbyId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: publicKey.toString(),
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (isCreator) {
+          // Game was canceled, show refund info and redirect
+          if (result.refunds && result.refunds.length > 0) {
+            alert(`Game canceled successfully! ${result.refunds.length} refunds processed.`);
+          } else {
+            alert('Game canceled successfully!');
+          }
+          router.push('/');
+        } else {
+          // Player left the game
+          if (result.refund) {
+            alert(`Successfully left the game! Refund of ${result.refund.amount} SOL processed.`);
+          } else {
+            alert('Successfully left the game!');
+          }
+          router.push('/');
+        }
+      } else {
+        const error = await response.json();
+        setError(error.error || 'Failed to cancel/leave game');
+      }
+    } catch (error) {
+      console.error('Error canceling/leaving game:', error);
+      setError('Failed to cancel/leave game');
+    } finally {
+      setCanceling(false);
     }
   };
 
@@ -389,6 +446,20 @@ export default function LobbyPage() {
             Back to Lobbies
           </Button>
         )}
+
+        {currentPlayer && lobby.status === 'waiting' && (
+          <Button
+            variant="outlined"
+            size="large"
+            startIcon={isCreator ? <CancelIcon /> : <LeaveIcon />}
+            onClick={() => setShowCancelDialog(true)}
+            disabled={canceling}
+            color="error"
+            sx={{ minWidth: 200 }}
+          >
+            {canceling ? 'Processing...' : (isCreator ? 'Cancel Game' : 'Leave Game')}
+          </Button>
+        )}
       </Box>
 
       {/* Game Start Info */}
@@ -399,6 +470,39 @@ export default function LobbyPage() {
           </Typography>
         </Paper>
       )}
+
+      {/* Cancel/Leave Game Confirmation Dialog */}
+      <Dialog
+        open={showCancelDialog}
+        onClose={() => setShowCancelDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {isCreator ? 'Cancel Game?' : 'Leave Game?'}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {isCreator 
+              ? 'Are you sure you want to cancel this game? All players who have paid will receive full refunds.'
+              : 'Are you sure you want to leave this game? If you have paid the entry fee, you will receive a full refund.'
+            }
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowCancelDialog(false)}>
+            Keep Playing
+          </Button>
+          <Button 
+            onClick={handleCancelOrLeaveGame} 
+            color="error" 
+            variant="contained"
+            disabled={canceling}
+          >
+            {canceling ? 'Processing...' : (isCreator ? 'Cancel Game' : 'Leave Game')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 } 
