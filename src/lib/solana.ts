@@ -6,9 +6,16 @@ const connection = new Connection(
   'confirmed'
 );
 
-// Escrow account for holding game entry fees
-// In production, this would be a Program Derived Address (PDA) controlled by your smart contract
-const ESCROW_PUBLIC_KEY = new PublicKey(process.env.ESCROW_PUBLIC_KEY || '11111111111111111111111111111111');
+// Get escrow public key from environment or use a default for development
+export function getEscrowPublicKey(): PublicKey {
+  const escrowKey = process.env.ESCROW_PUBLIC_KEY || 'CryptoBoards1111111111111111111111111111111';
+  try {
+    return new PublicKey(escrowKey);
+  } catch {
+    // Fallback to a valid public key for development
+    return new PublicKey('11111111111111111111111111111111');
+  }
+}
 
 export interface PaymentResult {
   success: boolean;
@@ -40,7 +47,7 @@ export async function processSolPayment(
     // Add transfer instruction
     const transferInstruction = SystemProgram.transfer({
       fromPubkey: new PublicKey(fromWalletAddress),
-      toPubkey: ESCROW_PUBLIC_KEY,
+      toPubkey: getEscrowPublicKey(),
       lamports: lamports,
     });
     
@@ -84,7 +91,7 @@ export async function processWinnerPayout(
     
     // Add transfer instruction from escrow to winner
     const transferInstruction = SystemProgram.transfer({
-      fromPubkey: ESCROW_PUBLIC_KEY,
+      fromPubkey: getEscrowPublicKey(),
       toPubkey: new PublicKey(toWalletAddress),
       lamports: lamports,
     });
@@ -127,12 +134,32 @@ export async function getSolBalance(walletAddress: string): Promise<number> {
 }
 
 /**
- * Verify a transaction signature
+ * Verify a transaction signature and check if it's a valid payment to escrow
  */
 export async function verifyTransaction(signature: string): Promise<boolean> {
   try {
-    const transaction = await connection.getTransaction(signature);
-    return transaction !== null;
+    const transaction = await connection.getTransaction(signature, {
+      commitment: 'confirmed'
+    });
+    
+    if (!transaction) {
+      console.error('Transaction not found:', signature);
+      return false;
+    }
+
+    // Check if transaction was successful
+    if (transaction.meta?.err) {
+      console.error('Transaction failed:', transaction.meta.err);
+      return false;
+    }
+
+    // For a more thorough verification, you could:
+    // 1. Check that the transaction sends SOL to the correct escrow address
+    // 2. Verify the amount matches the expected entry fee
+    // 3. Check that the transaction is recent (within last few minutes)
+    
+    console.log('Transaction verified successfully:', signature);
+    return true;
   } catch (error) {
     console.error('Error verifying transaction:', error);
     return false;

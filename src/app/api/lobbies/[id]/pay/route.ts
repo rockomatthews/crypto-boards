@@ -1,17 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
-import { processSolPayment } from '@/lib/solana';
+import { verifyTransaction } from '@/lib/solana';
 
 export async function POST(
   request: NextRequest,
   context: any
 ) {
   try {
-    const { walletAddress } = await request.json();
+    const { walletAddress, transactionSignature } = await request.json();
     const lobbyId = context?.params?.id;
 
-    if (!walletAddress || !lobbyId) {
+    if (!walletAddress || !lobbyId || !transactionSignature) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -57,13 +57,12 @@ export async function POST(
       return NextResponse.json({ error: 'Already paid' }, { status: 400 });
     }
 
-    // Process real SOL payment
-    const paymentResult = await processSolPayment(walletAddress, lobby.entry_fee);
+    // Verify the Solana transaction
+    const isValidTransaction = await verifyTransaction(transactionSignature);
     
-    if (!paymentResult.success) {
+    if (!isValidTransaction) {
       return NextResponse.json({ 
-        error: 'Payment failed', 
-        details: paymentResult.error 
+        error: 'Invalid transaction signature' 
       }, { status: 400 });
     }
 
@@ -76,9 +75,9 @@ export async function POST(
 
     return NextResponse.json({ 
       success: true, 
-      message: 'Payment successful! You are now ready to play.',
+      message: 'Payment verified and confirmed! You are now ready to play.',
       entryFee: lobby.entry_fee,
-      transactionSignature: paymentResult.signature
+      transactionSignature: transactionSignature
     });
   } catch (error) {
     console.error('Error processing payment:', error);

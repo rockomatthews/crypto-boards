@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { Connection, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { getEscrowPublicKey } from '@/lib/solana';
 import {
   Box,
   Card,
@@ -52,7 +54,7 @@ interface Lobby {
 export default function LobbyPage() {
   const params = useParams();
   const router = useRouter();
-  const { publicKey } = useWallet();
+  const { publicKey, sendTransaction } = useWallet();
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,10 +90,42 @@ export default function LobbyPage() {
   }, [lobbyId, fetchLobby]);
 
   const handlePayEntryFee = async () => {
-    if (!publicKey || !lobby) return;
+    if (!publicKey || !lobby || !sendTransaction) return;
 
     setPaying(true);
     try {
+      // Create Solana connection
+      const connection = new Connection(
+        process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
+        'confirmed'
+      );
+
+      // Create the transaction
+      const transaction = new Transaction();
+      
+      // Get the proper escrow address
+      const escrowPublicKey = getEscrowPublicKey();
+      
+      const transferInstruction = SystemProgram.transfer({
+        fromPubkey: publicKey,
+        toPubkey: escrowPublicKey,
+        lamports: lobby.entry_fee * LAMPORTS_PER_SOL,
+      });
+
+      transaction.add(transferInstruction);
+
+      // Get recent blockhash
+      const { blockhash } = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = publicKey;
+
+      // Send transaction
+      const signature = await sendTransaction(transaction, connection);
+      
+      // Wait for confirmation
+      await connection.confirmTransaction(signature, 'confirmed');
+
+      // Send signature to API for verification
       const response = await fetch(`/api/lobbies/${lobbyId}/pay`, {
         method: 'POST',
         headers: {
@@ -99,6 +133,7 @@ export default function LobbyPage() {
         },
         body: JSON.stringify({
           walletAddress: publicKey.toString(),
+          transactionSignature: signature,
         }),
       });
 
@@ -106,11 +141,11 @@ export default function LobbyPage() {
         await fetchLobby(); // Refresh lobby data
       } else {
         const error = await response.json();
-        setError(error.error || 'Failed to pay entry fee');
+        setError(error.error || 'Failed to verify payment');
       }
     } catch (error) {
       console.error('Error paying entry fee:', error);
-      setError('Failed to pay entry fee');
+      setError(error instanceof Error ? error.message : 'Failed to pay entry fee');
     } finally {
       setPaying(false);
     }
