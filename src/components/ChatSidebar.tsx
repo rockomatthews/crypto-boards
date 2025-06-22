@@ -202,12 +202,14 @@ export default function ChatSidebar({
         },
         body: JSON.stringify({
           walletAddress: publicKey.toString(),
-          friendWalletAddress: onlineUsers.find(u => u.id === userId)?.wallet_address,
+          friendAddress: onlineUsers.find(u => u.id === userId)?.wallet_address,
         }),
       });
 
       if (response.ok) {
         fetchOnlineUsers();
+      } else {
+        console.error('Error adding friend:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error adding friend:', error);
