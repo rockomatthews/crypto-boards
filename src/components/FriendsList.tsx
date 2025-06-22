@@ -22,7 +22,8 @@ import {
   Chip,
   CircularProgress,
 } from '@mui/material';
-import { Delete as DeleteIcon, Add as AddIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Add as AddIcon, ContactPhone as ContactPhoneIcon } from '@mui/icons-material';
+import { useChatContext } from './ChatContext';
 
 interface Friend {
   id: string;
@@ -35,6 +36,7 @@ interface Friend {
 
 export const FriendsList: FC = () => {
   const { publicKey } = useWallet();
+  const { openFindAllFriends } = useChatContext();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddingFriend, setIsAddingFriend] = useState(false);
@@ -134,19 +136,39 @@ export const FriendsList: FC = () => {
       <CardContent>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
           <Typography variant="h6">Friends</Typography>
-          <Button
-            startIcon={<AddIcon />}
-            variant="contained"
-            onClick={() => setIsAddingFriend(true)}
-          >
-            Add Friend
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              startIcon={<ContactPhoneIcon />}
+              variant="contained"
+              onClick={openFindAllFriends}
+              sx={{ 
+                background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #1976D2 30%, #0288D1 90%)',
+                }
+              }}
+            >
+              Find Friends
+            </Button>
+            <Button
+              startIcon={<AddIcon />}
+              variant="outlined"
+              onClick={() => setIsAddingFriend(true)}
+            >
+              Add by Wallet
+            </Button>
+          </Box>
         </Box>
 
         {friends.length === 0 ? (
-          <Typography color="text.secondary" align="center">
-            No friends yet. Add some friends to start playing together!
-          </Typography>
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography color="text.secondary" gutterBottom>
+              No friends yet. Add some friends to start playing together!
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Use &quot;Find Friends&quot; to discover friends from your contacts, or &quot;Add by Wallet&quot; to add someone directly.
+            </Typography>
+          </Box>
         ) : (
           <List>
             {friends.map((friend) => (
@@ -191,7 +213,7 @@ export const FriendsList: FC = () => {
       </CardContent>
 
       <Dialog open={isAddingFriend} onClose={() => setIsAddingFriend(false)}>
-        <DialogTitle>Add Friend</DialogTitle>
+        <DialogTitle>Add Friend by Wallet</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus

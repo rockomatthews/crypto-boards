@@ -5,6 +5,7 @@ import "../styles/phone-input.css";
 import { WalletProviders } from '../components/WalletProviders';
 import ThemeRegistry from '../components/ThemeRegistry';
 import ClientHeader from '../components/ClientHeader';
+import { ChatProvider } from '../components/ChatContext';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,8 +32,10 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <ThemeRegistry>
           <WalletProviders>
-            <ClientHeader />
-            {children}
+            <ChatProvider>
+              <ClientHeader />
+              {children}
+            </ChatProvider>
           </WalletProviders>
         </ThemeRegistry>
       </body>

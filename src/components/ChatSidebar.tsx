@@ -62,18 +62,54 @@ interface OnlineUser {
 interface ChatSidebarProps {
   isVisible: boolean;
   onClose: () => void;
+  initialActiveTab?: number;
+  onTabChange?: (tab: number) => void;
+  initialShowPhoneFinder?: boolean;
+  onPhoneFinderChange?: (show: boolean) => void;
 }
 
-export default function ChatSidebar({ isVisible, onClose }: ChatSidebarProps) {
+export default function ChatSidebar({ 
+  isVisible, 
+  onClose,
+  initialActiveTab = 0,
+  onTabChange,
+  initialShowPhoneFinder = false,
+  onPhoneFinderChange
+}: ChatSidebarProps) {
   const { publicKey } = useWallet();
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPhoneFinder, setShowPhoneFinder] = useState(false);
+  const [showPhoneFinder, setShowPhoneFinder] = useState(initialShowPhoneFinder);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Update local state when props change
+  useEffect(() => {
+    setActiveTab(initialActiveTab);
+  }, [initialActiveTab]);
+
+  useEffect(() => {
+    setShowPhoneFinder(initialShowPhoneFinder);
+  }, [initialShowPhoneFinder]);
+
+  // Handle tab change
+  const handleTabChange = (newValue: number) => {
+    setActiveTab(newValue);
+    if (onTabChange) {
+      onTabChange(newValue);
+    }
+  };
+
+  // Handle phone finder change
+  const handlePhoneFinderChange = (show: boolean) => {
+    setShowPhoneFinder(show);
+    if (onPhoneFinderChange) {
+      onPhoneFinderChange(show);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -216,7 +252,7 @@ export default function ChatSidebar({ isVisible, onClose }: ChatSidebarProps) {
       {/* Tabs */}
       <Tabs
         value={activeTab}
-        onChange={(_, newValue) => setActiveTab(newValue)}
+        onChange={(_, newValue) => handleTabChange(newValue)}
         variant="fullWidth"
         sx={{ borderBottom: '1px solid #e0e0e0' }}
       >
@@ -357,7 +393,7 @@ export default function ChatSidebar({ isVisible, onClose }: ChatSidebarProps) {
                 fullWidth
                 variant="outlined"
                 startIcon={<ContactPhoneIcon />}
-                onClick={() => setShowPhoneFinder(true)}
+                onClick={() => handlePhoneFinderChange(true)}
                 sx={{ mt: 1 }}
               >
                 🔍 Find All Friends
@@ -449,7 +485,7 @@ export default function ChatSidebar({ isVisible, onClose }: ChatSidebarProps) {
       
       <FindFriendsByPhone
         open={showPhoneFinder}
-        onClose={() => setShowPhoneFinder(false)}
+        onClose={() => handlePhoneFinderChange(false)}
       />
     </Paper>
   );

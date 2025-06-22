@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useChatContext } from './ChatContext';
 
 const Header = dynamic(() => import('./Header'), {
   ssr: false,
@@ -16,7 +16,14 @@ const FloatingChatButton = dynamic(() => import('./FloatingChatButton'), {
 });
 
 export default function ClientHeader() {
-  const [isChatVisible, setIsChatVisible] = useState(false);
+  const { 
+    isChatVisible, 
+    setIsChatVisible, 
+    activeTab, 
+    setActiveTab,
+    showPhoneFinder,
+    setShowPhoneFinder 
+  } = useChatContext();
 
   const handleChatToggle = () => {
     setIsChatVisible(!isChatVisible);
@@ -27,7 +34,11 @@ export default function ClientHeader() {
       <Header />
       <ChatSidebar 
         isVisible={isChatVisible} 
-        onClose={() => setIsChatVisible(false)} 
+        onClose={() => setIsChatVisible(false)}
+        initialActiveTab={activeTab}
+        onTabChange={setActiveTab}
+        initialShowPhoneFinder={showPhoneFinder}
+        onPhoneFinderChange={setShowPhoneFinder}
       />
       <FloatingChatButton
         isOpen={isChatVisible}
