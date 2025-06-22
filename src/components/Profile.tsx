@@ -34,7 +34,7 @@ export const Profile: FC = () => {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newUsername, setNewUsername] = useState('');
-  const [newPhoneNumber, setNewPhoneNumber] = useState('');
+  const [newPhoneNumber, setNewPhoneNumber] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -275,7 +275,10 @@ export const Profile: FC = () => {
           />
           <PhoneInput
             value={newPhoneNumber}
-            onChange={(value) => setNewPhoneNumber(value || '')}
+            onChange={(value) => {
+              console.log('PhoneInput onChange:', value);
+              setNewPhoneNumber(value || '');
+            }}
             label="Phone Number (Private)"
             placeholder="Select country and enter number"
             helperText="Your phone number is private and only used to help friends find you"
