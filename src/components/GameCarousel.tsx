@@ -22,7 +22,7 @@ const games = [
     id: 2,
     title: 'Chess',
     description: 'The ultimate battle of wits. Stake your SOL and prove your mastery.',
-    image: '/images/chess.jpg',
+    image: '/images/chess.png',
     minPlayers: 2,
     maxPlayers: 2,
     entryFee: '0.2 SOL',
@@ -30,9 +30,9 @@ const games = [
   },
   {
     id: 3,
-    title: 'Go',
-    description: 'Ancient strategy game meets modern crypto gaming.',
-    image: '/images/go.jpg',
+    title: 'Stratego',
+    description: 'The most fun board game ever hooked on SOL',
+    image: '/images/stratego.png',
     minPlayers: 2,
     maxPlayers: 2,
     entryFee: '0.15 SOL',
@@ -40,9 +40,9 @@ const games = [
   },
   {
     id: 4,
-    title: 'Poker',
-    description: 'Texas Hold\'em with crypto stakes. Play with friends or join public tables.',
-    image: '/images/poker.jpg',
+    title: 'Shoots & Ladders',
+    description: 'Stay tuned and plan to get vertical',
+    image: '/images/shootsAndLadders.png',
     minPlayers: 2,
     maxPlayers: 6,
     entryFee: '0.5 SOL',
@@ -94,6 +94,50 @@ export default function GameCarousel() {
 
   return (
     <>
+      <Box sx={{ 
+        width: '100%', 
+        maxWidth: '1600px', 
+        mx: 'auto', 
+        mt: 4,
+        mb: 6,
+        px: { xs: 2, md: 6 },
+      }}>
+        {/* Title Section */}
+        <Box sx={{ 
+          textAlign: 'center', 
+          mb: 4,
+          px: 2 
+        }}>
+          <Typography 
+            variant="h3" 
+            component="h1" 
+            sx={{ 
+              fontFamily: 'MK5Style, monospace',
+              fontSize: { xs: '1.8rem', sm: '2.5rem', md: '3rem' },
+              color: '#9c27b0',
+              textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+              lineHeight: 1.2,
+              mb: 2
+            }}
+          >
+            In the land of no copyRIGHTS, will you bet your SOL?
+          </Typography>
+          <Typography 
+            variant="h4" 
+            component="h2" 
+            sx={{ 
+              fontFamily: 'MK5Style, monospace',
+              fontSize: { xs: '1.2rem', sm: '1.5rem', md: '2rem' },
+              color: '#00e676',
+              textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
+              fontStyle: 'italic'
+            }}
+          >
+            ... then why did you come here... oh come right in.
+          </Typography>
+        </Box>
+      </Box>
+
       <Box sx={{ 
         width: '100%', 
         maxWidth: '1600px', 
