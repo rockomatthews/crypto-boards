@@ -294,8 +294,8 @@ export default function LobbyPage() {
 
   const isCreator = publicKey && lobby?.creator_wallet === publicKey.toString();
   const currentPlayer = lobby?.players.find(p => p.wallet_address === publicKey?.toString());
-  const allPlayersReady = lobby?.players.every(p => p.game_status === 'ready');
-  const canStart = isCreator && allPlayersReady && lobby?.players.length >= 2;
+  const allPlayersReady = lobby && lobby.players.length >= 2 && lobby.players.every(p => p.game_status === 'ready');
+  const canStart = isCreator && allPlayersReady;
 
   if (loading) {
     return (
@@ -436,9 +436,54 @@ export default function LobbyPage() {
           </Button>
         )}
 
-        {!currentPlayer && (
+        {!currentPlayer && lobby.players.length < lobby.max_players && (
           <Button
             variant="contained"
+            size="large"
+            onClick={async () => {
+              if (!publicKey) return;
+              try {
+                const response = await fetch(`/api/lobbies/${lobbyId}/join`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    walletAddress: publicKey.toString(),
+                  }),
+                });
+
+                if (response.ok) {
+                  await fetchLobby(); // Refresh lobby data
+                } else {
+                  const error = await response.json();
+                  setError(error.error || 'Failed to join lobby');
+                }
+              } catch (error) {
+                console.error('Error joining lobby:', error);
+                setError('Failed to join lobby');
+              }
+            }}
+            sx={{ minWidth: 200 }}
+          >
+            Join Lobby
+          </Button>
+        )}
+
+        {!currentPlayer && lobby.players.length >= lobby.max_players && (
+          <Button
+            variant="outlined"
+            size="large"
+            disabled
+            sx={{ minWidth: 200 }}
+          >
+            Lobby Full
+          </Button>
+        )}
+
+        {!currentPlayer && (
+          <Button
+            variant="outlined"
             size="large"
             onClick={() => router.push('/')}
             sx={{ minWidth: 200 }}
@@ -463,10 +508,18 @@ export default function LobbyPage() {
       </Box>
 
       {/* Game Start Info */}
-      {allPlayersReady && !canStart && (
+      {lobby && lobby.players.length >= 2 && lobby.players.every(p => p.game_status === 'ready') && !canStart && (
         <Paper sx={{ p: 2, mt: 2, bgcolor: 'success.light', color: 'white' }}>
           <Typography variant="body1">
-            All players are ready! Waiting for the creator to start the game.
+            All {lobby.players.length} players are ready! Waiting for the creator to start the game.
+          </Typography>
+        </Paper>
+      )}
+
+      {lobby && lobby.players.length === 1 && lobby.players[0].game_status === 'ready' && (
+        <Paper sx={{ p: 2, mt: 2, bgcolor: 'info.light', color: 'white' }}>
+          <Typography variant="body1">
+            Waiting for more players to join. Need at least 2 players to start.
           </Typography>
         </Paper>
       )}
