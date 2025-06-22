@@ -11,6 +11,10 @@ const ChatSidebar = dynamic(() => import('./ChatSidebar'), {
   ssr: false,
 });
 
+const FloatingChatButton = dynamic(() => import('./FloatingChatButton'), {
+  ssr: false,
+});
+
 export default function ClientHeader() {
   const [isChatVisible, setIsChatVisible] = useState(false);
 
@@ -20,10 +24,15 @@ export default function ClientHeader() {
 
   return (
     <>
-      <Header onChatToggle={handleChatToggle} />
+      <Header />
       <ChatSidebar 
         isVisible={isChatVisible} 
         onClose={() => setIsChatVisible(false)} 
+      />
+      <FloatingChatButton
+        isOpen={isChatVisible}
+        onClick={handleChatToggle}
+        unreadCount={0} // TODO: Implement unread message count
       />
     </>
   );

@@ -9,6 +9,7 @@ export interface Player {
   wallet_address: string;
   username: string;
   avatar_url: string;
+  phone_number?: string;
   is_online: boolean;
   created_at: Date;
   last_login: Date;
@@ -107,6 +108,7 @@ export async function initializeDatabase() {
         wallet_address TEXT UNIQUE NOT NULL,
         username TEXT UNIQUE NOT NULL,
         avatar_url TEXT,
+        phone_number TEXT,
         is_online BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         last_login TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

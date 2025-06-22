@@ -5,6 +5,7 @@ import {
   Box,
   Typography,
   TextField,
+  Button,
   List,
   ListItem,
   ListItemAvatar,
@@ -27,8 +28,14 @@ import {
   People as PeopleIcon,
   Close as CloseIcon,
   Search as SearchIcon,
+  ContactPhone as ContactPhoneIcon,
 } from '@mui/icons-material';
 import { useWallet } from '@solana/wallet-adapter-react';
+import dynamic from 'next/dynamic';
+
+const FindFriendsByPhone = dynamic(() => import('./FindFriendsByPhone'), {
+  ssr: false,
+});
 
 interface ChatMessage {
   id: string;
@@ -65,6 +72,7 @@ export default function ChatSidebar({ isVisible, onClose }: ChatSidebarProps) {
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPhoneFinder, setShowPhoneFinder] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -345,6 +353,15 @@ export default function ChatSidebar({ isVisible, onClose }: ChatSidebarProps) {
                   ),
                 }}
               />
+              <Button
+                fullWidth
+                variant="outlined"
+                startIcon={<ContactPhoneIcon />}
+                onClick={() => setShowPhoneFinder(true)}
+                sx={{ mt: 1 }}
+              >
+                🔍 Find All Friends
+              </Button>
             </Box>
 
             {/* Users List */}
@@ -429,6 +446,11 @@ export default function ChatSidebar({ isVisible, onClose }: ChatSidebarProps) {
           </>
         )}
       </Box>
+      
+      <FindFriendsByPhone
+        open={showPhoneFinder}
+        onClose={() => setShowPhoneFinder(false)}
+      />
     </Paper>
   );
 } 

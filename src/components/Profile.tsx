@@ -22,6 +22,7 @@ import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
 interface ProfileData {
   username: string;
   avatar_url: string;
+  phone_number?: string;
   games_played: number;
   games_won: number;
   total_winnings: number;
@@ -32,6 +33,7 @@ export const Profile: FC = () => {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newUsername, setNewUsername] = useState('');
+  const [newPhoneNumber, setNewPhoneNumber] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,8 +62,8 @@ export const Profile: FC = () => {
     }
   }, [publicKey, fetchProfile]);
 
-  const updateUsername = async () => {
-    if (!publicKey || !newUsername) return;
+  const updateProfile = async () => {
+    if (!publicKey) return;
 
     try {
       const response = await fetch('/api/profile', {
@@ -71,7 +73,8 @@ export const Profile: FC = () => {
         },
         body: JSON.stringify({
           walletAddress: publicKey.toString(),
-          username: newUsername,
+          username: newUsername || undefined,
+          phoneNumber: newPhoneNumber || undefined,
         }),
       });
 
@@ -81,14 +84,15 @@ export const Profile: FC = () => {
           setProfile({
             ...profile,
             username: data.username,
+            phone_number: data.phone_number,
           });
         }
         setIsEditing(false);
       } else {
-        console.error('Error updating username:', response.statusText);
+        console.error('Error updating profile:', response.statusText);
       }
     } catch (error) {
-      console.error('Error updating username:', error);
+      console.error('Error updating profile:', error);
     }
   };
 
@@ -210,10 +214,11 @@ export const Profile: FC = () => {
               size="small"
               onClick={() => {
                 setNewUsername(profile?.username || '');
+                setNewPhoneNumber(profile?.phone_number || '');
                 setIsEditing(true);
               }}
             >
-              Edit Username
+              Edit Profile
             </Button>
           </Box>
         </Box>
@@ -255,9 +260,9 @@ export const Profile: FC = () => {
         onChange={handleImageUpload}
       />
 
-      <Dialog open={isEditing} onClose={() => setIsEditing(false)}>
-        <DialogTitle>Edit Username</DialogTitle>
-        <DialogContent>
+      <Dialog open={isEditing} onClose={() => setIsEditing(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Profile</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
           <TextField
             autoFocus
             margin="dense"
@@ -265,12 +270,23 @@ export const Profile: FC = () => {
             fullWidth
             value={newUsername}
             onChange={(e) => setNewUsername(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            label="Phone Number (Private)"
+            fullWidth
+            type="tel"
+            value={newPhoneNumber}
+            onChange={(e) => setNewPhoneNumber(e.target.value)}
+            placeholder="+1 (555) 123-4567"
+            helperText="Your phone number is private and only used to help friends find you"
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setIsEditing(false)}>Cancel</Button>
-          <Button onClick={updateUsername} variant="contained">
-            Save
+          <Button onClick={updateProfile} variant="contained">
+            Save Changes
           </Button>
         </DialogActions>
       </Dialog>

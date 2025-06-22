@@ -4,17 +4,12 @@ import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import Button from '@mui/material/Button';
 import PersonIcon from '@mui/icons-material/Person';
-import ChatIcon from '@mui/icons-material/Chat';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import Link from 'next/link';
 import { useWallet } from '@solana/wallet-adapter-react';
 import Image from 'next/image';
 
-interface HeaderProps {
-  onChatToggle?: () => void;
-}
-
-export default function Header({ onChatToggle }: HeaderProps = {}) {
+export default function Header() {
   const { publicKey } = useWallet();
 
   return (
@@ -41,28 +36,6 @@ export default function Header({ onChatToggle }: HeaderProps = {}) {
             </Button>
           )}
           <WalletMultiButton />
-          {publicKey && (
-            <Button
-              variant="contained"
-              color="primary"
-              size="large"
-              startIcon={<ChatIcon />}
-              onClick={onChatToggle}
-              sx={{ 
-                ml: 2,
-                px: 3,
-                py: 1.5,
-                fontSize: '1.1rem',
-                fontWeight: 'bold',
-                background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
-                '&:hover': {
-                  background: 'linear-gradient(45deg, #1976D2 30%, #0288D1 90%)',
-                }
-              }}
-            >
-              Community Chat
-            </Button>
-          )}
         </div>
       </Toolbar>
 

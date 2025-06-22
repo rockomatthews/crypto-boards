@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     const result = await db`
       SELECT 
         p.username,
-        p.avatar_url
+        p.avatar_url,
+        p.phone_number
       FROM players p
       WHERE p.wallet_address = ${walletAddress}
     `;
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         username: result[0].username,
         avatar_url: result[0].avatar_url,
+        phone_number: result[0].phone_number,
         games_played: 0,
         games_won: 0,
         total_winnings: 0,
@@ -30,15 +32,16 @@ export async function GET(request: NextRequest) {
     } else {
       // Create new profile if it doesn't exist
       const newProfile = await db`
-        INSERT INTO players (wallet_address, username, avatar_url)
-        VALUES (${walletAddress}, ${`Player${walletAddress.slice(0, 4)}`}, '')
-        RETURNING username, avatar_url
+        INSERT INTO players (wallet_address, username, avatar_url, phone_number)
+        VALUES (${walletAddress}, ${`Player${walletAddress.slice(0, 4)}`}, '', NULL)
+        RETURNING username, avatar_url, phone_number
       `;
 
       if (newProfile.length > 0) {
         return NextResponse.json({
           username: newProfile[0].username,
           avatar_url: newProfile[0].avatar_url,
+          phone_number: newProfile[0].phone_number,
           games_played: 0,
           games_won: 0,
           total_winnings: 0,
@@ -55,21 +58,44 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { walletAddress, username } = await request.json();
+    const { walletAddress, username, phoneNumber } = await request.json();
 
-    if (!walletAddress || !username) {
-      return NextResponse.json({ error: 'Wallet address and username are required' }, { status: 400 });
+    if (!walletAddress) {
+      return NextResponse.json({ error: 'Wallet address is required' }, { status: 400 });
     }
 
-    const result = await db`
+    // Build dynamic update query based on provided fields
+    const updates = [];
+    const values = [];
+    
+    if (username) {
+      updates.push('username = $' + (values.length + 2)); // +2 because walletAddress is $1
+      values.push(username);
+    }
+    
+    if (phoneNumber !== undefined) { // Allow setting to null/empty
+      updates.push('phone_number = $' + (values.length + 2));
+      values.push(phoneNumber || null);
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
+
+    const query = `
       UPDATE players
-      SET username = ${username}
-      WHERE wallet_address = ${walletAddress}
-      RETURNING username
+      SET ${updates.join(', ')}
+      WHERE wallet_address = $1
+      RETURNING username, phone_number
     `;
 
+    const result = await db.query(query, [walletAddress, ...values]);
+
     if (result.length > 0) {
-      return NextResponse.json({ username: result[0].username });
+      return NextResponse.json({ 
+        username: result[0].username,
+        phone_number: result[0].phone_number 
+      });
     } else {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
