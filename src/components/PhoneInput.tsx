@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { TextField, Box } from '@mui/material';
+import React, { forwardRef } from 'react';
+import { TextField, Box, TextFieldProps } from '@mui/material';
 import PhoneInputComponent from 'react-phone-number-input';
 import { isValidPhoneNumber } from 'libphonenumber-js';
 import 'react-phone-number-input/style.css';
@@ -17,8 +17,24 @@ interface PhoneInputProps {
   disabled?: boolean;
 }
 
+// Custom TextField component for better integration
+const CustomTextField = forwardRef<HTMLInputElement, TextFieldProps>((props, ref) => {
+  return (
+    <TextField
+      {...props}
+      ref={ref}
+      inputProps={{
+        ...props.inputProps,
+        autoComplete: 'tel',
+      }}
+    />
+  );
+});
+
+CustomTextField.displayName = 'CustomTextField';
+
 export default function PhoneInput({
-  value,
+  value = '',
   onChange,
   label = "Phone Number",
   placeholder = "Enter phone number",
@@ -28,39 +44,42 @@ export default function PhoneInput({
   disabled = false,
 }: PhoneInputProps) {
   const handleChange = (phoneValue?: string) => {
-    onChange?.(phoneValue);
+    // Ensure we always pass a string or undefined, never null
+    onChange?.(phoneValue || '');
   };
 
-  const isValid = value ? isValidPhoneNumber(value) : true;
-  const showError = error || (value && !isValid);
+  // Safely check if the phone number is valid
+  const isValid = value && value.length > 0 ? isValidPhoneNumber(value) : true;
+  const showError = error || (value && value.length > 0 && !isValid);
 
   return (
     <Box sx={{ position: 'relative' }}>
       <style jsx global>{`
         .PhoneInput {
           display: flex;
-          align-items: center;
+          align-items: stretch;
+          gap: 8px;
         }
         
         .PhoneInputCountry {
           display: flex;
           align-items: center;
-          margin-right: 8px;
-          padding: 8px;
-          border: 1px solid #c4c4c4;
+          padding: 14px 12px;
+          border: 1px solid ${showError ? '#d32f2f' : '#c4c4c4'};
           border-radius: 4px;
-          background: white;
-          cursor: pointer;
-          min-width: 80px;
+          background: ${disabled ? '#f5f5f5' : 'white'};
+          cursor: ${disabled ? 'not-allowed' : 'pointer'};
+          min-width: 90px;
           justify-content: center;
+          transition: border-color 0.2s ease;
         }
         
         .PhoneInputCountry:hover {
-          border-color: #1976d2;
+          border-color: ${showError ? '#d32f2f' : '#1976d2'};
         }
         
         .PhoneInputCountry:focus-within {
-          border-color: #1976d2;
+          border-color: ${showError ? '#d32f2f' : '#1976d2'};
           border-width: 2px;
           outline: none;
         }
@@ -68,9 +87,10 @@ export default function PhoneInput({
         .PhoneInputCountryIcon {
           width: 20px;
           height: 15px;
-          margin-right: 6px;
+          margin-right: 8px;
           border-radius: 2px;
           object-fit: cover;
+          border: 1px solid rgba(0,0,0,0.1);
         }
         
         .PhoneInputCountrySelect {
@@ -78,8 +98,8 @@ export default function PhoneInput({
           background: transparent;
           font-size: 14px;
           font-weight: 500;
-          color: #333;
-          cursor: pointer;
+          color: ${disabled ? '#999' : '#333'};
+          cursor: ${disabled ? 'not-allowed' : 'pointer'};
           outline: none;
           appearance: none;
           padding-right: 16px;
@@ -94,50 +114,29 @@ export default function PhoneInput({
         }
         
         .PhoneInput--focus .PhoneInputCountry {
-          border-color: #1976d2;
+          border-color: ${showError ? '#d32f2f' : '#1976d2'};
           border-width: 2px;
         }
-        
-        ${showError ? `
-        .PhoneInputCountry {
-          border-color: #d32f2f !important;
-        }
-        .PhoneInput--focus .PhoneInputCountry {
-          border-color: #d32f2f !important;
-        }
-        ` : ''}
-        
-        ${disabled ? `
-        .PhoneInputCountry {
-          background-color: #f5f5f5;
-          border-color: #e0e0e0;
-          cursor: not-allowed;
-        }
-        .PhoneInputCountrySelect {
-          cursor: not-allowed;
-          color: #999;
-        }
-        ` : ''}
       `}</style>
       
       <PhoneInputComponent
         international
         countryCallingCodeEditable={false}
         defaultCountry="US"
-        value={value}
+        value={value || ''}
         onChange={handleChange}
         disabled={disabled}
-        inputComponent={TextField}
-        inputProps={{
+        inputComponent={CustomTextField}
+        numberInputProps={{
           label,
           placeholder,
-          helperText: showError && value && !isValid 
+          helperText: showError && value && value.length > 0 && !isValid 
             ? "Please enter a valid phone number" 
             : helperText,
           error: showError,
           fullWidth,
           disabled,
-          variant: "outlined",
+          variant: "outlined" as const,
           sx: {
             '& .MuiOutlinedInput-root': {
               '& fieldset': {
@@ -158,7 +157,7 @@ export default function PhoneInput({
         }}
       />
       
-      {value && isValid && (
+      {value && value.length > 0 && isValid && (
         <Box sx={{ 
           position: 'absolute', 
           right: 12, 
