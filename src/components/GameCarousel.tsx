@@ -12,7 +12,7 @@ const games = [
     id: 1,
     title: 'Checkers',
     description: 'Classic strategy game with a crypto twist. Play and earn!',
-    image: '/images/checkers.jpg',
+    image: '/images/checkers.png',
     minPlayers: 2,
     maxPlayers: 2,
     entryFee: '0.1 SOL',
