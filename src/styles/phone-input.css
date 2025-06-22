@@ -1,0 +1,42 @@
+/* Additional styles for react-phone-number-input integration with Material-UI */
+
+.PhoneInput {
+  --PhoneInputCountryFlag-height: 1em;
+  --PhoneInputCountryFlag-borderColor: transparent;
+  --PhoneInputCountrySelectArrow-color: #6b7280;
+  --PhoneInputCountrySelectArrow-opacity: 1;
+}
+
+.PhoneInputCountryIcon--square {
+  width: calc(var(--PhoneInputCountryFlag-height) * 1.33);
+  height: var(--PhoneInputCountryFlag-height);
+}
+
+.PhoneInputCountryIcon {
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.PhoneInputCountrySelect:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.PhoneInputCountry:focus-within {
+  box-shadow: 0 0 0 1px #1976d2;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .PhoneInputCountry {
+    background: #2d2d2d;
+    border-color: #555;
+  }
+  
+  .PhoneInputCountrySelect {
+    color: #fff;
+  }
+  
+  .PhoneInputCountry:hover {
+    border-color: #1976d2;
+  }
+} 

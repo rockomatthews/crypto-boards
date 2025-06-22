@@ -18,6 +18,7 @@ import {
   Fab,
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
+import PhoneInput from './PhoneInput';
 
 interface ProfileData {
   username: string;
@@ -270,17 +271,15 @@ export const Profile: FC = () => {
             fullWidth
             value={newUsername}
             onChange={(e) => setNewUsername(e.target.value)}
-            sx={{ mb: 2 }}
+            sx={{ mb: 3 }}
           />
-          <TextField
-            margin="dense"
-            label="Phone Number (Private)"
-            fullWidth
-            type="tel"
+          <PhoneInput
             value={newPhoneNumber}
-            onChange={(e) => setNewPhoneNumber(e.target.value)}
-            placeholder="+1 (555) 123-4567"
+            onChange={(value) => setNewPhoneNumber(value || '')}
+            label="Phone Number (Private)"
+            placeholder="Select country and enter number"
             helperText="Your phone number is private and only used to help friends find you"
+            fullWidth
           />
         </DialogContent>
         <DialogActions>
