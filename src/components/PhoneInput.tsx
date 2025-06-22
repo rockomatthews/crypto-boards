@@ -1,10 +1,8 @@
 'use client';
 
-import React, { forwardRef, useState, useEffect } from 'react';
-import { TextField, Box, TextFieldProps } from '@mui/material';
-import PhoneInputComponent from 'react-phone-number-input';
-import { isValidPhoneNumber } from 'libphonenumber-js';
-import 'react-phone-number-input/style.css';
+import React, { useState, useEffect } from 'react';
+import { TextField, Box, MenuItem, InputAdornment } from '@mui/material';
+import { Check as CheckIcon } from '@mui/icons-material';
 
 interface PhoneInputProps {
   value?: string | null;
@@ -17,21 +15,19 @@ interface PhoneInputProps {
   disabled?: boolean;
 }
 
-// Custom TextField component for better integration
-const CustomTextField = forwardRef<HTMLInputElement, TextFieldProps>((props, ref) => {
-  return (
-    <TextField
-      {...props}
-      ref={ref}
-      inputProps={{
-        ...props.inputProps,
-        autoComplete: 'tel',
-      }}
-    />
-  );
-});
-
-CustomTextField.displayName = 'CustomTextField';
+// Common country codes
+const countryCodes = [
+  { code: '+1', country: 'US', flag: '🇺🇸' },
+  { code: '+1', country: 'CA', flag: '🇨🇦' },
+  { code: '+44', country: 'GB', flag: '🇬🇧' },
+  { code: '+33', country: 'FR', flag: '🇫🇷' },
+  { code: '+49', country: 'DE', flag: '🇩🇪' },
+  { code: '+81', country: 'JP', flag: '🇯🇵' },
+  { code: '+86', country: 'CN', flag: '🇨🇳' },
+  { code: '+91', country: 'IN', flag: '🇮🇳' },
+  { code: '+61', country: 'AU', flag: '🇦🇺' },
+  { code: '+55', country: 'BR', flag: '🇧🇷' },
+];
 
 export default function PhoneInput({
   value,
@@ -43,100 +39,120 @@ export default function PhoneInput({
   fullWidth = true,
   disabled = false,
 }: PhoneInputProps) {
-  // Use local state to ensure we always have a controlled value
-  const [phoneValue, setPhoneValue] = useState<string>('');
+  const [countryCode, setCountryCode] = useState('+1');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
-  // Initialize phone value from props
+  // Parse existing value
   useEffect(() => {
-    // Convert any input to a safe string
-    const safeValue = (value || '').toString();
-    setPhoneValue(safeValue);
+    if (value) {
+      const phoneStr = value.toString();
+      // Try to extract country code
+      const foundCountry = countryCodes.find(c => phoneStr.startsWith(c.code));
+      if (foundCountry) {
+        setCountryCode(foundCountry.code);
+        setPhoneNumber(phoneStr.substring(foundCountry.code.length));
+      } else {
+        setPhoneNumber(phoneStr);
+      }
+    } else {
+      setPhoneNumber('');
+    }
   }, [value]);
 
-  const handleChange = (newValue?: string | null) => {
-    // Ensure we always work with strings, never undefined or null
-    const safeValue = newValue ? newValue.toString() : '';
-    console.log('PhoneInput handleChange - newValue:', newValue, 'safeValue:', safeValue);
+  // Simple phone number validation
+  const isValidPhone = (phone: string) => {
+    const cleaned = phone.replace(/\D/g, '');
+    return cleaned.length >= 10 && cleaned.length <= 15;
+  };
+
+  const formatPhoneNumber = (phone: string) => {
+    const cleaned = phone.replace(/\D/g, '');
     
-    setPhoneValue(safeValue);
-    
-    // Call the parent onChange with the safe value
-    if (onChange) {
-      onChange(safeValue || undefined);
+    if (cleaned.length <= 3) {
+      return cleaned;
+    } else if (cleaned.length <= 6) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+    } else if (cleaned.length <= 10) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+    } else {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
     }
   };
 
-  // Safely check if the phone number is valid
-  let isValid = true;
-  if (phoneValue && phoneValue.length > 0) {
-    try {
-      isValid = isValidPhoneNumber(phoneValue);
-    } catch (error) {
-      console.warn('Phone validation error:', error);
-      isValid = false;
+  const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.target.value;
+    const formatted = formatPhoneNumber(input);
+    setPhoneNumber(formatted);
+    
+    // Combine country code and phone number
+    const fullNumber = countryCode + formatted.replace(/\D/g, '');
+    console.log('Phone change:', { countryCode, formatted, fullNumber });
+    
+    if (onChange) {
+      onChange(fullNumber);
     }
-  }
-  
-  const showError = error || (phoneValue && phoneValue.length > 0 && !isValid);
+  };
+
+  const handleCountryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newCountryCode = event.target.value;
+    setCountryCode(newCountryCode);
+    
+    // Update full number with new country code
+    const fullNumber = newCountryCode + phoneNumber.replace(/\D/g, '');
+    console.log('Country change:', { newCountryCode, phoneNumber, fullNumber });
+    
+    if (onChange) {
+      onChange(fullNumber);
+    }
+  };
+
+  const isValid = phoneNumber ? isValidPhone(phoneNumber) : true;
+  const showError = error || (phoneNumber.length > 0 && !isValid);
 
   return (
-    <Box sx={{ position: 'relative', width: fullWidth ? '100%' : 'auto' }}>
-      <PhoneInputComponent
-        international
-        countryCallingCodeEditable={false}
-        defaultCountry="US"
-        value={phoneValue || ''}
-        onChange={handleChange}
+    <Box sx={{ display: 'flex', gap: 1, width: fullWidth ? '100%' : 'auto' }}>
+      {/* Country Code Selector */}
+      <TextField
+        select
+        value={countryCode}
+        onChange={handleCountryChange}
         disabled={disabled}
-        inputComponent={CustomTextField}
-        style={{
-          '--PhoneInputCountryFlag-height': '1em',
-          '--PhoneInputCountrySelectArrow-color': '#6b7280',
-        } as React.CSSProperties}
-        numberInputProps={{
-          label,
-          placeholder,
-          helperText: showError && phoneValue && phoneValue.length > 0 && !isValid 
-            ? "Please enter a valid phone number" 
-            : helperText,
-          error: showError,
-          fullWidth,
-          disabled,
-          variant: "outlined" as const,
-          sx: {
-            '& .MuiOutlinedInput-root': {
-              '& fieldset': {
-                borderColor: showError ? '#d32f2f' : undefined,
-              },
-              '&:hover fieldset': {
-                borderColor: showError ? '#d32f2f' : undefined,
-              },
-              '&.Mui-focused fieldset': {
-                borderColor: showError ? '#d32f2f' : undefined,
-                borderWidth: showError ? 1 : 2,
-              },
-            },
-            '& .MuiFormHelperText-root': {
-              color: showError ? '#d32f2f' : undefined,
-            },
-          }
+        sx={{ minWidth: 120 }}
+        variant="outlined"
+      >
+        {countryCodes.map((country) => (
+          <MenuItem key={`${country.code}-${country.country}`} value={country.code}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <span>{country.flag}</span>
+              <span>{country.code}</span>
+            </Box>
+          </MenuItem>
+        ))}
+      </TextField>
+
+      {/* Phone Number Input */}
+      <TextField
+        label={label}
+        placeholder={placeholder}
+        value={phoneNumber}
+        onChange={handlePhoneChange}
+        error={showError}
+        helperText={showError && phoneNumber && !isValid 
+          ? "Please enter a valid phone number" 
+          : helperText}
+        disabled={disabled}
+        fullWidth
+        variant="outlined"
+        InputProps={{
+          ...(phoneNumber && isValid && {
+            endAdornment: (
+              <InputAdornment position="end">
+                <CheckIcon sx={{ color: 'success.main' }} />
+              </InputAdornment>
+            ),
+          }),
         }}
       />
-      
-      {phoneValue && phoneValue.length > 0 && isValid && (
-        <Box sx={{ 
-          position: 'absolute', 
-          right: 12, 
-          top: '50%', 
-          transform: 'translateY(-50%)',
-          color: 'success.main',
-          fontSize: '18px',
-          pointerEvents: 'none',
-          zIndex: 1
-        }}>
-          ✓
-        </Box>
-      )}
     </Box>
   );
 } 
