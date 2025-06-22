@@ -171,7 +171,7 @@ export default function GameCarousel() {
                   </Typography>
                   <Typography variant="body1" sx={{ 
                     color: 'white',
-                    mb: 2,
+                    mb: 3,
                     maxWidth: '100%',
                     textShadow: '1px 1px 2px rgba(0,0,0,0.5)',
                     display: '-webkit-box',
@@ -181,20 +181,6 @@ export default function GameCarousel() {
                   }}>
                     {game.description}
                   </Typography>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    gap: 2,
-                    alignItems: 'center',
-                    mb: 2,
-                    flexWrap: 'wrap'
-                  }}>
-                    <Typography variant="body2" sx={{ color: 'white' }}>
-                      Players: {game.minPlayers}-{game.maxPlayers}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'white' }}>
-                      Entry: {game.entryFee}
-                    </Typography>
-                  </Box>
                   <Button 
                     variant="contained" 
                     size="medium"

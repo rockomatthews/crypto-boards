@@ -60,6 +60,10 @@ export default function MultiplayerCheckersPage() {
 
   const currentPlayer = game?.players.find(p => p.wallet_address === publicKey?.toString());
   const isPlayerInGame = currentPlayer && currentPlayer.game_status === 'active';
+  
+  // Determine player color based on join order (first player = white, second = black)
+  const playerColor: 'black' | 'white' = (game?.players && game.players.length >= 2 && currentPlayer) ? 
+    (game.players[0].wallet_address === currentPlayer.wallet_address ? 'white' : 'black') : 'white';
 
   if (loading) {
     return (
@@ -122,9 +126,37 @@ export default function MultiplayerCheckersPage() {
           Checkers - {game.entry_fee} SOL Game
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Players: {game.players.length}
+          You are playing as {playerColor.charAt(0).toUpperCase() + playerColor.slice(1)}
         </Typography>
       </Box>
+
+      {/* Player Information */}
+      {game.players.length >= 2 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, mb: 3 }}>
+          <Box sx={{ textAlign: 'center', p: 2, border: '1px solid #333', borderRadius: 2 }}>
+            <Typography variant="h6" color="white">
+              ⚪ White Player
+            </Typography>
+            <Typography variant="body2">
+              {game.players[0]?.username || 'Player 1'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {game.players[0]?.wallet_address.slice(0, 8)}...
+            </Typography>
+          </Box>
+          <Box sx={{ textAlign: 'center', p: 2, border: '1px solid #333', borderRadius: 2 }}>
+            <Typography variant="h6" color="text.secondary">
+              ⚫ Black Player
+            </Typography>
+            <Typography variant="body2">
+              {game.players[1]?.username || 'Player 2'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {game.players[1]?.wallet_address.slice(0, 8)}...
+            </Typography>
+          </Box>
+        </Box>
+      )}
 
       {/* Game Board */}
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
@@ -132,6 +164,7 @@ export default function MultiplayerCheckersPage() {
           gameId={gameId}
           currentPlayer={currentPlayer}
           isMultiplayer={true}
+          playerColor={playerColor}
         />
       </Box>
 

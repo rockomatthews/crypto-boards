@@ -21,6 +21,7 @@ interface CheckersBoardProps {
     game_status: string;
   };
   isMultiplayer?: boolean;
+  playerColor?: 'black' | 'white'; // Which color this player is playing
 }
 
 const initializeBoard = (): BoardState => {
@@ -47,15 +48,28 @@ const initializeBoard = (): BoardState => {
   return board;
 };
 
-export const CheckersBoard: FC<CheckersBoardProps> = () => {
-  // TODO: Use gameId, currentPlayer, and isMultiplayer props for multiplayer functionality in the future
-
+export const CheckersBoard: FC<CheckersBoardProps> = ({ 
+  gameId, 
+  isMultiplayer = false,
+  playerColor = 'white' // Default to white for single player
+}) => {
   const [board, setBoard] = useState<BoardState>(initializeBoard());
-  const [currentPlayer, setCurrentPlayer] = useState<'black' | 'white'>('black');
+  const [currentTurn, setCurrentTurn] = useState<'black' | 'white'>('black');
   const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
   const [validMoves, setValidMoves] = useState<Position[]>([]);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState<'black' | 'white' | null>(null);
+
+  // Determine if board should be flipped for this player
+  const shouldFlipBoard = isMultiplayer && playerColor === 'black';
+
+  // Helper function to get actual board coordinates from display coordinates
+  const getActualCoords = (displayRow: number, displayCol: number) => {
+    if (shouldFlipBoard) {
+      return { row: 7 - displayRow, col: 7 - displayCol };
+    }
+    return { row: displayRow, col: displayCol };
+  };
 
   const getValidMoves = useCallback((row: number, col: number): Position[] => {
     const piece = board[row][col];
@@ -105,16 +119,32 @@ export const CheckersBoard: FC<CheckersBoardProps> = () => {
     return row >= 0 && row < 8 && col >= 0 && col < 8;
   };
 
-  const handleSquareClick = (row: number, col: number) => {
+  const handleSquareClick = (displayRow: number, displayCol: number) => {
     if (gameOver) return;
 
+    // Convert display coordinates to actual board coordinates
+    const { row, col } = getActualCoords(displayRow, displayCol);
     const piece = board[row][col];
-    const isCurrentPlayerPiece = piece && 
-      ((currentPlayer === 'black' && piece.includes('black')) ||
-       (currentPlayer === 'white' && piece.includes('white')));
+    
+    // In multiplayer, only allow moves if it's the player's turn and their piece
+    if (isMultiplayer) {
+      if (currentTurn !== playerColor) return; // Not this player's turn
+      
+      const isPlayerPiece = piece && piece.includes(playerColor);
+      
+      if (piece && !isPlayerPiece) return; // Can't select opponent's piece
+    } else {
+      // Single player mode - check current turn
+      const isCurrentPlayerPiece = piece && 
+        ((currentTurn === 'black' && piece.includes('black')) ||
+         (currentTurn === 'white' && piece.includes('white')));
+      
+      if (piece && !isCurrentPlayerPiece) return;
+    }
 
     // If clicking on current player's piece, select it
-    if (isCurrentPlayerPiece) {
+    if (piece && ((isMultiplayer && piece.includes(playerColor)) || 
+                  (!isMultiplayer && piece.includes(currentTurn)))) {
       setSelectedPiece({ row, col });
       const moves = getValidMoves(row, col);
       setValidMoves(moves);
@@ -165,8 +195,13 @@ export const CheckersBoard: FC<CheckersBoardProps> = () => {
       setValidMoves(additionalCaptures);
     } else {
       // Switch turns
-      setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+      setCurrentTurn(currentTurn === 'black' ? 'white' : 'black');
       checkGameOver(newBoard);
+    }
+
+    // TODO: In multiplayer mode, send move to server
+    if (isMultiplayer && gameId) {
+      // sendMoveToServer(from, to, newBoard);
     }
   };
 
@@ -225,21 +260,46 @@ export const CheckersBoard: FC<CheckersBoardProps> = () => {
 
   const resetGame = () => {
     setBoard(initializeBoard());
-    setCurrentPlayer('black');
+    setCurrentTurn('black');
     setSelectedPiece(null);
     setValidMoves([]);
     setGameOver(false);
     setWinner(null);
   };
 
+  // Create display board (potentially flipped)
+  const displayBoard = Array(8).fill(null).map((_, row) =>
+    Array(8).fill(null).map((_, col) => {
+      const { row: actualRow, col: actualCol } = getActualCoords(row, col);
+      return board[actualRow][actualCol];
+    })
+  );
+
+  // Get current turn display text
+  const getCurrentTurnText = () => {
+    if (gameOver) {
+      return `Game Over! ${winner ? winner.charAt(0).toUpperCase() + winner.slice(1) : ''} wins!`;
+    }
+    
+    if (isMultiplayer) {
+      const isMyTurn = currentTurn === playerColor;
+      return `${isMyTurn ? 'Your' : "Opponent's"} Turn (${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)})`;
+    }
+    
+    return `Current Player: ${currentTurn.charAt(0).toUpperCase() + currentTurn.slice(1)}`;
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
       <Typography variant="h5" gutterBottom>
-        {gameOver 
-          ? `Game Over! ${winner ? winner.charAt(0).toUpperCase() + winner.slice(1) : ''} wins!`
-          : `Current Player: ${currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1)}`
-        }
+        {getCurrentTurnText()}
       </Typography>
+      
+      {isMultiplayer && (
+        <Typography variant="body1" color="text.secondary">
+          You are playing as {playerColor.charAt(0).toUpperCase() + playerColor.slice(1)}
+        </Typography>
+      )}
       
       <Box sx={{ 
         display: 'grid', 
@@ -248,27 +308,36 @@ export const CheckersBoard: FC<CheckersBoardProps> = () => {
         border: '2px solid #333',
         width: 'fit-content'
       }}>
-        {board.map((row, rowIndex) =>
-          row.map((piece, colIndex) => (
-            <CheckersSquare
-              key={`${rowIndex}-${colIndex}`}
-              piece={piece}
-              isSelected={selectedPiece?.row === rowIndex && selectedPiece?.col === colIndex}
-              isValidMove={validMoves.some(move => move.row === rowIndex && move.col === colIndex)}
-              onClick={() => handleSquareClick(rowIndex, colIndex)}
-              isDarkSquare={(rowIndex + colIndex) % 2 === 1}
-            />
-          ))
+        {displayBoard.map((row, rowIndex) =>
+          row.map((piece, colIndex) => {
+            // Check if this square is selected (need to convert to actual coordinates)
+            const { row: actualRow, col: actualCol } = getActualCoords(rowIndex, colIndex);
+            const isSelected = selectedPiece?.row === actualRow && selectedPiece?.col === actualCol;
+            const isValidMove = validMoves.some(move => move.row === actualRow && move.col === actualCol);
+            
+            return (
+              <CheckersSquare
+                key={`${rowIndex}-${colIndex}`}
+                piece={piece}
+                isSelected={isSelected}
+                isValidMove={isValidMove}
+                onClick={() => handleSquareClick(rowIndex, colIndex)}
+                isDarkSquare={(rowIndex + colIndex) % 2 === 1}
+              />
+            );
+          })
         )}
       </Box>
 
-      <Button 
-        variant="contained" 
-        onClick={resetGame}
-        sx={{ mt: 2 }}
-      >
-        New Game
-      </Button>
+      {!isMultiplayer && (
+        <Button 
+          variant="contained" 
+          onClick={resetGame}
+          sx={{ mt: 2 }}
+        >
+          New Game
+        </Button>
+      )}
     </Box>
   );
 }; 
