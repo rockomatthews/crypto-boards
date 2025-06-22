@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { Connection, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getEscrowPublicKey } from '@/lib/solana';
 import {
   Box,
   Card,
@@ -61,7 +59,7 @@ interface Lobby {
 export default function LobbyPage() {
   const params = useParams();
   const router = useRouter();
-  const { publicKey, sendTransaction } = useWallet();
+  const { publicKey } = useWallet();
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,74 +97,15 @@ export default function LobbyPage() {
   }, [lobbyId, fetchLobby]);
 
   const handlePayEntryFee = async () => {
-    if (!publicKey || !lobby || !sendTransaction) return;
+    if (!publicKey || !lobby) return;
 
     setPaying(true);
     try {
-      // Create Solana connection with the correct RPC URL
-      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-      console.log('Using RPC URL:', rpcUrl);
-      
-      const connection = new Connection(rpcUrl, 'confirmed');
+      // Temporarily bypass Solana transaction for testing
+      console.log('Bypassing Solana transaction for testing purposes');
+      const mockSignature = 'mock_signature_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 
-      // Test the connection first
-      try {
-        await connection.getSlot();
-      } catch (connectionError) {
-        console.error('RPC connection failed:', connectionError);
-        throw new Error('Unable to connect to Solana network. Please check your internet connection and try again.');
-      }
-
-      // Create the transaction
-      const transaction = new Transaction();
-      
-      // Get the proper escrow address
-      const escrowPublicKey = getEscrowPublicKey();
-      
-      const transferInstruction = SystemProgram.transfer({
-        fromPubkey: publicKey,
-        toPubkey: escrowPublicKey,
-        lamports: lobby.entry_fee * LAMPORTS_PER_SOL,
-      });
-
-      transaction.add(transferInstruction);
-
-      // Get recent blockhash with retry logic
-      let blockhash;
-      let attempts = 0;
-      const maxAttempts = 3;
-      
-      while (attempts < maxAttempts) {
-        try {
-          const latestBlockhash = await connection.getLatestBlockhash('finalized');
-          blockhash = latestBlockhash.blockhash;
-          break;
-        } catch (blockhashError) {
-          attempts++;
-          console.error(`Blockhash attempt ${attempts} failed:`, blockhashError);
-          if (attempts >= maxAttempts) {
-            throw new Error('Unable to get latest blockhash. Please try again.');
-          }
-          // Wait 1 second before retrying
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = publicKey;
-
-      // Send transaction
-      const signature = await sendTransaction(transaction, connection);
-      
-      // Wait for confirmation with timeout
-      const confirmationPromise = connection.confirmTransaction(signature, 'confirmed');
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 30000)
-      );
-      
-      await Promise.race([confirmationPromise, timeoutPromise]);
-
-      // Send signature to API for verification
+      // Send mock signature to API for verification (which is also bypassed)
       const response = await fetch(`/api/lobbies/${lobbyId}/pay`, {
         method: 'POST',
         headers: {
@@ -174,7 +113,7 @@ export default function LobbyPage() {
         },
         body: JSON.stringify({
           walletAddress: publicKey.toString(),
-          transactionSignature: signature,
+          transactionSignature: mockSignature,
         }),
       });
 
