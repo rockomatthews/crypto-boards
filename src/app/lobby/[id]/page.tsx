@@ -75,6 +75,13 @@ export default function LobbyPage() {
       const response = await fetch(`/api/lobbies/${lobbyId}`);
       if (response.ok) {
         const data = await response.json();
+        
+        // If the game has started, navigate to the game
+        if (data.status === 'in_progress') {
+          router.push(`/${data.game_type}/${lobbyId}`);
+          return;
+        }
+        
         setLobby(data);
       } else {
         setError('Failed to fetch lobby');
@@ -85,13 +92,13 @@ export default function LobbyPage() {
     } finally {
       setLoading(false);
     }
-  }, [lobbyId]);
+  }, [lobbyId, router]);
 
   useEffect(() => {
     if (lobbyId) {
       fetchLobby();
-      // Poll for updates every 5 seconds
-      const interval = setInterval(fetchLobby, 5000);
+      // Poll for updates every 2 seconds (faster for game start detection)
+      const interval = setInterval(fetchLobby, 2000);
       return () => clearInterval(interval);
     }
   }, [lobbyId, fetchLobby]);

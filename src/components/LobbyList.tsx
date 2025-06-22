@@ -60,11 +60,20 @@ export const LobbyList: FC = () => {
   useEffect(() => {
     if (publicKey) {
       fetchLobbies();
+      // Poll for updates every 3 seconds to catch game status changes
+      const interval = setInterval(fetchLobbies, 3000);
+      return () => clearInterval(interval);
     }
   }, [publicKey, fetchLobbies]);
 
   const handleJoinLobby = async (lobby: Lobby) => {
     if (!publicKey) return;
+
+    // If the game is in progress, navigate directly to the game
+    if (lobby.status === 'in_progress' && lobby.player_status === 'active') {
+      router.push(`/${lobby.game_type}/${lobby.id}`);
+      return;
+    }
 
     // If player already has a status in this lobby, go directly to the lobby page
     if (lobby.player_status) {
@@ -116,12 +125,29 @@ export const LobbyList: FC = () => {
     switch (status) {
       case 'ready':
         return 'success';
+      case 'active':
+        return 'error';
       case 'invited':
         return 'warning';
       case 'waiting':
         return 'info';
       default:
         return 'default';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'ready':
+        return 'Ready';
+      case 'active':
+        return 'In Progress';
+      case 'invited':
+        return 'Invited';
+      case 'waiting':
+        return 'Waiting';
+      default:
+        return status;
     }
   };
 
@@ -226,16 +252,26 @@ export const LobbyList: FC = () => {
                     />
                     {lobby.player_status && (
                       <Chip 
-                        label={lobby.player_status}
+                        label={getStatusText(lobby.player_status)}
                         size="small"
-                        color={getStatusColor(lobby.player_status) as 'success' | 'warning' | 'info' | 'default'}
+                        color={getStatusColor(lobby.player_status) as 'success' | 'warning' | 'info' | 'default' | 'error'}
                       />
                     )}
                   </Box>
                 </Box>
 
                 <Box sx={{ mt: 'auto' }}>
-                  {lobby.player_status === 'ready' ? (
+                  {lobby.status === 'in_progress' && lobby.player_status === 'active' ? (
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      onClick={() => handleJoinLobby(lobby)}
+                      startIcon={<PlayIcon />}
+                      color="error"
+                    >
+                      Resume Game
+                    </Button>
+                  ) : lobby.player_status === 'ready' ? (
                     <Button
                       variant="contained"
                       fullWidth

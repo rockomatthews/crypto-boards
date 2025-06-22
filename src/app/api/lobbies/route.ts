@@ -122,11 +122,11 @@ export async function GET(request: NextRequest) {
       JOIN players p ON g.creator_id = p.id
       LEFT JOIN game_players gp ON g.id = gp.game_id AND gp.player_id = ${playerId}
       LEFT JOIN game_players gp2 ON g.id = gp2.game_id
-      WHERE g.status = 'waiting' 
+      WHERE (g.status = 'waiting' OR (g.status = 'in_progress' AND gp.player_id = ${playerId}))
         AND (
           g.creator_id = ${playerId} 
           OR gp.player_id = ${playerId}
-          OR (g.is_private = false AND g.creator_id != ${playerId})
+          OR (g.is_private = false AND g.creator_id != ${playerId} AND g.status = 'waiting')
         )
       GROUP BY g.id, g.game_type, g.status, g.max_players, g.entry_fee, g.is_private, g.created_at, p.username, p.wallet_address, gp.game_status
       ORDER BY g.created_at DESC
