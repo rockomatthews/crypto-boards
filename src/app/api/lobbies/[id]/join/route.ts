@@ -66,31 +66,32 @@ export async function POST(
     if (existingPlayerResult.length > 0) {
       const existingStatus = existingPlayerResult[0].game_status;
       
-      if (existingStatus === 'ready') {
-        return NextResponse.json({ error: 'Already ready in this lobby' }, { status: 400 });
-      }
-      
-      if (existingStatus === 'invited') {
-        // Update status to waiting (needs to pay)
-        await db`
-          UPDATE game_players 
-          SET game_status = 'waiting'
-          WHERE game_id = ${lobbyId} AND player_id = ${playerId}
-        `;
-      }
+      // If player is already in the lobby (any status), just return success
+      // This allows them to re-enter the lobby page
+      return NextResponse.json({ 
+        success: true, 
+        message: existingStatus === 'ready' 
+          ? 'You are already ready in this lobby!' 
+          : existingStatus === 'invited'
+          ? 'Welcome back! Please pay the entry fee to become ready.'
+          : 'Welcome back to the lobby!',
+        entryFee: lobby.entry_fee,
+        status: existingStatus
+      });
     } else {
       // Add player to lobby with waiting status
       await db`
         INSERT INTO game_players (game_id, player_id, game_status)
         VALUES (${lobbyId}, ${playerId}, 'waiting')
       `;
-    }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Joined lobby successfully. Please pay the entry fee to become ready.',
-      entryFee: lobby.entry_fee
-    });
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Joined lobby successfully. Please pay the entry fee to become ready.',
+        entryFee: lobby.entry_fee,
+        status: 'waiting'
+      });
+    }
   } catch (error) {
     console.error('Error joining lobby:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

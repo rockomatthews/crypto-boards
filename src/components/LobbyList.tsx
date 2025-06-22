@@ -66,6 +66,13 @@ export const LobbyList: FC = () => {
   const handleJoinLobby = async (lobby: Lobby) => {
     if (!publicKey) return;
 
+    // If player already has a status in this lobby, go directly to the lobby page
+    if (lobby.player_status) {
+      router.push(`/lobby/${lobby.id}`);
+      return;
+    }
+
+    // Otherwise, try to join the lobby
     try {
       const response = await fetch(`/api/lobbies/${lobby.id}/join`, {
         method: 'POST',
@@ -232,10 +239,21 @@ export const LobbyList: FC = () => {
                     <Button
                       variant="contained"
                       fullWidth
-                      disabled
+                      onClick={() => handleJoinLobby(lobby)}
                       startIcon={<PlayIcon />}
+                      color="success"
                     >
-                      Ready
+                      Enter Lobby
+                    </Button>
+                  ) : lobby.player_status === 'waiting' ? (
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      onClick={() => handleJoinLobby(lobby)}
+                      startIcon={<PlayIcon />}
+                      color="warning"
+                    >
+                      Continue Setup
                     </Button>
                   ) : lobby.player_status === 'invited' ? (
                     <Button
