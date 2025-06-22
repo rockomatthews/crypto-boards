@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
       WHERE f.player_id = (
         SELECT id FROM players WHERE wallet_address = ${walletAddress}
       )
+      AND f.status = 'accepted'
       ORDER BY p.username ASC
     `) as FriendRow[];
 
@@ -55,28 +56,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Wallet address and friend address are required' }, { status: 400 });
     }
 
+    // Get the current user's ID
+    const currentUserResult = await db`
+      SELECT id FROM players WHERE wallet_address = ${walletAddress}
+    `;
+
+    if (currentUserResult.length === 0) {
+      return NextResponse.json({ error: 'Current user not found' }, { status: 404 });
+    }
+
+    const currentUserId = currentUserResult[0].id;
+
     // First, ensure the friend exists in the players table
     const friendResult = await db`
       INSERT INTO players (wallet_address, username, avatar_url)
       VALUES (${friendAddress}, ${`Player${friendAddress.slice(0, 4)}`}, '')
-      ON CONFLICT (wallet_address) DO NOTHING
+      ON CONFLICT (wallet_address) DO UPDATE SET wallet_address = EXCLUDED.wallet_address
       RETURNING id
     `;
 
+    let friendId;
     if (friendResult.length > 0) {
-      // Add the friendship
-      await db`
-        INSERT INTO friendships (player_id, friend_id)
-        SELECT 
-          (SELECT id FROM players WHERE wallet_address = ${walletAddress}),
-          ${friendResult[0].id}
-        ON CONFLICT (player_id, friend_id) DO NOTHING
+      friendId = friendResult[0].id;
+    } else {
+      // Friend already exists, get their ID
+      const existingFriendResult = await db`
+        SELECT id FROM players WHERE wallet_address = ${friendAddress}
       `;
-
-      return NextResponse.json({ success: true });
+      
+      if (existingFriendResult.length === 0) {
+        return NextResponse.json({ error: 'Failed to find or create friend' }, { status: 500 });
+      }
+      
+      friendId = existingFriendResult[0].id;
     }
 
-    return NextResponse.json({ error: 'Failed to add friend' }, { status: 500 });
+    // Add the friendship with status
+    await db`
+      INSERT INTO friendships (player_id, friend_id, status)
+      VALUES (${currentUserId}, ${friendId}, 'accepted')
+      ON CONFLICT (player_id, friend_id) DO NOTHING
+    `;
+
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error adding friend:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
