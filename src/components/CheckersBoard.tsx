@@ -74,40 +74,26 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     return board;
   }
 
-  // Fetch game state from API (like chat messages)
-  const fetchGameState = useCallback(async () => {
+  // Save game state to API (like sending chat messages)
+  const saveGameState = useCallback(async (state: GameState) => {
+    if (!publicKey) return;
+    
     try {
-      const response = await fetch(`/api/games/${gameId}/state`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.currentState) {
-          setGameState(data.currentState);
-          
-          // Determine player color based on game players
-          if (publicKey) {
-            const gameResponse = await fetch(`/api/games/${gameId}`);
-            if (gameResponse.ok) {
-              const gameData = await gameResponse.json();
-              const walletAddress = publicKey.toString();
-              
-              if (gameData.players && gameData.players.length >= 2) {
-                // First player = red, second player = black
-                if (gameData.players[0].wallet_address === walletAddress) {
-                  setPlayerColor('red');
-                } else if (gameData.players[1].wallet_address === walletAddress) {
-                  setPlayerColor('black');
-                }
-              }
-            }
-          }
-        }
-      } else if (response.status === 404) {
-        // Game state doesn't exist yet, try to join the game
-        await joinGame();
+      const response = await fetch(`/api/games/${gameId}/state`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newState: state,
+          playerId: publicKey.toString(),
+          move: state.lastMove
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save game state');
       }
     } catch (error) {
-      console.error('Error fetching game state:', error);
-      setError('Failed to load game state');
+      console.error('Error saving game state:', error);
     }
   }, [gameId, publicKey]);
 
@@ -161,30 +147,44 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     } catch (error) {
       console.error('Error joining game:', error);
     }
-  }, [gameId, publicKey]);
+  }, [gameId, publicKey, saveGameState]);
 
-  // Save game state to API (like sending chat messages)
-  const saveGameState = async (state: GameState) => {
-    if (!publicKey) return;
-    
+  // Fetch game state from API (like chat messages)
+  const fetchGameState = useCallback(async () => {
     try {
-      const response = await fetch(`/api/games/${gameId}/state`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          newState: state,
-          playerId: publicKey.toString(),
-          move: state.lastMove
-        })
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to save game state');
+      const response = await fetch(`/api/games/${gameId}/state`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.currentState) {
+          setGameState(data.currentState);
+          
+          // Determine player color based on game players
+          if (publicKey) {
+            const gameResponse = await fetch(`/api/games/${gameId}`);
+            if (gameResponse.ok) {
+              const gameData = await gameResponse.json();
+              const walletAddress = publicKey.toString();
+              
+              if (gameData.players && gameData.players.length >= 2) {
+                // First player = red, second player = black
+                if (gameData.players[0].wallet_address === walletAddress) {
+                  setPlayerColor('red');
+                } else if (gameData.players[1].wallet_address === walletAddress) {
+                  setPlayerColor('black');
+                }
+              }
+            }
+          }
+        }
+      } else if (response.status === 404) {
+        // Game state doesn't exist yet, try to join the game
+        await joinGame();
       }
     } catch (error) {
-      console.error('Error saving game state:', error);
+      console.error('Error fetching game state:', error);
+      setError('Failed to load game state');
     }
-  };
+  }, [gameId, publicKey, joinGame]);
 
   // Polling setup (same as chat)
   useEffect(() => {
