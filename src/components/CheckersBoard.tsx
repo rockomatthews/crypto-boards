@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useCallback, useEffect, useRef } from 'react';
+import { FC, useState, useCallback, useEffect } from 'react';
 import { Box, Typography, Button } from '@mui/material';
 import { CheckersSquare } from './CheckersSquare';
 
@@ -21,14 +21,12 @@ interface CheckersBoardProps {
     game_status: string;
   };
   isMultiplayer?: boolean;
-  playerColor?: 'black' | 'white'; // Which color this player is playing
+  playerColor?: 'black' | 'white';
 }
 
 interface GameState {
   board: BoardState;
   currentTurn: 'black' | 'white';
-  selectedPiece: Position | null;
-  validMoves: Position[];
   lastMove: { from: Position; to: Position } | null;
 }
 
@@ -60,7 +58,7 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
   gameId, 
   currentPlayer,
   isMultiplayer = false,
-  playerColor = 'white' // Default to white for single player
+  playerColor = 'white'
 }) => {
   const [board, setBoard] = useState<BoardState>(initializeBoard());
   const [currentTurn, setCurrentTurn] = useState<'black' | 'white'>('black');
@@ -68,84 +66,62 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
   const [validMoves, setValidMoves] = useState<Position[]>([]);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState<'black' | 'white' | null>(null);
-  const lastUpdatedRef = useRef<string | null>(null);
 
-  // Fetch game state from server
-  const fetchGameState = useCallback(async () => {
+  // Real-time sync using localStorage (for local testing) and storage events
+  useEffect(() => {
     if (!isMultiplayer || !gameId) return;
 
-    try {
-      const response = await fetch(`/api/games/${gameId}`);
-      if (response.ok) {
-        const data = await response.json();
-        const gameState = data.currentState as GameState;
-        
-        // Only update if the state has changed
-        if (data.lastUpdated !== lastUpdatedRef.current) {
-          setBoard(gameState?.board || initializeBoard());
-          setCurrentTurn(gameState?.currentTurn || 'black');
-          lastUpdatedRef.current = data.lastUpdated;
-          
-          // Clear local selection state when receiving updates from server
+    const storageKey = `game-state-${gameId}`;
+
+    // Listen for changes from other browser tabs/windows
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === storageKey && e.newValue) {
+        try {
+          const gameState: GameState = JSON.parse(e.newValue);
+          setBoard(gameState.board);
+          setCurrentTurn(gameState.currentTurn);
           setSelectedPiece(null);
           setValidMoves([]);
-          
-          // Check for game over
-          checkGameOver(gameState?.board || initializeBoard());
+          checkGameOver(gameState.board);
+          console.log('Game state synced from other player');
+        } catch (error) {
+          console.error('Error parsing game state:', error);
         }
       }
-    } catch (error) {
-      console.error('Error fetching game state:', error);
-    }
-  }, [gameId, isMultiplayer]);
+    };
 
-  // Send move to server
-  const sendMoveToServer = useCallback(async (from: Position, to: Position, newBoard: BoardState, newTurn: 'black' | 'white') => {
-    if (!isMultiplayer || !gameId || !currentPlayer) return;
-
-    try {
-      const newState: GameState = {
-        board: newBoard,
-        currentTurn: newTurn,
-        selectedPiece: null,
-        validMoves: [],
-        lastMove: { from, to }
-      };
-
-      const response = await fetch(`/api/games/${gameId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          newState,
-          playerId: currentPlayer.id
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('Failed to send move to server');
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Load initial state if exists
+    const savedState = localStorage.getItem(storageKey);
+    if (savedState) {
+      try {
+        const gameState: GameState = JSON.parse(savedState);
+        setBoard(gameState.board);
+        setCurrentTurn(gameState.currentTurn);
+        checkGameOver(gameState.board);
+        console.log('Loaded existing game state');
+      } catch (error) {
+        console.error('Error loading saved game state:', error);
       }
-    } catch (error) {
-      console.error('Error sending move to server:', error);
     }
-  }, [gameId, isMultiplayer, currentPlayer]);
 
-  // Set up polling for multiplayer games
-  useEffect(() => {
-    if (isMultiplayer && gameId) {
-      fetchGameState(); // Initial fetch
-      
-      // Poll for updates every 2 seconds
-      const interval = setInterval(fetchGameState, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [isMultiplayer, gameId, fetchGameState]);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [isMultiplayer, gameId]);
 
-  // Determine if board should be flipped for this player
+  // Save game state for other players
+  const syncGameState = useCallback((gameState: GameState) => {
+    if (!isMultiplayer || !gameId) return;
+
+    const storageKey = `game-state-${gameId}`;
+    localStorage.setItem(storageKey, JSON.stringify(gameState));
+    console.log('Game state saved for sync');
+  }, [isMultiplayer, gameId]);
+
   const shouldFlipBoard = isMultiplayer && playerColor === 'black';
 
-  // Helper function to get actual board coordinates from display coordinates
   const getActualCoords = (displayRow: number, displayCol: number) => {
     if (shouldFlipBoard) {
       return { row: 7 - displayRow, col: 7 - displayCol };
@@ -161,12 +137,11 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
     const isKing = piece.includes('king');
     const isBlack = piece.includes('black');
 
-    // Define possible directions based on piece type
     const directions = isKing 
-      ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] // Kings can move in all 4 directions
+      ? [[-1, -1], [-1, 1], [1, -1], [1, 1]]
       : isBlack 
-        ? [[1, -1], [1, 1]] // Black pieces move down
-        : [[-1, -1], [-1, 1]]; // White pieces move up
+        ? [[1, -1], [1, 1]]
+        : [[-1, -1], [-1, 1]];
 
     // Check regular moves
     for (const [dRow, dCol] of directions) {
@@ -204,19 +179,16 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
   const handleSquareClick = (displayRow: number, displayCol: number) => {
     if (gameOver) return;
 
-    // Convert display coordinates to actual board coordinates
     const { row, col } = getActualCoords(displayRow, displayCol);
     const piece = board[row][col];
     
-    // In multiplayer, only allow moves if it's the player's turn and their piece
     if (isMultiplayer) {
-      if (currentTurn !== playerColor) return; // Not this player's turn
+      if (currentTurn !== playerColor) return;
       
       const isPlayerPiece = piece && piece !== 'empty' && piece.includes(playerColor);
       
-      if (piece && piece !== 'empty' && !isPlayerPiece) return; // Can't select opponent's piece
+      if (piece && piece !== 'empty' && !isPlayerPiece) return;
     } else {
-      // Single player mode - check current turn
       const isCurrentPlayerPiece = piece && piece !== 'empty' &&
         ((currentTurn === 'black' && piece.includes('black')) ||
          (currentTurn === 'white' && piece.includes('white')));
@@ -224,7 +196,6 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
       if (piece && piece !== 'empty' && !isCurrentPlayerPiece) return;
     }
 
-    // If clicking on current player's piece, select it
     if (piece && piece !== 'empty' && ((isMultiplayer && piece.includes(playerColor)) || 
                   (!isMultiplayer && piece.includes(currentTurn)))) {
       setSelectedPiece({ row, col });
@@ -233,7 +204,6 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
       return;
     }
 
-    // If clicking on a valid move position, make the move
     if (selectedPiece && validMoves.some(move => move.row === row && move.col === col)) {
       makeMove(selectedPiece, { row, col });
       setSelectedPiece(null);
@@ -247,11 +217,9 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
     
     if (!piece || piece === 'empty') return;
 
-    // Move the piece
     newBoard[to.row][to.col] = piece;
     newBoard[from.row][from.col] = 'empty';
 
-    // Check if it's a capture move
     const capturedRow = (from.row + to.row) / 2;
     const capturedCol = (from.col + to.col) / 2;
     const isCapture = Math.abs(from.row - to.row) === 2;
@@ -260,7 +228,6 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
       newBoard[capturedRow][capturedCol] = 'empty';
     }
 
-    // Check for king promotion
     if (piece === 'black' && to.row === 7) {
       newBoard[to.row][to.col] = 'black-king';
     } else if (piece === 'white' && to.row === 0) {
@@ -269,22 +236,23 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
 
     setBoard(newBoard);
 
-    // Check for additional captures
     const additionalCaptures = getCaptureMoves(to.row, to.col, newBoard);
     if (additionalCaptures.length > 0 && isCapture) {
-      // Continue turn for multiple captures
       setSelectedPiece(to);
       setValidMoves(additionalCaptures);
-      // Don't switch turns or send to server yet
     } else {
-      // Switch turns
       const newTurn = currentTurn === 'black' ? 'white' : 'black';
       setCurrentTurn(newTurn);
       checkGameOver(newBoard);
       
-      // Send move to server in multiplayer mode
+      // Sync game state in multiplayer mode
       if (isMultiplayer && gameId) {
-        sendMoveToServer(from, to, newBoard, newTurn);
+        const gameState: GameState = {
+          board: newBoard,
+          currentTurn: newTurn,
+          lastMove: { from, to }
+        };
+        syncGameState(gameState);
       }
     }
   };
@@ -351,7 +319,6 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
     setWinner(null);
   };
 
-  // Create display board (potentially flipped)
   const displayBoard = Array(8).fill(null).map((_, row) =>
     Array(8).fill(null).map((_, col) => {
       const { row: actualRow, col: actualCol } = getActualCoords(row, col);
@@ -359,7 +326,6 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
     })
   );
 
-  // Get current turn display text
   const getCurrentTurnText = () => {
     if (gameOver) {
       return `Game Over! ${winner ? winner.charAt(0).toUpperCase() + winner.slice(1) : ''} wins!`;
@@ -382,6 +348,11 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
       {isMultiplayer && (
         <Typography variant="body1" color="text.secondary">
           You are playing as {playerColor.charAt(0).toUpperCase() + playerColor.slice(1)}
+          {isMultiplayer && (
+            <Typography variant="caption" display="block" color="text.secondary">
+              Open another browser tab to play as the opponent
+            </Typography>
+          )}
         </Typography>
       )}
       
@@ -394,7 +365,6 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
       }}>
         {displayBoard.map((row, rowIndex) =>
           row.map((piece, colIndex) => {
-            // Check if this square is selected (need to convert to actual coordinates)
             const { row: actualRow, col: actualCol } = getActualCoords(rowIndex, colIndex);
             const isSelected = selectedPiece?.row === actualRow && selectedPiece?.col === actualCol;
             const isValidMove = validMoves.some(move => move.row === actualRow && move.col === actualCol);

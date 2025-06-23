@@ -85,6 +85,13 @@ export class SocketManager {
         console.log(`User ${socket.id} joined game ${gameId}`);
       });
 
+      // Handle joining a game room (alternative event name for CheckersBoard)
+      socket.on('join-game', (gameId: string) => {
+        socket.join(`game:${gameId}`);
+        socket.data.currentGame = gameId;
+        console.log(`User ${socket.id} joined game ${gameId}`);
+      });
+
       // Handle leaving a game room
       socket.on(SOCKET_EVENTS.LEAVE_GAME, (gameId: string) => {
         socket.leave(`game:${gameId}`);
@@ -110,7 +117,7 @@ export class SocketManager {
         console.log(`User ${socket.id} left lobby ${lobbyId}`);
       });
 
-      // Handle game moves
+      // Handle game moves (original format)
       socket.on(SOCKET_EVENTS.GAME_MOVE, (data: { gameId: string; move: GameMove }) => {
         this.broadcastGameUpdate(data.gameId, {
           gameId: data.gameId,
@@ -118,6 +125,13 @@ export class SocketManager {
           data: data.move,
           timestamp: new Date()
         });
+      });
+
+      // Handle game moves (CheckersBoard format)
+      socket.on('game-move', (data: { gameId: string; playerId: string; gameState: any }) => {
+        console.log(`Game move from ${data.playerId} in game ${data.gameId}`);
+        // Broadcast the updated game state to all other players in the room
+        socket.to(`game:${data.gameId}`).emit('game-updated', data.gameState);
       });
 
       // Handle chat messages
