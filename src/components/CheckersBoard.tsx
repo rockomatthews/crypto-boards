@@ -74,7 +74,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     return board;
   }
 
-  // Save game state to API (like sending chat messages)
+  // Save game state to API (using existing game state endpoint)
   const saveGameState = useCallback(async (state: GameState) => {
     if (!publicKey) return;
     
@@ -97,26 +97,15 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   }, [gameId, publicKey]);
 
-  // Join game (similar to chat user creation)
-  const joinGame = useCallback(async () => {
+  // Initialize game state when needed
+  const initializeGameState = async () => {
     if (!publicKey) return;
     
     try {
-      // Get player ID first
-      const playerResponse = await fetch('/api/chat/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletAddress: publicKey.toString() })
-      });
-      
-      if (!playerResponse.ok) return;
-      
-      const walletAddress = publicKey.toString();
-      
-      // Check if we need to initialize game state
       const gameResponse = await fetch(`/api/games/${gameId}`);
       if (gameResponse.ok) {
         const gameData = await gameResponse.json();
+        const walletAddress = publicKey.toString();
         
         if (gameData.players && gameData.players.length >= 1) {
           const newState: GameState = {
@@ -136,20 +125,15 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           }
           
           setGameState(newState);
-          
-          // Initialize game state in database if not exists
-          const stateResponse = await fetch(`/api/games/${gameId}/state`);
-          if (!stateResponse.ok) {
-            await saveGameState(newState);
-          }
+          await saveGameState(newState);
         }
       }
     } catch (error) {
-      console.error('Error joining game:', error);
+      console.error('Error initializing game:', error);
     }
-  }, [gameId, publicKey, saveGameState]);
+  };
 
-  // Fetch game state from API (like chat messages)
+  // Fetch game state from API (using existing endpoint)
   const fetchGameState = useCallback(async () => {
     try {
       const response = await fetch(`/api/games/${gameId}/state`);
@@ -177,38 +161,17 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           }
         }
       } else if (response.status === 404) {
-        // Game state doesn't exist yet, try to join the game
-        await joinGame();
+        // Game state doesn't exist yet, we'll let initializeGameState handle this
+        console.log('Game state not found, will initialize separately');
       }
     } catch (error) {
       console.error('Error fetching game state:', error);
       setError('Failed to load game state');
     }
-  }, [gameId, publicKey, joinGame]);
-
-  // Polling setup (same as chat)
-  useEffect(() => {
-    if (gameId && publicKey) {
-      fetchGameState();
-      
-      // Poll for updates every 3 seconds (same as chat)
-      const interval = setInterval(() => {
-        fetchGameState();
-      }, 3000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [gameId, publicKey, fetchGameState]);
-
-  // Initialize game on mount
-  useEffect(() => {
-    if (gameId && publicKey) {
-      joinGame();
-    }
-  }, [gameId, publicKey, joinGame]);
+  }, [gameId, publicKey]);
 
   // Get valid moves for a piece
-  const getValidMoves = (row: number, col: number, piece: GamePiece): [number, number][] => {
+  const getValidMoves = useCallback((row: number, col: number, piece: GamePiece): [number, number][] => {
     const moves: [number, number][] = [];
     if (!piece) return moves;
 
@@ -242,36 +205,28 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
     
     return moves;
-  };
+  }, [gameState.board]);
 
-  // Handle square click
-  const handleSquareClick = (row: number, col: number) => {
-    if (gameState.gameStatus !== 'active') return;
-    if (!playerColor || gameState.currentPlayer !== playerColor) return;
-    if (loading) return;
-
-    const piece = gameState.board[row][col];
+  // Check for winner
+  const checkWinner = useCallback((board: (GamePiece | null)[][]): Player | null => {
+    let redPieces = 0;
+    let blackPieces = 0;
     
-    if (selectedSquare) {
-      const [selectedRow, selectedCol] = selectedSquare;
-      
-      // Check if this is a valid move
-      const isValidMove = validMoves.some(([r, c]) => r === row && c === col);
-      
-      if (isValidMove) {
-        makeMove(selectedRow, selectedCol, row, col);
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = board[row][col];
+        if (piece?.type === 'red') redPieces++;
+        if (piece?.type === 'black') blackPieces++;
       }
-      
-      setSelectedSquare(null);
-      setValidMoves([]);
-    } else if (piece && piece.type === playerColor) {
-      setSelectedSquare([row, col]);
-      setValidMoves(getValidMoves(row, col, piece));
     }
-  };
+    
+    if (redPieces === 0) return 'black';
+    if (blackPieces === 0) return 'red';
+    return null;
+  }, []);
 
   // Make a move and save to database
-  const makeMove = async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
+  const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
     setLoading(true);
     
     const newBoard = gameState.board.map(row => [...row]);
@@ -325,25 +280,55 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
     
     setLoading(false);
-  };
+  }, [gameState, saveGameState, checkWinner]);
 
-  // Check for winner
-  const checkWinner = (board: (GamePiece | null)[][]): Player | null => {
-    let redPieces = 0;
-    let blackPieces = 0;
+  // Handle square click
+  const handleSquareClick = useCallback((row: number, col: number) => {
+    if (gameState.gameStatus !== 'active') return;
+    if (!playerColor || gameState.currentPlayer !== playerColor) return;
+    if (loading) return;
+
+    const piece = gameState.board[row][col];
     
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        const piece = board[row][col];
-        if (piece?.type === 'red') redPieces++;
-        if (piece?.type === 'black') blackPieces++;
+    if (selectedSquare) {
+      const [selectedRow, selectedCol] = selectedSquare;
+      
+      // Check if this is a valid move
+      const isValidMove = validMoves.some(([r, c]) => r === row && c === col);
+      
+      if (isValidMove) {
+        makeMove(selectedRow, selectedCol, row, col);
       }
+      
+      setSelectedSquare(null);
+      setValidMoves([]);
+    } else if (piece && piece.type === playerColor) {
+      setSelectedSquare([row, col]);
+      setValidMoves(getValidMoves(row, col, piece));
     }
-    
-    if (redPieces === 0) return 'black';
-    if (blackPieces === 0) return 'red';
-    return null;
-  };
+  }, [gameState.gameStatus, gameState.board, gameState.currentPlayer, playerColor, loading, selectedSquare, validMoves, makeMove, getValidMoves]);
+
+  // Polling setup (every 3 seconds like chat)
+  useEffect(() => {
+    if (gameId && publicKey) {
+      fetchGameState();
+      
+      // Poll for updates every 3 seconds
+      const interval = setInterval(() => {
+        fetchGameState();
+      }, 3000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [gameId, publicKey, fetchGameState]);
+
+  // Initialize game on mount
+  useEffect(() => {
+    if (gameId && publicKey) {
+      initializeGameState();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, publicKey]);
 
   // Render square with classic checkerboard pattern
   const renderSquare = (row: number, col: number) => {
@@ -375,7 +360,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       {/* Game Info */}
       <Paper sx={{ p: 2, mb: 3, bgcolor: '#8B4513', color: 'white', borderRadius: 2 }}>
         <Typography variant="h4" align="center" gutterBottom sx={{ fontWeight: 'bold' }}>
-          🏁 Classic Checkers 🏁
+          🏁 Async Multiplayer Checkers 🏁
         </Typography>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
@@ -440,9 +425,12 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       {/* Game Instructions */}
       <Paper sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
         <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#8B4513' }}>
-          📋 How to Play:
+          📋 Asynchronous Multiplayer:
         </Typography>
         <Typography variant="body2" component="div">
+          ✅ **REAL-TIME SYNC** - Game updates every 3 seconds<br/>
+          ✅ **DATABASE STORAGE** - Moves saved permanently<br/>
+          ✅ **CROSS-DEVICE** - Play on different devices/browsers<br/>
           • Click on your {playerColor} piece to select it<br/>
           • Green highlighted squares show valid moves<br/>
           • Jump over opponent pieces to capture them<br/>
@@ -450,8 +438,8 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           • Capture all opponent pieces to win!
         </Typography>
         {gameState.lastMove && (
-          <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
-            Last move: ({gameState.lastMove.from[0]},{gameState.lastMove.from[1]}) → ({gameState.lastMove.to[0]},{gameState.lastMove.to[1]})
+          <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic', color: '#FF6B35' }}>
+            **Last move:** ({gameState.lastMove.from[0]},{gameState.lastMove.from[1]}) → ({gameState.lastMove.to[0]},{gameState.lastMove.to[1]})
           </Typography>
         )}
       </Paper>

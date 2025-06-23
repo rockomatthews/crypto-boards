@@ -50,95 +50,63 @@ a {
   }
 }
 
-/* Classic Checkers Board Styles */
+/* CheckersBoard Styles */
 .checkers-board {
-  width: 520px;
-  height: 520px;
-  border: 12px solid #4A3728;
-  border-radius: 12px;
-  box-shadow: 
-    0 12px 24px rgba(0,0,0,0.4),
-    inset 0 0 0 4px #8B4513,
-    inset 0 0 0 8px #654321;
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
   gap: 0;
-  background: #2F1B14;
-  position: relative;
-}
-
-.checkers-board::before {
-  content: '';
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  right: -4px;
-  bottom: -4px;
-  background: linear-gradient(45deg, #8B4513, #CD853F, #D2691E, #A0522D);
-  border-radius: 16px;
-  z-index: -1;
+  width: 480px;
+  height: 480px;
+  border: 8px solid #8B4513;
+  border-radius: 8px;
+  box-shadow: 
+    0 8px 16px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 4px #DEB887,
+    inset 0 0 0 8px #8B4513;
+  background: linear-gradient(145deg, #CD853F, #8B4513);
 }
 
 .square {
-  width: 65px;
-  height: 65px;
+  width: 60px;
+  height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   position: relative;
-  transition: all 0.3s ease;
-  border: 1px solid rgba(0,0,0,0.1);
-}
-
-.square.dark {
-  background: 
-    radial-gradient(circle at 30% 30%, #654321, #4A3728),
-    linear-gradient(135deg, #5D4037, #3E2723);
-  box-shadow: inset 2px 2px 4px rgba(0,0,0,0.3);
+  transition: all 0.2s ease;
+  border: 1px solid rgba(139, 69, 19, 0.3);
 }
 
 .square.light {
-  background: 
-    radial-gradient(circle at 30% 30%, #D2691E, #CD853F),
-    linear-gradient(135deg, #DEB887, #F4A460);
-  box-shadow: inset -2px -2px 4px rgba(0,0,0,0.1);
+  background: linear-gradient(145deg, #F5DEB3, #DEB887);
+}
+
+.square.dark {
+  background: linear-gradient(145deg, #8B4513, #654321);
+}
+
+.square:hover {
+  transform: scale(1.05);
+  z-index: 2;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
 }
 
 .square.selected {
-  box-shadow: 
-    inset 0 0 0 4px #FFD700,
-    inset 0 0 20px rgba(255, 215, 0, 0.3),
-    0 0 20px rgba(255, 215, 0, 0.6);
-  background: radial-gradient(circle, #FFFF99, #FFD700) !important;
-  transform: scale(0.95);
+  background: linear-gradient(145deg, #FFD700, #FFA500) !important;
+  border: 3px solid #FF6B35;
+  animation: pulse 1s infinite;
 }
 
 .square.valid-move {
-  box-shadow: 
-    inset 0 0 0 3px #32CD32,
-    inset 0 0 15px rgba(50, 205, 50, 0.2),
-    0 0 15px rgba(50, 205, 50, 0.4);
-  animation: pulse 1.5s infinite;
+  background: linear-gradient(145deg, #90EE90, #32CD32) !important;
+  border: 2px solid #228B22;
+  animation: glow 1.5s ease-in-out infinite alternate;
 }
 
 .square.last-move {
-  box-shadow: 
-    inset 0 0 0 3px #FF6B35,
-    inset 0 0 15px rgba(255, 107, 53, 0.3),
-    0 0 10px rgba(255, 107, 53, 0.5);
-}
-
-@keyframes pulse {
-  0% { box-shadow: inset 0 0 0 3px #32CD32, inset 0 0 15px rgba(50, 205, 50, 0.2); }
-  50% { box-shadow: inset 0 0 0 3px #90EE90, inset 0 0 25px rgba(50, 205, 50, 0.4); }
-  100% { box-shadow: inset 0 0 0 3px #32CD32, inset 0 0 15px rgba(50, 205, 50, 0.2); }
-}
-
-.square:hover:not(.selected) {
-  filter: brightness(1.1);
-  transform: translateZ(2px);
+  background: linear-gradient(145deg, #FFB6C1, #FF69B4) !important;
+  border: 2px solid #FF1493;
 }
 
 .piece {
@@ -150,345 +118,71 @@ a {
   justify-content: center;
   font-size: 24px;
   font-weight: bold;
-  border: 4px solid;
-  box-shadow: 
-    0 6px 12px rgba(0,0,0,0.4),
-    inset 0 2px 4px rgba(255,255,255,0.3);
-  cursor: pointer;
   transition: all 0.3s ease;
   position: relative;
-}
-
-.piece::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  right: 2px;
-  bottom: 2px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), transparent);
-  pointer-events: none;
+  cursor: pointer;
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.3),
+    inset 0 2px 4px rgba(255, 255, 255, 0.3);
 }
 
 .piece.red {
-  background: 
-    radial-gradient(circle at 30% 30%, #FF4444, #CC0000),
-    linear-gradient(135deg, #FF6B6B, #DC143C);
-  border-color: #8B0000;
-  color: #FFD700;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  background: linear-gradient(145deg, #FF6B6B, #FF4444);
+  border: 3px solid #CC0000;
+  color: #FFFFFF;
 }
 
 .piece.black {
-  background: 
-    radial-gradient(circle at 30% 30%, #444444, #000000),
-    linear-gradient(135deg, #333333, #111111);
-  border-color: #222;
+  background: linear-gradient(145deg, #333333, #111111);
+  border: 3px solid #000000;
   color: #FFD700;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
 }
 
 .piece.king {
-  border-width: 5px;
-  transform: scale(1.15);
+  border-width: 4px;
   box-shadow: 
-    0 8px 16px rgba(0,0,0,0.5),
-    inset 0 2px 4px rgba(255,255,255,0.4),
-    0 0 20px rgba(255, 215, 0, 0.3);
+    0 6px 12px rgba(0, 0, 0, 0.4),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4),
+    0 0 20px rgba(255, 215, 0, 0.6);
+  animation: kingGlow 2s ease-in-out infinite alternate;
 }
 
-.piece.king::after {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border-radius: 50%;
-  border: 2px solid #FFD700;
-  animation: glow 2s ease-in-out infinite alternate;
+.piece.red.king {
+  background: linear-gradient(145deg, #FF6B6B, #FF4444, #FFD700);
+  border-color: #FFD700;
 }
 
-@keyframes glow {
-  from { box-shadow: 0 0 5px #FFD700; }
-  to { box-shadow: 0 0 15px #FFD700, 0 0 25px #FFD700; }
+.piece.black.king {
+  background: linear-gradient(145deg, #333333, #111111, #FFD700);
+  border-color: #FFD700;
 }
 
 .piece:hover {
-  transform: scale(1.08) translateY(-2px);
-  box-shadow: 
-    0 8px 16px rgba(0,0,0,0.5),
-    inset 0 2px 4px rgba(255,255,255,0.4);
-}
-
-.piece.king:hover {
-  transform: scale(1.2) translateY(-2px);
-  box-shadow: 
-    0 10px 20px rgba(0,0,0,0.6),
-    inset 0 2px 4px rgba(255,255,255,0.5),
-    0 0 25px rgba(255, 215, 0, 0.5);
-}
-
-/* Game board responsive */
-@media (max-width: 768px) {
-  .checkers-board {
-    width: 400px;
-    height: 400px;
-    border-width: 8px;
-  }
-  
-  .square {
-    width: 50px;
-    height: 50px;
-  }
-  
-  .piece {
-    width: 38px;
-    height: 38px;
-    font-size: 18px;
-    border-width: 3px;
-  }
-  
-  .piece.king {
-    border-width: 4px;
-  }
-}
-
-@media (max-width: 480px) {
-  .checkers-board {
-    width: 320px;
-    height: 320px;
-    border-width: 6px;
-  }
-  
-  .square {
-    width: 40px;
-    height: 40px;
-  }
-  
-  .piece {
-    width: 30px;
-    height: 30px;
-    font-size: 14px;
-    border-width: 2px;
-  }
-  
-  .piece.king {
-    border-width: 3px;
-  }
-}
-
-/* Classic Checkers Board Styles */
-.checkers-board {
-  width: 520px;
-  height: 520px;
-  border: 12px solid #4A3728;
-  border-radius: 12px;
-  box-shadow: 
-    0 12px 24px rgba(0,0,0,0.4),
-    inset 0 0 0 4px #8B4513,
-    inset 0 0 0 8px #654321;
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
-  gap: 0;
-  background: #2F1B14;
-  position: relative;
-}
-
-.checkers-board::before {
-  content: '';
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  right: -4px;
-  bottom: -4px;
-  background: linear-gradient(45deg, #8B4513, #CD853F, #D2691E, #A0522D);
-  border-radius: 16px;
-  z-index: -1;
-}
-
-.square {
-  width: 65px;
-  height: 65px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.3s ease;
-  border: 1px solid rgba(0,0,0,0.1);
-}
-
-.square.dark {
-  background: 
-    radial-gradient(circle at 30% 30%, #654321, #4A3728),
-    linear-gradient(135deg, #5D4037, #3E2723);
-  box-shadow: inset 2px 2px 4px rgba(0,0,0,0.3);
-}
-
-.square.light {
-  background: 
-    radial-gradient(circle at 30% 30%, #D2691E, #CD853F),
-    linear-gradient(135deg, #DEB887, #F4A460);
-  box-shadow: inset -2px -2px 4px rgba(0,0,0,0.1);
-}
-
-.square.selected {
-  box-shadow: 
-    inset 0 0 0 4px #FFD700,
-    inset 0 0 20px rgba(255, 215, 0, 0.3),
-    0 0 20px rgba(255, 215, 0, 0.6);
-  background: radial-gradient(circle, #FFFF99, #FFD700) !important;
-  transform: scale(0.95);
-}
-
-.square.valid-move {
-  box-shadow: 
-    inset 0 0 0 3px #32CD32,
-    inset 0 0 15px rgba(50, 205, 50, 0.2),
-    0 0 15px rgba(50, 205, 50, 0.4);
-  animation: pulse 1.5s infinite;
-}
-
-.square.last-move {
-  box-shadow: 
-    inset 0 0 0 3px #FF6B35,
-    inset 0 0 15px rgba(255, 107, 53, 0.3),
-    0 0 10px rgba(255, 107, 53, 0.5);
+  transform: scale(1.1);
+  z-index: 3;
 }
 
 @keyframes pulse {
-  0% { box-shadow: inset 0 0 0 3px #32CD32, inset 0 0 15px rgba(50, 205, 50, 0.2); }
-  50% { box-shadow: inset 0 0 0 3px #90EE90, inset 0 0 25px rgba(50, 205, 50, 0.4); }
-  100% { box-shadow: inset 0 0 0 3px #32CD32, inset 0 0 15px rgba(50, 205, 50, 0.2); }
-}
-
-.square:hover:not(.selected) {
-  filter: brightness(1.1);
-  transform: translateZ(2px);
-}
-
-.piece {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: bold;
-  border: 4px solid;
-  box-shadow: 
-    0 6px 12px rgba(0,0,0,0.4),
-    inset 0 2px 4px rgba(255,255,255,0.3);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-.piece::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  right: 2px;
-  bottom: 2px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), transparent);
-  pointer-events: none;
-}
-
-.piece.red {
-  background: 
-    radial-gradient(circle at 30% 30%, #FF4444, #CC0000),
-    linear-gradient(135deg, #FF6B6B, #DC143C);
-  border-color: #8B0000;
-  color: #FFD700;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-}
-
-.piece.black {
-  background: 
-    radial-gradient(circle at 30% 30%, #444444, #000000),
-    linear-gradient(135deg, #333333, #111111);
-  border-color: #222;
-  color: #FFD700;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-}
-
-.piece.king {
-  border-width: 5px;
-  transform: scale(1.15);
-  box-shadow: 
-    0 8px 16px rgba(0,0,0,0.5),
-    inset 0 2px 4px rgba(255,255,255,0.4),
-    0 0 20px rgba(255, 215, 0, 0.3);
-}
-
-.piece.king::after {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border-radius: 50%;
-  border: 2px solid #FFD700;
-  animation: glow 2s ease-in-out infinite alternate;
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
 }
 
 @keyframes glow {
-  from { box-shadow: 0 0 5px #FFD700; }
-  to { box-shadow: 0 0 15px #FFD700, 0 0 25px #FFD700; }
+  from { box-shadow: 0 0 5px #32CD32, 0 0 10px #32CD32, 0 0 15px #32CD32; }
+  to { box-shadow: 0 0 10px #32CD32, 0 0 20px #32CD32, 0 0 30px #32CD32; }
 }
 
-.piece:hover {
-  transform: scale(1.08) translateY(-2px);
-  box-shadow: 
-    0 8px 16px rgba(0,0,0,0.5),
-    inset 0 2px 4px rgba(255,255,255,0.4);
+@keyframes kingGlow {
+  from { box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.4), 0 0 15px rgba(255, 215, 0, 0.4); }
+  to { box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.4), 0 0 25px rgba(255, 215, 0, 0.8); }
 }
 
-.piece.king:hover {
-  transform: scale(1.2) translateY(-2px);
-  box-shadow: 
-    0 10px 20px rgba(0,0,0,0.6),
-    inset 0 2px 4px rgba(255,255,255,0.5),
-    0 0 25px rgba(255, 215, 0, 0.5);
-}
-
-/* Game board responsive */
+/* Responsive design for smaller screens */
 @media (max-width: 768px) {
-  .checkers-board {
-    width: 400px;
-    height: 400px;
-    border-width: 8px;
-  }
-  
-  .square {
-    width: 50px;
-    height: 50px;
-  }
-  
-  .piece {
-    width: 38px;
-    height: 38px;
-    font-size: 18px;
-    border-width: 3px;
-  }
-  
-  .piece.king {
-    border-width: 4px;
-  }
-}
-
-@media (max-width: 480px) {
   .checkers-board {
     width: 320px;
     height: 320px;
-    border-width: 6px;
   }
   
   .square {
@@ -497,13 +191,26 @@ a {
   }
   
   .piece {
-    width: 30px;
-    height: 30px;
-    font-size: 14px;
-    border-width: 2px;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .checkers-board {
+    width: 280px;
+    height: 280px;
   }
   
-  .piece.king {
-    border-width: 3px;
+  .square {
+    width: 35px;
+    height: 35px;
+  }
+  
+  .piece {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
   }
 }
