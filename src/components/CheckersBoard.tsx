@@ -20,6 +20,11 @@ interface GameState {
   blackPlayer: string | null;
   gameStatus: 'waiting' | 'active' | 'finished';
   winner: Player | null;
+  lastMove?: {
+    from: [number, number];
+    to: [number, number];
+    capturedPieces?: [number, number][];
+  };
 }
 
 interface CheckersBoardProps {
@@ -42,6 +47,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   const [playerColor, setPlayerColor] = useState<Player | null>(null);
   const [gameEndDialog, setGameEndDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Initialize a standard checkers board
   function initializeBoard(): (GamePiece | null)[][] {
@@ -68,81 +74,138 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     return board;
   }
 
-  // Load game state from localStorage for testing
-  const loadGameState = useCallback(() => {
+  // Fetch game state from API (like chat messages)
+  const fetchGameState = useCallback(async () => {
     try {
-      const saved = localStorage.getItem(`checkers_game_${gameId}`);
-      if (saved) {
-        const parsedState = JSON.parse(saved);
-        setGameState(parsedState);
-        
-        // Determine player color
-        if (publicKey) {
-          const walletAddress = publicKey.toString();
-          if (parsedState.redPlayer === walletAddress) {
-            setPlayerColor('red');
-          } else if (parsedState.blackPlayer === walletAddress) {
-            setPlayerColor('black');
+      const response = await fetch(`/api/games/${gameId}/state`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.currentState) {
+          setGameState(data.currentState);
+          
+          // Determine player color based on game players
+          if (publicKey) {
+            const gameResponse = await fetch(`/api/games/${gameId}`);
+            if (gameResponse.ok) {
+              const gameData = await gameResponse.json();
+              const walletAddress = publicKey.toString();
+              
+              if (gameData.players && gameData.players.length >= 2) {
+                // First player = red, second player = black
+                if (gameData.players[0].wallet_address === walletAddress) {
+                  setPlayerColor('red');
+                } else if (gameData.players[1].wallet_address === walletAddress) {
+                  setPlayerColor('black');
+                }
+              }
+            }
           }
         }
-      } else {
-        // Initialize new game
-        const newState = {
-          board: initializeBoard(),
-          currentPlayer: 'red' as Player,
-          redPlayer: null,
-          blackPlayer: null,
-          gameStatus: 'waiting' as const,
-          winner: null,
-        };
-        setGameState(newState);
-        saveGameState(newState);
+      } else if (response.status === 404) {
+        // Game state doesn't exist yet, try to join the game
+        await joinGame();
       }
     } catch (error) {
-      console.error('Error loading game state:', error);
+      console.error('Error fetching game state:', error);
       setError('Failed to load game state');
     }
   }, [gameId, publicKey]);
 
-  // Save game state to localStorage
-  const saveGameState = (state: GameState) => {
+  // Join game (similar to chat user creation)
+  const joinGame = useCallback(async () => {
+    if (!publicKey) return;
+    
     try {
-      localStorage.setItem(`checkers_game_${gameId}`, JSON.stringify(state));
-      // Trigger storage event for real-time sync
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: `checkers_game_${gameId}`,
-        newValue: JSON.stringify(state),
-      }));
+      // Get player ID first
+      const playerResponse = await fetch('/api/chat/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: publicKey.toString() })
+      });
+      
+      if (!playerResponse.ok) return;
+      
+      const walletAddress = publicKey.toString();
+      
+      // Check if we need to initialize game state
+      const gameResponse = await fetch(`/api/games/${gameId}`);
+      if (gameResponse.ok) {
+        const gameData = await gameResponse.json();
+        
+        if (gameData.players && gameData.players.length >= 1) {
+          const newState: GameState = {
+            board: initializeBoard(),
+            currentPlayer: 'red' as Player,
+            redPlayer: gameData.players[0]?.wallet_address || null,
+            blackPlayer: gameData.players[1]?.wallet_address || null,
+            gameStatus: (gameData.players.length >= 2 ? 'active' : 'waiting') as 'waiting' | 'active' | 'finished',
+            winner: null,
+          };
+          
+          // Determine player color
+          if (gameData.players[0]?.wallet_address === walletAddress) {
+            setPlayerColor('red');
+          } else if (gameData.players[1]?.wallet_address === walletAddress) {
+            setPlayerColor('black');
+          }
+          
+          setGameState(newState);
+          
+          // Initialize game state in database if not exists
+          const stateResponse = await fetch(`/api/games/${gameId}/state`);
+          if (!stateResponse.ok) {
+            await saveGameState(newState);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error joining game:', error);
+    }
+  }, [gameId, publicKey]);
+
+  // Save game state to API (like sending chat messages)
+  const saveGameState = async (state: GameState) => {
+    if (!publicKey) return;
+    
+    try {
+      const response = await fetch(`/api/games/${gameId}/state`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newState: state,
+          playerId: publicKey.toString(),
+          move: state.lastMove
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save game state');
+      }
     } catch (error) {
       console.error('Error saving game state:', error);
     }
   };
 
-  // Join game as player
-  const joinGame = () => {
-    if (!publicKey) return;
-    
-    const walletAddress = publicKey.toString();
-    
-    if (!gameState.redPlayer) {
-      const newState = {
-        ...gameState,
-        redPlayer: walletAddress,
-      };
-      setPlayerColor('red');
-      setGameState(newState);
-      saveGameState(newState);
-    } else if (!gameState.blackPlayer && gameState.redPlayer !== walletAddress) {
-      const newState = {
-        ...gameState,
-        blackPlayer: walletAddress,
-        gameStatus: 'active' as const,
-      };
-      setPlayerColor('black');
-      setGameState(newState);
-      saveGameState(newState);
+  // Polling setup (same as chat)
+  useEffect(() => {
+    if (gameId && publicKey) {
+      fetchGameState();
+      
+      // Poll for updates every 3 seconds (same as chat)
+      const interval = setInterval(() => {
+        fetchGameState();
+      }, 3000);
+      
+      return () => clearInterval(interval);
     }
-  };
+  }, [gameId, publicKey, fetchGameState]);
+
+  // Initialize game on mount
+  useEffect(() => {
+    if (gameId && publicKey) {
+      joinGame();
+    }
+  }, [gameId, publicKey, joinGame]);
 
   // Get valid moves for a piece
   const getValidMoves = (row: number, col: number, piece: GamePiece): [number, number][] => {
@@ -185,6 +248,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   const handleSquareClick = (row: number, col: number) => {
     if (gameState.gameStatus !== 'active') return;
     if (!playerColor || gameState.currentPlayer !== playerColor) return;
+    if (loading) return;
 
     const piece = gameState.board[row][col];
     
@@ -206,12 +270,17 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   };
 
-  // Make a move
-  const makeMove = (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
+  // Make a move and save to database
+  const makeMove = async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
+    setLoading(true);
+    
     const newBoard = gameState.board.map(row => [...row]);
     const piece = newBoard[fromRow][fromCol];
     
-    if (!piece) return;
+    if (!piece) {
+      setLoading(false);
+      return;
+    }
     
     // Move piece
     newBoard[toRow][toCol] = piece;
@@ -220,9 +289,11 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     // Check for jump
     const jumpedRow = Math.floor((fromRow + toRow) / 2);
     const jumpedCol = Math.floor((fromCol + toCol) / 2);
+    const capturedPieces: [number, number][] = [];
     
     if (Math.abs(toRow - fromRow) === 2) {
       newBoard[jumpedRow][jumpedCol] = null; // Remove jumped piece
+      capturedPieces.push([jumpedRow, jumpedCol]);
     }
     
     // Check for king promotion
@@ -239,14 +310,21 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       currentPlayer: gameState.currentPlayer === 'red' ? 'black' : 'red',
       gameStatus: winner ? 'finished' : 'active',
       winner,
+      lastMove: {
+        from: [fromRow, fromCol],
+        to: [toRow, toCol],
+        capturedPieces: capturedPieces.length > 0 ? capturedPieces : undefined
+      }
     };
     
     setGameState(newState);
-    saveGameState(newState);
+    await saveGameState(newState);
     
     if (winner) {
       setGameEndDialog(true);
     }
+    
+    setLoading(false);
   };
 
   // Check for winner
@@ -267,35 +345,20 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     return null;
   };
 
-  // Listen for storage changes (real-time sync)
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `checkers_game_${gameId}` && e.newValue) {
-        const newState = JSON.parse(e.newValue);
-        setGameState(newState);
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [gameId]);
-
-  // Initialize game
-  useEffect(() => {
-    loadGameState();
-  }, [loadGameState]);
-
   // Render square with classic checkerboard pattern
   const renderSquare = (row: number, col: number) => {
     const piece = gameState.board[row][col];
     const isSelected = selectedSquare && selectedSquare[0] === row && selectedSquare[1] === col;
     const isValidMove = validMoves.some(([r, c]) => r === row && c === col);
     const isDarkSquare = (row + col) % 2 === 1;
+    const isLastMoveSquare = gameState.lastMove && 
+      ((gameState.lastMove.from[0] === row && gameState.lastMove.from[1] === col) ||
+       (gameState.lastMove.to[0] === row && gameState.lastMove.to[1] === col));
     
     return (
       <div
         key={`${row}-${col}`}
-        className={`square ${isDarkSquare ? 'dark' : 'light'} ${isSelected ? 'selected' : ''} ${isValidMove ? 'valid-move' : ''}`}
+        className={`square ${isDarkSquare ? 'dark' : 'light'} ${isSelected ? 'selected' : ''} ${isValidMove ? 'valid-move' : ''} ${isLastMoveSquare ? 'last-move' : ''}`}
         onClick={() => handleSquareClick(row, col)}
       >
         {piece && (
@@ -343,6 +406,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             fontWeight: 'bold'
           }}>
             {gameState.currentPlayer === playerColor ? "🎯 Your Turn!" : `${gameState.currentPlayer.toUpperCase()}'s Turn`}
+            {loading && " (Making move...)"}
           </Typography>
         )}
         
@@ -351,21 +415,9 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             <Typography gutterBottom sx={{ fontSize: '1.1rem' }}>
               ⏳ Waiting for players to join...
             </Typography>
-            {!playerColor && (
-              <Button 
-                variant="contained" 
-                onClick={joinGame} 
-                disabled={!publicKey}
-                sx={{ 
-                  bgcolor: '#FFD700', 
-                  color: '#333', 
-                  fontWeight: 'bold',
-                  '&:hover': { bgcolor: '#FFC107' }
-                }}
-              >
-                🚀 Join Game
-              </Button>
-            )}
+            <Typography variant="body2">
+              You are playing as: {playerColor ? playerColor.toUpperCase() : 'Not assigned'}
+            </Typography>
           </Box>
         )}
       </Paper>
@@ -391,12 +443,17 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           📋 How to Play:
         </Typography>
         <Typography variant="body2" component="div">
-          • Click on your piece to select it<br/>
+          • Click on your {playerColor} piece to select it<br/>
           • Green highlighted squares show valid moves<br/>
           • Jump over opponent pieces to capture them<br/>
           • Reach the opposite end to become a King ♔<br/>
           • Capture all opponent pieces to win!
         </Typography>
+        {gameState.lastMove && (
+          <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+            Last move: ({gameState.lastMove.from[0]},{gameState.lastMove.from[1]}) → ({gameState.lastMove.to[0]},{gameState.lastMove.to[1]})
+          </Typography>
+        )}
       </Paper>
 
       {/* Game End Dialog */}
