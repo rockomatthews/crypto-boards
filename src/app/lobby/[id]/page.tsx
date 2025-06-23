@@ -97,9 +97,9 @@ export default function LobbyPage() {
   useEffect(() => {
     if (lobbyId) {
       fetchLobby();
-      // Poll for updates every 2 seconds (faster for game start detection)
-      const interval = setInterval(fetchLobby, 2000);
-      return () => clearInterval(interval);
+      // Disabled polling to prevent constant refreshing
+      // const interval = setInterval(fetchLobby, 2000);
+      // return () => clearInterval(interval);
     }
   }, [lobbyId, fetchLobby]);
 

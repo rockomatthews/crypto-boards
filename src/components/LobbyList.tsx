@@ -60,9 +60,9 @@ export const LobbyList: FC = () => {
   useEffect(() => {
     if (publicKey) {
       fetchLobbies();
-      // Poll for updates every 3 seconds to catch game status changes
-      const interval = setInterval(fetchLobbies, 3000);
-      return () => clearInterval(interval);
+      // Disabled polling to prevent constant refreshing
+      // const interval = setInterval(fetchLobbies, 3000);
+      // return () => clearInterval(interval);
     }
   }, [publicKey, fetchLobbies]);
 
