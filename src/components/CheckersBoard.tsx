@@ -242,7 +242,7 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
       if (isMultiplayer && gameId) {
         const gameState = {
           board: newBoard,
-          currentTurn: newTurn,
+          currentTurn: newTurn as 'black' | 'white',
           lastMove: { from, to }
         };
         syncGameState(gameState);
