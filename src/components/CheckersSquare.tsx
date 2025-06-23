@@ -20,12 +20,12 @@ export const CheckersSquare: FC<CheckersSquareProps> = ({
   isDarkSquare,
 }) => {
   const getPieceColor = () => {
-    if (!piece) return 'transparent';
+    if (!piece || piece === 'empty') return 'transparent';
     return piece.includes('black') ? '#000' : '#fff';
   };
 
   const getPieceBorder = () => {
-    if (!piece) return 'none';
+    if (!piece || piece === 'empty') return 'none';
     return piece.includes('king') ? '3px solid #ffd700' : '2px solid #333';
   };
 
@@ -53,7 +53,7 @@ export const CheckersSquare: FC<CheckersSquareProps> = ({
         },
       }}
     >
-      {piece && (
+      {piece && piece !== 'empty' && (
         <Box
           sx={{
             width: 40,
@@ -84,7 +84,7 @@ export const CheckersSquare: FC<CheckersSquareProps> = ({
           )}
         </Box>
       )}
-      {isValidMove && !piece && (
+      {isValidMove && (!piece || piece === 'empty') && (
         <Box
           sx={{
             width: 20,
