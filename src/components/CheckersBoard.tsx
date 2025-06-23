@@ -24,12 +24,6 @@ interface CheckersBoardProps {
   playerColor?: 'black' | 'white';
 }
 
-interface GameState {
-  board: BoardState;
-  currentTurn: 'black' | 'white';
-  lastMove: { from: Position; to: Position } | null;
-}
-
 const initializeBoard = (): BoardState => {
   const board: BoardState = Array(8).fill(null).map(() => Array(8).fill('empty'));
   
@@ -56,7 +50,6 @@ const initializeBoard = (): BoardState => {
 
 export const CheckersBoard: FC<CheckersBoardProps> = ({ 
   gameId, 
-  currentPlayer,
   isMultiplayer = false,
   playerColor = 'white'
 }) => {
@@ -77,7 +70,7 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === storageKey && e.newValue) {
         try {
-          const gameState: GameState = JSON.parse(e.newValue);
+          const gameState = JSON.parse(e.newValue);
           setBoard(gameState.board);
           setCurrentTurn(gameState.currentTurn);
           setSelectedPiece(null);
@@ -96,7 +89,7 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
     const savedState = localStorage.getItem(storageKey);
     if (savedState) {
       try {
-        const gameState: GameState = JSON.parse(savedState);
+        const gameState = JSON.parse(savedState);
         setBoard(gameState.board);
         setCurrentTurn(gameState.currentTurn);
         checkGameOver(gameState.board);
@@ -112,7 +105,7 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
   }, [isMultiplayer, gameId]);
 
   // Save game state for other players
-  const syncGameState = useCallback((gameState: GameState) => {
+  const syncGameState = useCallback((gameState: { board: BoardState; currentTurn: 'black' | 'white'; lastMove: { from: Position; to: Position } | null }) => {
     if (!isMultiplayer || !gameId) return;
 
     const storageKey = `game-state-${gameId}`;
@@ -247,7 +240,7 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
       
       // Sync game state in multiplayer mode
       if (isMultiplayer && gameId) {
-        const gameState: GameState = {
+        const gameState = {
           board: newBoard,
           currentTurn: newTurn,
           lastMove: { from, to }
@@ -348,11 +341,9 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
       {isMultiplayer && (
         <Typography variant="body1" color="text.secondary">
           You are playing as {playerColor.charAt(0).toUpperCase() + playerColor.slice(1)}
-          {isMultiplayer && (
-            <Typography variant="caption" display="block" color="text.secondary">
-              Open another browser tab to play as the opponent
-            </Typography>
-          )}
+          <Typography variant="caption" display="block" color="text.secondary">
+            Open another browser tab to play as the opponent
+          </Typography>
         </Typography>
       )}
       
