@@ -8,10 +8,10 @@ const CheckersPage: FC = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h3" component="h1" gutterBottom align="center">
-        Checkers
+        Practice Checkers
       </Typography>
       <Paper elevation={3} sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
-        <CheckersBoard />
+        <CheckersBoard gameId="practice-game" />
       </Paper>
     </Container>
   );

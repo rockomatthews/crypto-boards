@@ -52,9 +52,9 @@ export default function MultiplayerCheckersPage() {
   useEffect(() => {
     if (gameId) {
       fetchGame();
-      // Poll for updates every 3 seconds
-      const interval = setInterval(fetchGame, 3000);
-      return () => clearInterval(interval);
+      // Disabled polling to prevent constant refreshing
+      // const interval = setInterval(fetchGame, 3000);
+      // return () => clearInterval(interval);
     }
   }, [gameId, fetchGame]);
 
@@ -160,12 +160,7 @@ export default function MultiplayerCheckersPage() {
 
       {/* Game Board */}
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
-        <CheckersBoard 
-          gameId={gameId}
-          currentPlayer={currentPlayer}
-          isMultiplayer={true}
-          playerColor={playerColor}
-        />
+        <CheckersBoard gameId={gameId} />
       </Box>
 
       {/* Game Info */}
