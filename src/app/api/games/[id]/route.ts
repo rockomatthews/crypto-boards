@@ -57,12 +57,51 @@ export async function GET(
     const gameWithDetails = {
       ...game,
       players: playersResult,
-      currentState: stateResult.length > 0 ? stateResult[0].current_state : null
+      currentState: stateResult.length > 0 ? stateResult[0].current_state : null,
+      lastUpdated: stateResult.length > 0 ? stateResult[0].last_updated : null
     };
 
     return NextResponse.json(gameWithDetails);
   } catch (error) {
     console.error('Error fetching game:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  context: any
+) {
+  try {
+    const gameId = context?.params?.id;
+    const { newState, playerId } = await request.json();
+
+    if (!newState || !playerId) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // Validate that the player is in the game
+    const playerInGameResult = await db`
+      SELECT game_status FROM game_players 
+      WHERE game_id = ${gameId} AND player_id = ${playerId}
+    `;
+
+    if (playerInGameResult.length === 0) {
+      return NextResponse.json({ error: 'Player not in game' }, { status: 403 });
+    }
+
+    // Update game state
+    await db`
+      INSERT INTO game_states (game_id, current_state)
+      VALUES (${gameId}, ${JSON.stringify(newState)})
+    `;
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Game state updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating game state:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

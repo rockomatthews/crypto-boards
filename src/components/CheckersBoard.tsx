@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useCallback, useEffect } from 'react';
+import { FC, useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Typography, Button } from '@mui/material';
 import { CheckersSquare } from './CheckersSquare';
 
@@ -29,7 +29,7 @@ interface GameState {
   currentTurn: 'black' | 'white';
   selectedPiece: Position | null;
   validMoves: Position[];
-  lastMove: Position[] | null;
+  lastMove: { from: Position; to: Position } | null;
 }
 
 const initializeBoard = (): BoardState => {
@@ -68,36 +68,36 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
   const [validMoves, setValidMoves] = useState<Position[]>([]);
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState<'black' | 'white' | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const lastUpdatedRef = useRef<string | null>(null);
 
   // Fetch game state from server
   const fetchGameState = useCallback(async () => {
     if (!isMultiplayer || !gameId) return;
 
     try {
-      const response = await fetch(`/api/games/${gameId}/state`);
+      const response = await fetch(`/api/games/${gameId}`);
       if (response.ok) {
         const data = await response.json();
         const gameState = data.currentState as GameState;
         
         // Only update if the state has changed
-        if (data.lastUpdated !== lastUpdated) {
-          setBoard(gameState.board || initializeBoard());
-          setCurrentTurn(gameState.currentTurn || 'black');
-          setLastUpdated(data.lastUpdated);
+        if (data.lastUpdated !== lastUpdatedRef.current) {
+          setBoard(gameState?.board || initializeBoard());
+          setCurrentTurn(gameState?.currentTurn || 'black');
+          lastUpdatedRef.current = data.lastUpdated;
           
           // Clear local selection state when receiving updates from server
           setSelectedPiece(null);
           setValidMoves([]);
           
           // Check for game over
-          checkGameOver(gameState.board || initializeBoard());
+          checkGameOver(gameState?.board || initializeBoard());
         }
       }
     } catch (error) {
       console.error('Error fetching game state:', error);
     }
-  }, [gameId, isMultiplayer, lastUpdated]);
+  }, [gameId, isMultiplayer]);
 
   // Send move to server
   const sendMoveToServer = useCallback(async (from: Position, to: Position, newBoard: BoardState, newTurn: 'black' | 'white') => {
@@ -109,24 +109,22 @@ export const CheckersBoard: FC<CheckersBoardProps> = ({
         currentTurn: newTurn,
         selectedPiece: null,
         validMoves: [],
-        lastMove: [from, to]
+        lastMove: { from, to }
       };
 
-      const response = await fetch(`/api/games/${gameId}/state`, {
+      const response = await fetch(`/api/games/${gameId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           newState,
-          playerId: currentPlayer.id,
-          move: { from, to }
+          playerId: currentPlayer.id
         }),
       });
 
       if (!response.ok) {
         console.error('Failed to send move to server');
-        // Optionally revert the move or show an error
       }
     } catch (error) {
       console.error('Error sending move to server:', error);
