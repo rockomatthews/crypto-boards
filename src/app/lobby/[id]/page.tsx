@@ -97,9 +97,9 @@ export default function LobbyPage() {
   useEffect(() => {
     if (lobbyId) {
       fetchLobby();
-      // Disabled polling to prevent constant refreshing
-      // const interval = setInterval(fetchLobby, 2000);
-      // return () => clearInterval(interval);
+      // Re-enable polling for debugging lobby issues
+      const interval = setInterval(fetchLobby, 3000);
+      return () => clearInterval(interval);
     }
   }, [lobbyId, fetchLobby]);
 
@@ -339,6 +339,20 @@ export default function LobbyPage() {
               </Box>
             ))}
           </List>
+        </CardContent>
+      </Card>
+
+      {/* Debug Info */}
+      <Card sx={{ mb: 3, bgcolor: '#f0f0f0' }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom color="error">🐛 Debug Info</Typography>
+          <Typography variant="body2">Is Creator: {isCreator ? 'YES' : 'NO'}</Typography>
+          <Typography variant="body2">Current Player: {currentPlayer ? currentPlayer.username : 'NOT IN GAME'}</Typography>
+          <Typography variant="body2">Player Status: {currentPlayer?.game_status || 'N/A'}</Typography>
+          <Typography variant="body2">Players Ready: {lobby?.players.filter(p => p.game_status === 'ready').length}/{lobby?.players.length}</Typography>
+          <Typography variant="body2">All Ready: {allPlayersReady ? 'YES' : 'NO'}</Typography>
+          <Typography variant="body2">Can Start: {canStart ? 'YES' : 'NO'}</Typography>
+          <Typography variant="body2">Lobby Status: {lobby?.status}</Typography>
         </CardContent>
       </Card>
 
