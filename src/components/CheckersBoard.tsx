@@ -79,23 +79,32 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     if (!publicKey) return;
     
     try {
+      console.log('Saving game state:', state);
       const response = await fetch(`/api/games/${gameId}/state`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           newState: state,
-          playerId: publicKey.toString(),
-          move: state.lastMove
+          playerId: publicKey.toString()
         })
       });
       
       if (!response.ok) {
-        console.error('Failed to save game state');
+        const errorData = await response.text();
+        console.error('Failed to save game state. Status:', response.status, 'Error:', errorData);
+        setError(`Failed to save game state: ${response.status}`);
+      } else {
+        const result = await response.json();
+        console.log('Game state saved successfully:', result);
+        
+        // Clear any existing errors on successful save
+        if (error) setError(null);
       }
     } catch (error) {
       console.error('Error saving game state:', error);
+      setError('Failed to save game state: Network error');
     }
-  }, [gameId, publicKey]);
+  }, [gameId, publicKey, error]);
 
   // Initialize game state when needed
   const initializeGameState = async () => {
