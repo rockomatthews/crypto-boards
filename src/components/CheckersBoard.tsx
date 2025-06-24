@@ -36,16 +36,41 @@ interface CheckersBoardProps {
 // Add time limit constant
 const GAME_TIME_LIMIT = 15 * 60 * 1000; // 15 minutes in milliseconds
 
+// Initialize a standard checkers board (plain function for initial state)
+function createInitialBoard(): (GamePiece | null)[][] {
+  const board: (GamePiece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
+  
+  // Place black pieces (top 3 rows)
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 8; col++) {
+      if ((row + col) % 2 === 1) {
+        board[row][col] = { type: 'black', isKing: false };
+      }
+    }
+  }
+  
+  // Place red pieces (bottom 3 rows)
+  for (let row = 5; row < 8; row++) {
+    for (let col = 0; col < 8; col++) {
+      if ((row + col) % 2 === 1) {
+        board[row][col] = { type: 'red', isKing: false };
+      }
+    }
+  }
+  
+  return board;
+}
+
 export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   const { publicKey, signTransaction } = useWallet();
-  const [gameState, setGameState] = useState<GameState>({
-    board: initializeBoard(),
+  const [gameState, setGameState] = useState<GameState>(() => ({
+    board: Array(8).fill(null).map(() => Array(8).fill(null)),
     currentPlayer: 'red',
     redPlayer: null,
     blackPlayer: null,
     gameStatus: 'waiting',
     winner: null,
-  });
+  }));
   
   const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null);
   const [validMoves, setValidMoves] = useState<[number, number][]>([]);
@@ -74,31 +99,6 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   const [ephemeralSession, setEphemeralSession] = useState<string | null>(null);
   const [moveLatency, setMoveLatency] = useState<number>(0);
   const [realTimeMoves, setRealTimeMoves] = useState<number>(0);
-
-  // Initialize a standard checkers board
-  function initializeBoard(): (GamePiece | null)[][] {
-    const board: (GamePiece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
-    
-    // Place black pieces (top 3 rows)
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 8; col++) {
-        if ((row + col) % 2 === 1) {
-          board[row][col] = { type: 'black', isKing: false };
-        }
-      }
-    }
-    
-    // Place red pieces (bottom 3 rows)
-    for (let row = 5; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        if ((row + col) % 2 === 1) {
-          board[row][col] = { type: 'red', isKing: false };
-        }
-      }
-    }
-    
-    return board;
-  }
 
   // Initialize MagicBlock session when game becomes active
   const initializeMagicBlockSession = useCallback(async () => {
@@ -160,7 +160,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   }, [gameId, publicKey, currentPlayerId, error]);
 
   // Initialize game state when needed
-  const initializeGameState = async () => {
+  const initializeGameState = useCallback(async () => {
     if (!publicKey) return;
     
     try {
@@ -168,6 +168,10 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       if (gameResponse.ok) {
         const gameData = await gameResponse.json();
         const walletAddress = publicKey.toString();
+        
+        console.log('Game data received:', gameData);
+        console.log('Game status from API:', gameData.status);
+        console.log('Number of players:', gameData.players?.length);
         
         if (gameData.players && gameData.players.length >= 1) {
           // Find the current player's ID and set player color
@@ -183,12 +187,25 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             }
           }
           
+          // Determine game status - check both database status and player count
+          let gameStatus: 'waiting' | 'active' | 'finished';
+          if (gameData.status === 'in_progress') {
+            gameStatus = 'active';
+          } else if (gameData.status === 'finished') {
+            gameStatus = 'finished';
+          } else {
+            // If not started yet, check if we have enough players
+            gameStatus = gameData.players.length >= 2 ? 'waiting' : 'waiting';
+          }
+          
+          console.log('Determined game status:', gameStatus);
+          
           const newState: GameState = {
-            board: initializeBoard(),
+            board: createInitialBoard(),
             currentPlayer: 'red' as Player,
             redPlayer: gameData.players[0]?.wallet_address || null,
             blackPlayer: gameData.players[1]?.wallet_address || null,
-            gameStatus: (gameData.players.length >= 2 ? 'active' : 'waiting') as 'waiting' | 'active' | 'finished',
+            gameStatus,
             winner: null,
           };
           
@@ -198,13 +215,17 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           }
           
           setGameState(newState);
-          await saveGameState(newState);
+          
+          // Only save state if game is active (to avoid overwriting existing state)
+          if (gameStatus === 'active') {
+            await saveGameState(newState);
+          }
         }
       }
     } catch (error) {
       console.error('Error initializing game:', error);
     }
-  };
+  }, [gameId, publicKey, gameStartTime, saveGameState]);
 
   // Fetch game state from API (using existing endpoint)
   const fetchGameState = useCallback(async () => {
@@ -222,6 +243,9 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
               const gameData = await gameResponse.json();
               const walletAddress = publicKey.toString();
               
+              console.log('Fetch game state - Game data:', gameData);
+              console.log('Fetch game state - Game status:', gameData.status);
+              
               if (gameData.players && gameData.players.length >= 2) {
                 // First player = red, second player = black
                 if (gameData.players[0].wallet_address === walletAddress) {
@@ -229,19 +253,33 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
                 } else if (gameData.players[1].wallet_address === walletAddress) {
                   setPlayerColor('black');
                 }
+                
+                // Update the game status based on current database status
+                const currentState = data.currentState;
+                if (gameData.status === 'in_progress' && currentState.gameStatus === 'waiting') {
+                  console.log('🚀 Game status changed to active - updating local state');
+                  const updatedState = {
+                    ...currentState,
+                    gameStatus: 'active' as const
+                  };
+                  setGameState(updatedState);
+                  // Save the updated state
+                  await saveGameState(updatedState);
+                }
               }
             }
           }
         }
       } else if (response.status === 404) {
-        // Game state doesn't exist yet, we'll let initializeGameState handle this
-        console.log('Game state not found, will initialize separately');
+        // Game state doesn't exist yet, initialize it
+        console.log('Game state not found, initializing...');
+        await initializeGameState();
       }
     } catch (error) {
       console.error('Error fetching game state:', error);
       setError('Failed to load game state');
     }
-  }, [gameId, publicKey]);
+  }, [gameId, publicKey, saveGameState, initializeGameState]);
 
   // Get valid moves for a piece
   const getValidMoves = useCallback((row: number, col: number, piece: GamePiece): [number, number][] => {

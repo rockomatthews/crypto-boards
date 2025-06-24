@@ -48,6 +48,15 @@ export async function POST(
       }, { status: 400 });
     }
 
+    // Get the actual players with their wallet addresses
+    const playersResult = await db`
+      SELECT p.wallet_address
+      FROM game_players gp
+      JOIN players p ON gp.player_id = p.id
+      WHERE gp.game_id = ${lobbyId}
+      ORDER BY gp.joined_at ASC
+    `;
+
     // Update game status to in_progress
     await db`
       UPDATE games 
@@ -66,20 +75,34 @@ export async function POST(
     let initialState;
     switch (lobby.game_type.toLowerCase()) {
       case 'checkers':
+        // Create board with proper piece objects that match CheckersBoard expectations
+        const board = Array(8).fill(null).map(() => Array(8).fill(null));
+        
+        // Place black pieces (top 3 rows)
+        for (let row = 0; row < 3; row++) {
+          for (let col = 0; col < 8; col++) {
+            if ((row + col) % 2 === 1) {
+              board[row][col] = { type: 'black', isKing: false };
+            }
+          }
+        }
+        
+        // Place red pieces (bottom 3 rows) 
+        for (let row = 5; row < 8; row++) {
+          for (let col = 0; col < 8; col++) {
+            if ((row + col) % 2 === 1) {
+              board[row][col] = { type: 'red', isKing: false };
+            }
+          }
+        }
+        
         initialState = {
-          board: [
-            ['empty', 'black', 'empty', 'black', 'empty', 'black', 'empty', 'black'],
-            ['black', 'empty', 'black', 'empty', 'black', 'empty', 'black', 'empty'],
-            ['empty', 'black', 'empty', 'black', 'empty', 'black', 'empty', 'black'],
-            ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
-            ['empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty', 'empty'],
-            ['white', 'empty', 'white', 'empty', 'white', 'empty', 'white', 'empty'],
-            ['empty', 'white', 'empty', 'white', 'empty', 'white', 'empty', 'white'],
-            ['white', 'empty', 'white', 'empty', 'white', 'empty', 'white', 'empty']
-          ],
-          currentTurn: 'black',
-          selectedPiece: null,
-          validMoves: [],
+          board,
+          currentPlayer: 'red',
+          redPlayer: playersResult[0]?.wallet_address || null,
+          blackPlayer: playersResult[1]?.wallet_address || null,
+          gameStatus: 'active',
+          winner: null,
           lastMove: null
         };
         break;
