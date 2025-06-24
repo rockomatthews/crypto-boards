@@ -15,6 +15,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@magicblock-labs/ephemeral-rollups-sdk": "^0.2.5",
     "@mui/icons-material": "^7.1.1",
     "@mui/material": "^7.1.1",
     "@neondatabase/serverless": "^1.0.1",

@@ -109,6 +109,26 @@ export interface GameStat {
   created_at: Date;
 }
 
+export interface GameEscrow {
+  id: string;
+  game_id: string;
+  player_id: string;
+  escrow_account: string; // Public key of the escrow account
+  amount: number;
+  status: 'active' | 'released' | 'refunded';
+  transaction_signature: string;
+  created_at: Date;
+  released_at?: Date;
+}
+
+export interface PlatformFee {
+  id: string;
+  game_id: string;
+  amount: number;
+  transaction_signature: string;
+  created_at: Date;
+}
+
 // Database initialization
 export async function initializeDatabase() {
   try {
@@ -236,6 +256,32 @@ export async function initializeDatabase() {
         result TEXT NOT NULL CHECK (result IN ('win', 'loss')),
         amount DECIMAL NOT NULL,
         opponent_id UUID REFERENCES players(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Create game_escrows table
+    await db`
+      CREATE TABLE IF NOT EXISTS game_escrows (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID REFERENCES games(id),
+        player_id UUID REFERENCES players(id),
+        escrow_account TEXT NOT NULL,
+        amount DECIMAL NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'released', 'refunded')),
+        transaction_signature TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        released_at TIMESTAMP WITH TIME ZONE
+      );
+    `;
+
+    // Create platform_fees table
+    await db`
+      CREATE TABLE IF NOT EXISTS platform_fees (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID REFERENCES games(id),
+        amount DECIMAL NOT NULL,
+        transaction_signature TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;

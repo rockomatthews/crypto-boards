@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert } from '@mui/material';
+import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert, Chip } from '@mui/material';
 
 // Game types
 type PieceType = 'red' | 'black' | null;
@@ -31,6 +31,9 @@ interface CheckersBoardProps {
   gameId: string;
 }
 
+// Add time limit constant
+const GAME_TIME_LIMIT = 15 * 60 * 1000; // 15 minutes in milliseconds
+
 export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   const { publicKey } = useWallet();
   const [gameState, setGameState] = useState<GameState>({
@@ -48,6 +51,21 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   const [gameEndDialog, setGameEndDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number>(GAME_TIME_LIMIT);
+  const [gameStartTime, setGameStartTime] = useState<Date | null>(null);
+  const [escrowStatus, setEscrowStatus] = useState<{
+    escrows: {
+      id: string;
+      wallet_address: string;
+      amount: string;
+      status: string;
+      username: string;
+    }[];
+    totalEscrowed: number;
+    platformFeePercentage: number;
+    estimatedPlatformFee: number;
+    estimatedWinnerAmount: number;
+  } | null>(null);
 
   // Initialize a standard checkers board
   function initializeBoard(): (GamePiece | null)[][] {
@@ -125,6 +143,11 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             gameStatus: (gameData.players.length >= 2 ? 'active' : 'waiting') as 'waiting' | 'active' | 'finished',
             winner: null,
           };
+          
+          // Set game start time if game is active
+          if (newState.gameStatus === 'active' && !gameStartTime) {
+            setGameStartTime(gameData.started_at ? new Date(gameData.started_at) : new Date());
+          }
           
           // Determine player color
           if (gameData.players[0]?.wallet_address === walletAddress) {
@@ -258,6 +281,29 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           
           console.log(`🏆 Completing game with winner: ${winner} (ID: ${winnerId})`);
           
+          // First, release escrow funds to winner
+          try {
+            const escrowResponse = await fetch(`/api/games/${gameId}/escrow`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'release_escrow',
+                winnerId,
+                playerWallet: publicKey.toString()
+              })
+            });
+            
+            if (escrowResponse.ok) {
+              const escrowResult = await escrowResponse.json();
+              console.log('💰 Escrow released:', escrowResult);
+            } else {
+              console.error('Failed to release escrow funds');
+            }
+          } catch (escrowError) {
+            console.error('Error releasing escrow:', escrowError);
+          }
+          
+          // Then complete the game and record stats
           const response = await fetch(`/api/games/${gameId}/complete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -393,19 +439,100 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   }, [gameState.gameStatus, gameState.board, gameState.currentPlayer, playerColor, loading, selectedSquare, validMoves, makeMove, getValidMoves]);
 
-  // Polling setup (every 3 seconds like chat)
+  // Add time management functions
+  const formatTime = (milliseconds: number): string => {
+    const minutes = Math.floor(milliseconds / 60000);
+    const seconds = Math.floor((milliseconds % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const determineWinnerByPieceCount = useCallback((): Player | null => {
+    let redPieces = 0;
+    let blackPieces = 0;
+    
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = gameState.board[row][col];
+        if (piece?.type === 'red') redPieces++;
+        if (piece?.type === 'black') blackPieces++;
+      }
+    }
+    
+    if (redPieces > blackPieces) return 'red';
+    if (blackPieces > redPieces) return 'black';
+    return null; // It's a tie
+  }, [gameState.board]);
+
+  // Timer effect
+  useEffect(() => {
+    if (gameState.gameStatus === 'active' && gameStartTime && timeLeft > 0) {
+      const timer = setInterval(() => {
+        const now = new Date();
+        const elapsed = now.getTime() - gameStartTime.getTime();
+        const remaining = GAME_TIME_LIMIT - elapsed;
+        
+        if (remaining <= 0) {
+          // Time's up! Determine winner by piece count
+          const winner = determineWinnerByPieceCount();
+          if (winner) {
+            console.log(`⏰ TIME'S UP! Winner by piece count: ${winner.toUpperCase()}`);
+            
+            const newState: GameState = {
+              ...gameState,
+              gameStatus: 'finished',
+              winner
+            };
+            
+            setGameState(newState);
+            saveGameState(newState);
+            completeGame(winner);
+            setGameEndDialog(true);
+          }
+          setTimeLeft(0);
+        } else {
+          setTimeLeft(remaining);
+        }
+      }, 1000);
+      
+      return () => clearInterval(timer);
+    }
+  }, [gameState.gameStatus, gameStartTime, timeLeft, gameState, saveGameState, completeGame, determineWinnerByPieceCount]);
+
+  // Fetch escrow status
+  const fetchEscrowStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/games/${gameId}/escrow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'get_escrow_status'
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setEscrowStatus(data);
+      }
+    } catch (error) {
+      console.error('Error fetching escrow status:', error);
+    }
+  }, [gameId]);
+
+  // Add to existing polling effect
   useEffect(() => {
     if (gameId && publicKey) {
       fetchGameState();
+      fetchEscrowStatus();
       
       // Poll for updates every 3 seconds
       const interval = setInterval(() => {
         fetchGameState();
+        fetchEscrowStatus();
       }, 3000);
       
       return () => clearInterval(interval);
     }
-  }, [gameId, publicKey, fetchGameState]);
+  }, [gameId, publicKey, fetchGameState, fetchEscrowStatus]);
 
   // Initialize game on mount
   useEffect(() => {
@@ -452,6 +579,24 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           🏁 Async Multiplayer Checkers 🏁
         </Typography>
         
+        {/* Timer and Escrow Info */}
+        {gameState.gameStatus === 'active' && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+            <Paper sx={{ p: 1, mx: 1, bgcolor: timeLeft < 60000 ? '#d32f2f' : '#2e7d32', color: 'white' }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                ⏰ {formatTime(timeLeft)}
+              </Typography>
+            </Paper>
+            {escrowStatus && (
+              <Paper sx={{ p: 1, mx: 1, bgcolor: '#ff9800', color: 'white' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  💰 Total Pot: {escrowStatus.totalEscrowed.toFixed(4)} SOL
+                </Typography>
+              </Paper>
+            )}
+          </Box>
+        )}
+        
         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#FF6B6B' }}>
@@ -460,6 +605,11 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             <Typography variant="body2">
               {gameState.redPlayer ? `${gameState.redPlayer.slice(0, 8)}...` : 'Waiting...'}
             </Typography>
+            {escrowStatus && escrowStatus.escrows.find(e => e.wallet_address === gameState.redPlayer && e.status === 'active') && (
+              <Typography variant="caption" sx={{ color: '#90EE90' }}>
+                ✅ {escrowStatus.escrows.find(e => e.wallet_address === gameState.redPlayer)?.amount} SOL Escrowed
+              </Typography>
+            )}
           </Box>
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#333' }}>
@@ -468,6 +618,11 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             <Typography variant="body2">
               {gameState.blackPlayer ? `${gameState.blackPlayer.slice(0, 8)}...` : 'Waiting...'}
             </Typography>
+            {escrowStatus && escrowStatus.escrows.find(e => e.wallet_address === gameState.blackPlayer && e.status === 'active') && (
+              <Typography variant="caption" sx={{ color: '#90EE90' }}>
+                ✅ {escrowStatus.escrows.find(e => e.wallet_address === gameState.blackPlayer)?.amount} SOL Escrowed
+              </Typography>
+            )}
           </Box>
         </Box>
         
@@ -484,10 +639,18 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           </Typography>
         )}
         
+        {escrowStatus && escrowStatus.totalEscrowed > 0 && (
+          <Box sx={{ mt: 2, p: 1, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 1 }}>
+            <Typography variant="caption" align="center" display="block">
+              💰 Winner gets: {escrowStatus.estimatedWinnerAmount.toFixed(4)} SOL | Platform fee: {(escrowStatus.platformFeePercentage * 100)}%
+            </Typography>
+          </Box>
+        )}
+        
         {gameState.gameStatus === 'waiting' && (
           <Box sx={{ textAlign: 'center' }}>
             <Typography gutterBottom sx={{ fontSize: '1.1rem' }}>
-              ⏳ Waiting for players to join...
+              ⏳ Waiting for players to join and escrow funds...
             </Typography>
             <Typography variant="body2">
               You are playing as: {playerColor ? playerColor.toUpperCase() : 'Not assigned'}
