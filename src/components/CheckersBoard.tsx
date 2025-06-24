@@ -375,19 +375,23 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
 
   // Render square with classic checkerboard pattern
   const renderSquare = (row: number, col: number) => {
-    const piece = gameState.board[row][col];
-    const isSelected = selectedSquare && selectedSquare[0] === row && selectedSquare[1] === col;
-    const isValidMove = validMoves.some(([r, c]) => r === row && c === col);
-    const isDarkSquare = (row + col) % 2 === 1;
+    // Flip the board visually for black player so their pieces appear at bottom
+    const displayRow = playerColor === 'black' ? 7 - row : row;
+    const displayCol = playerColor === 'black' ? 7 - col : col;
+    
+    const piece = gameState.board[displayRow][displayCol];
+    const isSelected = selectedSquare && selectedSquare[0] === displayRow && selectedSquare[1] === displayCol;
+    const isValidMove = validMoves.some(([r, c]) => r === displayRow && c === displayCol);
+    const isDarkSquare = (row + col) % 2 === 1; // Keep visual pattern consistent
     const isLastMoveSquare = gameState.lastMove && 
-      ((gameState.lastMove.from[0] === row && gameState.lastMove.from[1] === col) ||
-       (gameState.lastMove.to[0] === row && gameState.lastMove.to[1] === col));
+      ((gameState.lastMove.from[0] === displayRow && gameState.lastMove.from[1] === displayCol) ||
+       (gameState.lastMove.to[0] === displayRow && gameState.lastMove.to[1] === displayCol));
     
     return (
       <div
         key={`${row}-${col}`}
         className={`square ${isDarkSquare ? 'dark' : 'light'} ${isSelected ? 'selected' : ''} ${isValidMove ? 'valid-move' : ''} ${isLastMoveSquare ? 'last-move' : ''}`}
-        onClick={() => handleSquareClick(row, col)}
+        onClick={() => handleSquareClick(displayRow, displayCol)}
       >
         {piece && (
           <div className={`piece ${piece.type} ${piece.isKing ? 'king' : ''}`}>
