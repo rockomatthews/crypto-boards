@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
-import { processWinnerPayout } from '@/lib/solana';
+import { processWinnerPayout, calculatePlatformFee } from '@/lib/solana';
 
 export async function POST(
   request: NextRequest,
@@ -58,12 +58,10 @@ export async function POST(
 
     // Calculate total pot (entry fee * number of players)
     const totalPot = game.entry_fee * game.player_count;
-    
-    // Calculate winner's share (90% of pot, 10% platform fee)
-    const winnerShare = totalPot * 0.9;
+    const platformFee = calculatePlatformFee(totalPot);
 
-    // Process winner payout
-    const payoutResult = await processWinnerPayout(winner.wallet_address, winnerShare);
+    // Process winner payout (platform fee is calculated automatically)
+    const payoutResult = await processWinnerPayout(winner.wallet_address, totalPot, gameId);
     
     if (!payoutResult.success) {
       return NextResponse.json({ 
@@ -71,6 +69,8 @@ export async function POST(
         details: payoutResult.error 
       }, { status: 500 });
     }
+
+    const winnerAmount = payoutResult.amount || (totalPot - platformFee);
 
     // Update game status to completed with payout info
     await db`
@@ -84,17 +84,17 @@ export async function POST(
     // Store payout transaction details
     await db`
       INSERT INTO game_payouts (game_id, winner_wallet, amount, transaction_signature)
-      VALUES (${gameId}, ${winner.wallet_address}, ${winnerShare}, ${payoutResult.signature})
+      VALUES (${gameId}, ${winner.wallet_address}, ${winnerAmount}, ${payoutResult.signature})
     `;
 
     return NextResponse.json({ 
       success: true, 
-      message: `Winner payout successful! ${winner.username} received ${winnerShare} SOL`,
+      message: `Winner payout successful! ${winner.username} received ${winnerAmount} SOL`,
       winner: winner.username,
-      amount: winnerShare,
+      amount: winnerAmount,
       transactionSignature: payoutResult.signature,
       totalPot: totalPot,
-      platformFee: totalPot * 0.1
+      platformFee: platformFee
     });
   } catch (error) {
     console.error('Error processing winner payout:', error);

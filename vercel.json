@@ -22,17 +22,5 @@
         }
       ]
     }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1",
-      "has": [
-        {
-          "type": "header",
-          "key": "x-vercel-protection-bypass"
-        }
-      ]
-    }
   ]
 } 

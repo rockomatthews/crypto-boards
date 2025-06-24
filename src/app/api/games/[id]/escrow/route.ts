@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 import { PublicKey } from '@solana/web3.js';
 import { 
-  checkWalletBalance,
-  PLATFORM_FEE_PERCENTAGE
+  calculatePlatformFee,
+  createGameEscrow,
+  processWinnerPayout,
+  processRefund
 } from '@/lib/solana';
 
 export async function POST(
@@ -25,12 +27,6 @@ export async function POST(
       case 'create_escrow': {
         if (!amount || !transactionData) {
           return NextResponse.json({ error: 'Amount and transaction data required for escrow creation' }, { status: 400 });
-        }
-
-        // Check if player has sufficient balance
-        const hasBalance = await checkWalletBalance(playerKey, amount + 0.01); // Add buffer for fees
-        if (!hasBalance) {
-          return NextResponse.json({ error: 'Insufficient wallet balance' }, { status: 400 });
         }
 
         // Get player ID
@@ -55,20 +51,22 @@ export async function POST(
         }
 
         try {
-          // Note: In a real implementation, you'd call createGameEscrow here
-          // For now, we'll simulate the escrow creation
-          const escrowAccount = `escrow_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const transactionSignature = transactionData.signature || `sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          // Create the game escrow
+          const { escrowAccount, transactionSignature } = await createGameEscrow(
+            playerKey,
+            amount,
+            gameId
+          );
 
           // Record escrow in database
           await db`
             INSERT INTO game_escrows (game_id, player_id, escrow_account, amount, status, transaction_signature)
-            VALUES (${gameId}, ${playerId}, ${escrowAccount}, ${amount}, 'active', ${transactionSignature})
+            VALUES (${gameId}, ${playerId}, ${escrowAccount.publicKey.toString()}, ${amount}, 'active', ${transactionSignature})
           `;
 
           return NextResponse.json({
             success: true,
-            escrowAccount,
+            escrowAccount: escrowAccount.publicKey.toString(),
             amount,
             transactionSignature,
             message: 'Escrow created successfully'
@@ -101,7 +99,7 @@ export async function POST(
 
         // Calculate total amount
         const totalAmount = escrows.reduce((sum, escrow) => sum + parseFloat(escrow.amount), 0);
-        const platformFee = totalAmount * PLATFORM_FEE_PERCENTAGE;
+        const platformFee = calculatePlatformFee(totalAmount);
         const winnerAmount = totalAmount - platformFee;
 
         // Get winner wallet address
@@ -116,8 +114,12 @@ export async function POST(
         const winnerWallet = winnerResult[0].wallet_address;
 
         try {
-          // Note: In a real implementation, you'd call releaseEscrowToWinner here
-          const releaseSignature = `release_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          // Process the winner payout
+          const payoutResult = await processWinnerPayout(winnerWallet, totalAmount, gameId);
+
+          if (!payoutResult.success) {
+            throw new Error(payoutResult.error || 'Payout failed');
+          }
 
           // Update escrows as released
           await db`
@@ -129,13 +131,13 @@ export async function POST(
           // Record platform fee
           await db`
             INSERT INTO platform_fees (game_id, amount, transaction_signature)
-            VALUES (${gameId}, ${platformFee}, ${releaseSignature})
+            VALUES (${gameId}, ${platformFee}, ${payoutResult.signature})
           `;
 
           // Update game payout record
           await db`
             INSERT INTO game_payouts (game_id, winner_wallet, amount, transaction_signature)
-            VALUES (${gameId}, ${winnerWallet}, ${winnerAmount}, ${releaseSignature})
+            VALUES (${gameId}, ${winnerWallet}, ${winnerAmount}, ${payoutResult.signature})
           `;
 
           return NextResponse.json({
@@ -143,7 +145,7 @@ export async function POST(
             winnerAmount,
             platformFee,
             totalAmount,
-            transactionSignature: releaseSignature,
+            transactionSignature: payoutResult.signature,
             message: 'Escrow released successfully'
           });
 
@@ -178,8 +180,12 @@ export async function POST(
         const escrow = escrowResult[0];
 
         try {
-          // Note: In a real implementation, you'd call refundEscrowToPlayer here
-          const refundSignature = `refund_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          // Process the refund
+          const refundResult = await processRefund(playerWallet, parseFloat(escrow.amount));
+
+          if (!refundResult.success) {
+            throw new Error(refundResult.error || 'Refund failed');
+          }
 
           // Update escrow as refunded
           await db`
@@ -191,13 +197,13 @@ export async function POST(
           // Record refund
           await db`
             INSERT INTO game_refunds (game_id, player_wallet, amount, transaction_signature)
-            VALUES (${gameId}, ${playerWallet}, ${escrow.amount}, ${refundSignature})
+            VALUES (${gameId}, ${playerWallet}, ${escrow.amount}, ${refundResult.signature})
           `;
 
           return NextResponse.json({
             success: true,
             refundAmount: parseFloat(escrow.amount),
-            transactionSignature: refundSignature,
+            transactionSignature: refundResult.signature,
             message: 'Escrow refunded successfully'
           });
 
@@ -221,12 +227,14 @@ export async function POST(
           .filter(e => e.status === 'active')
           .reduce((sum, escrow) => sum + parseFloat(escrow.amount), 0);
 
+        const platformFee = calculatePlatformFee(totalEscrowed);
+
         return NextResponse.json({
           escrows,
           totalEscrowed,
-          platformFeePercentage: PLATFORM_FEE_PERCENTAGE,
-          estimatedPlatformFee: totalEscrowed * PLATFORM_FEE_PERCENTAGE,
-          estimatedWinnerAmount: totalEscrowed * (1 - PLATFORM_FEE_PERCENTAGE)
+          platformFeePercentage: 0.04, // 4%
+          estimatedPlatformFee: platformFee,
+          estimatedWinnerAmount: totalEscrowed - platformFee
         });
       }
 

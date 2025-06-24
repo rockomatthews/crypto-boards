@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
-// import { verifyTransaction } from '@/lib/solana'; // Temporarily disabled for testing
+import { verifyTransaction } from '@/lib/solana';
 
 export async function POST(
   request: NextRequest,
@@ -10,6 +10,11 @@ export async function POST(
   try {
     const { walletAddress, transactionSignature } = await request.json();
     const lobbyId = context?.params?.id;
+
+    console.log(`💰 Processing payment for lobby ${lobbyId}:`, {
+      walletAddress,
+      transactionSignature
+    });
 
     if (!walletAddress || !lobbyId || !transactionSignature) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -58,15 +63,17 @@ export async function POST(
     }
 
     // Verify the Solana transaction
-    // TODO: Re-enable transaction verification after testing
-    // const isValidTransaction = await verifyTransaction(transactionSignature);
-    const isValidTransaction = true; // Temporarily bypass for testing
+    console.log(`🔍 Verifying transaction: ${transactionSignature}`);
+    const isValidTransaction = await verifyTransaction(transactionSignature);
     
     if (!isValidTransaction) {
+      console.log(`❌ Transaction verification failed: ${transactionSignature}`);
       return NextResponse.json({ 
         error: 'Invalid transaction signature' 
       }, { status: 400 });
     }
+
+    console.log(`✅ Transaction verified: ${transactionSignature}`);
 
     // Update the database with payment confirmation
     await db`
@@ -75,11 +82,22 @@ export async function POST(
       WHERE game_id = ${lobbyId} AND player_id = ${playerId}
     `;
 
+    console.log(`✅ Player ${walletAddress} marked as ready in lobby ${lobbyId}`);
+
+    // Check how many players are now ready
+    const readyPlayersResult = await db`
+      SELECT COUNT(*) as ready_count FROM game_players 
+      WHERE game_id = ${lobbyId} AND game_status = 'ready'
+    `;
+
+    const readyCount = readyPlayersResult[0].ready_count;
+
     return NextResponse.json({ 
       success: true, 
-      message: 'Payment verified and confirmed! You are now ready to play.',
+      message: `Payment verified and confirmed! You are now ready to play. (${readyCount} players ready)`,
       entryFee: lobby.entry_fee,
-      transactionSignature: transactionSignature
+      transactionSignature: transactionSignature,
+      readyCount: readyCount
     });
   } catch (error) {
     console.error('Error processing payment:', error);
