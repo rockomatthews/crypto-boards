@@ -184,11 +184,15 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     const moves: [number, number][] = [];
     if (!piece) return moves;
 
+    console.log(`Getting valid moves for ${piece.type} piece at (${row}, ${col})`);
+
     const directions = piece.isKing 
       ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] // Kings can move in all directions
       : piece.type === 'red' 
-        ? [[1, -1], [1, 1]] // Red moves down
-        : [[-1, -1], [-1, 1]]; // Black moves up
+        ? [[-1, -1], [-1, 1]] // Red moves up (toward row 0)
+        : [[1, -1], [1, 1]]; // Black moves down (toward row 7)
+
+    console.log('Piece directions:', directions);
 
     for (const [dr, dc] of directions) {
       const newRow = row + dr;
@@ -196,6 +200,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       
       // Check if destination is valid and empty
       if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8 && !gameState.board[newRow][newCol]) {
+        console.log(`Regular move possible: (${newRow}, ${newCol})`);
         moves.push([newRow, newCol]);
       }
       
@@ -208,11 +213,13 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         const destination = gameState.board[jumpRow][jumpCol];
         
         if (jumpedPiece && jumpedPiece.type !== piece.type && !destination) {
+          console.log(`Jump move possible: (${jumpRow}, ${jumpCol}) jumping over (${newRow}, ${newCol})`);
           moves.push([jumpRow, jumpCol]);
         }
       }
     }
     
+    console.log('Final valid moves:', moves);
     return moves;
   }, [gameState.board]);
 
@@ -293,27 +300,54 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
 
   // Handle square click
   const handleSquareClick = useCallback((row: number, col: number) => {
-    if (gameState.gameStatus !== 'active') return;
-    if (!playerColor || gameState.currentPlayer !== playerColor) return;
-    if (loading) return;
+    console.log('Square clicked:', row, col);
+    console.log('Game status:', gameState.gameStatus);
+    console.log('Player color:', playerColor);
+    console.log('Current player:', gameState.currentPlayer);
+    console.log('Loading:', loading);
+    
+    if (gameState.gameStatus !== 'active') {
+      console.log('Game not active');
+      return;
+    }
+    if (!playerColor || gameState.currentPlayer !== playerColor) {
+      console.log('Not your turn or no player color assigned');
+      return;
+    }
+    if (loading) {
+      console.log('Currently loading');
+      return;
+    }
 
     const piece = gameState.board[row][col];
+    console.log('Piece at clicked square:', piece);
     
     if (selectedSquare) {
       const [selectedRow, selectedCol] = selectedSquare;
+      console.log('Already have selected square:', selectedRow, selectedCol);
+      console.log('Valid moves:', validMoves);
       
       // Check if this is a valid move
       const isValidMove = validMoves.some(([r, c]) => r === row && c === col);
+      console.log('Is valid move:', isValidMove);
       
       if (isValidMove) {
+        console.log('Making move from', selectedRow, selectedCol, 'to', row, col);
         makeMove(selectedRow, selectedCol, row, col);
+      } else {
+        console.log('Invalid move attempted');
       }
       
       setSelectedSquare(null);
       setValidMoves([]);
     } else if (piece && piece.type === playerColor) {
+      console.log('Selecting piece at:', row, col);
       setSelectedSquare([row, col]);
-      setValidMoves(getValidMoves(row, col, piece));
+      const moves = getValidMoves(row, col, piece);
+      console.log('Calculated valid moves:', moves);
+      setValidMoves(moves);
+    } else {
+      console.log('No valid piece to select');
     }
   }, [gameState.gameStatus, gameState.board, gameState.currentPlayer, playerColor, loading, selectedSquare, validMoves, makeMove, getValidMoves]);
 
@@ -430,28 +464,6 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           )}
         </div>
       </Box>
-
-      {/* Game Instructions */}
-      <Paper sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 2 }}>
-        <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#8B4513' }}>
-          📋 Asynchronous Multiplayer:
-        </Typography>
-        <Typography variant="body2" component="div">
-          ✅ **REAL-TIME SYNC** - Game updates every 3 seconds<br/>
-          ✅ **DATABASE STORAGE** - Moves saved permanently<br/>
-          ✅ **CROSS-DEVICE** - Play on different devices/browsers<br/>
-          • Click on your {playerColor} piece to select it<br/>
-          • Green highlighted squares show valid moves<br/>
-          • Jump over opponent pieces to capture them<br/>
-          • Reach the opposite end to become a King ♔<br/>
-          • Capture all opponent pieces to win!
-        </Typography>
-        {gameState.lastMove && (
-          <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic', color: '#FF6B35' }}>
-            **Last move:** ({gameState.lastMove.from[0]},{gameState.lastMove.from[1]}) → ({gameState.lastMove.to[0]},{gameState.lastMove.to[1]})
-          </Typography>
-        )}
-      </Paper>
 
       {/* Game End Dialog */}
       <Dialog open={gameEndDialog} maxWidth="sm" fullWidth>
