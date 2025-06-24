@@ -268,8 +268,9 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
     
     // Check for king promotion
-    if ((piece.type === 'red' && toRow === 7) || (piece.type === 'black' && toRow === 0)) {
+    if ((piece.type === 'red' && toRow === 0) || (piece.type === 'black' && toRow === 7)) {
       newBoard[toRow][toCol] = { ...piece, isKing: true };
+      console.log(`🎉 ${piece.type.toUpperCase()} PIECE PROMOTED TO KING at (${toRow}, ${toCol})! 👑`);
     }
     
     // Check for winner
@@ -395,7 +396,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       >
         {piece && (
           <div className={`piece ${piece.type} ${piece.isKing ? 'king' : ''}`}>
-            {piece.isKing && '♔'}
+            {piece.isKing ? '👑' : ''}
           </div>
         )}
       </div>
