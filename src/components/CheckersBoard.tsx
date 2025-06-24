@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert, Chip } from '@mui/material';
+import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert } from '@mui/material';
 
 // Game types
 type PieceType = 'red' | 'black' | null;
