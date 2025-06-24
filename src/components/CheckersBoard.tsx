@@ -68,6 +68,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     estimatedPlatformFee: number;
     estimatedWinnerAmount: number;
   } | null>(null);
+  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
 
   // MagicBlock state for real-time moves
   const [ephemeralSession, setEphemeralSession] = useState<string | null>(null);
@@ -128,7 +129,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
 
   // Save game state to API (using existing game state endpoint)
   const saveGameState = useCallback(async (state: GameState) => {
-    if (!publicKey) return;
+    if (!publicKey || !currentPlayerId) return;
     
     try {
       console.log('Saving game state:', state);
@@ -137,7 +138,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           newState: state,
-          playerId: publicKey.toString()
+          playerId: currentPlayerId
         })
       });
       
@@ -156,7 +157,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       console.error('Error saving game state:', error);
       setError('Failed to save game state: Network error');
     }
-  }, [gameId, publicKey, error]);
+  }, [gameId, publicKey, currentPlayerId, error]);
 
   // Initialize game state when needed
   const initializeGameState = async () => {
@@ -169,6 +170,19 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         const walletAddress = publicKey.toString();
         
         if (gameData.players && gameData.players.length >= 1) {
+          // Find the current player's ID and set player color
+          const currentPlayer = gameData.players.find((p: { id: string; wallet_address: string }) => p.wallet_address === walletAddress);
+          if (currentPlayer) {
+            setCurrentPlayerId(currentPlayer.id);
+            
+            // Determine player color based on position in players array
+            if (gameData.players[0]?.wallet_address === walletAddress) {
+              setPlayerColor('red');
+            } else if (gameData.players[1]?.wallet_address === walletAddress) {
+              setPlayerColor('black');
+            }
+          }
+          
           const newState: GameState = {
             board: initializeBoard(),
             currentPlayer: 'red' as Player,
@@ -181,13 +195,6 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           // Set game start time if game is active
           if (newState.gameStatus === 'active' && !gameStartTime) {
             setGameStartTime(gameData.started_at ? new Date(gameData.started_at) : new Date());
-          }
-          
-          // Determine player color
-          if (gameData.players[0]?.wallet_address === walletAddress) {
-            setPlayerColor('red');
-          } else if (gameData.players[1]?.wallet_address === walletAddress) {
-            setPlayerColor('black');
           }
           
           setGameState(newState);
@@ -573,12 +580,15 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
 
   // Fetch escrow status
   const fetchEscrowStatus = useCallback(async () => {
+    if (!publicKey) return;
+    
     try {
       const response = await fetch(`/api/games/${gameId}/escrow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'get_escrow_status'
+          action: 'get_escrow_status',
+          playerWallet: publicKey.toString()
         })
       });
       
@@ -589,7 +599,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     } catch (error) {
       console.error('Error fetching escrow status:', error);
     }
-  }, [gameId]);
+  }, [gameId, publicKey]);
 
   // Add to existing polling effect
   useEffect(() => {
