@@ -27,12 +27,12 @@ import {
 } from '@mui/material';
 import { 
   PlayArrow as PlayIcon, 
-  Payment as PaymentIcon,
   Lock as LockIcon,
   Public as PublicIcon,
   Cancel as CancelIcon,
   ExitToApp as LeaveIcon 
 } from '@mui/icons-material';
+import { EscrowPayment } from '@/components/EscrowPayment';
 
 interface LobbyPlayer {
   id: string;
@@ -63,7 +63,6 @@ export default function LobbyPage() {
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [paying, setPaying] = useState(false);
   const [starting, setStarting] = useState(false);
   const [canceling, setCanceling] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -102,41 +101,6 @@ export default function LobbyPage() {
       return () => clearInterval(interval);
     }
   }, [lobbyId, fetchLobby]);
-
-  const handlePayEntryFee = async () => {
-    if (!publicKey || !lobby) return;
-
-    setPaying(true);
-    try {
-      // Temporarily bypass Solana transaction for testing
-      console.log('Bypassing Solana transaction for testing purposes');
-      const mockSignature = 'mock_signature_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-
-      // Send mock signature to API for verification (which is also bypassed)
-      const response = await fetch(`/api/lobbies/${lobbyId}/pay`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: publicKey.toString(),
-          transactionSignature: mockSignature,
-        }),
-      });
-
-      if (response.ok) {
-        await fetchLobby(); // Refresh lobby data
-      } else {
-        const error = await response.json();
-        setError(error.error || 'Failed to verify payment');
-      }
-    } catch (error) {
-      console.error('Error paying entry fee:', error);
-      setError(error instanceof Error ? error.message : 'Failed to pay entry fee');
-    } finally {
-      setPaying(false);
-    }
-  };
 
   const handleStartGame = async () => {
     if (!lobby) return;
@@ -356,21 +320,42 @@ export default function LobbyPage() {
         </CardContent>
       </Card>
 
+      {/* Payment Section */}
+      {currentPlayer?.game_status === 'waiting' && (
+        <Box sx={{ mb: 3 }}>
+          <EscrowPayment
+            gameId={lobbyId}
+            entryFee={lobby.entry_fee}
+            onPaymentSuccess={async () => {
+              // Update player status to ready after successful payment
+              const response = await fetch(`/api/lobbies/${lobbyId}/pay`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  walletAddress: publicKey?.toString(),
+                  transactionSignature: 'escrow_payment_' + Date.now(),
+                }),
+              });
+
+              if (response.ok) {
+                console.log('✅ Payment verified and player marked as ready');
+                await fetchLobby(); // Refresh lobby data
+              } else {
+                const error = await response.json();
+                setError(error.error || 'Failed to verify payment');
+              }
+            }}
+            onPaymentError={(error) => {
+              setError(error);
+            }}
+          />
+        </Box>
+      )}
+
       {/* Action Buttons */}
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        {currentPlayer?.game_status === 'waiting' && (
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={<PaymentIcon />}
-            onClick={handlePayEntryFee}
-            disabled={paying}
-            sx={{ minWidth: 200 }}
-          >
-            {paying ? 'Processing...' : `Pay ${lobby.entry_fee} SOL`}
-          </Button>
-        )}
-
         {currentPlayer?.game_status === 'ready' && (
           <Button
             variant="outlined"
