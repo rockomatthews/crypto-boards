@@ -9,6 +9,41 @@ import {
   processRefund
 } from '@/lib/solana';
 
+// Check if escrow tables exist
+async function ensureEscrowTablesExist() {
+  try {
+    // Try to create the tables if they don't exist
+    await db`
+      CREATE TABLE IF NOT EXISTS game_escrows (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID NOT NULL,
+        player_id UUID NOT NULL,
+        escrow_account TEXT NOT NULL,
+        amount DECIMAL(18, 9) NOT NULL,
+        status VARCHAR(20) DEFAULT 'active',
+        transaction_signature TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        released_at TIMESTAMP
+      )
+    `;
+
+    await db`
+      CREATE TABLE IF NOT EXISTS platform_fees (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID NOT NULL,
+        amount DECIMAL(18, 9) NOT NULL,
+        transaction_signature TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    return true;
+  } catch (error) {
+    console.error('Error ensuring escrow tables exist:', error);
+    return false;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   context: any
@@ -17,17 +52,54 @@ export async function POST(
     const gameId = context?.params?.id;
     const { action, playerWallet, amount, transactionData } = await request.json();
 
-    if (!gameId || !action || !playerWallet) {
+    if (!gameId || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const playerKey = new PublicKey(playerWallet);
+    // For get_escrow_status, we don't need playerWallet
+    if (action !== 'get_escrow_status' && !playerWallet) {
+      return NextResponse.json({ error: 'Missing playerWallet' }, { status: 400 });
+    }
+
+    // Ensure escrow tables exist
+    const tablesExist = await ensureEscrowTablesExist();
+    if (!tablesExist) {
+      console.error('Failed to ensure escrow tables exist');
+      return NextResponse.json({ error: 'Database not ready' }, { status: 503 });
+    }
 
     switch (action) {
+      case 'get_escrow_status': {
+        // Get escrow status for the game
+        const escrows = await db`
+          SELECT ge.*, p.username, p.wallet_address
+          FROM game_escrows ge
+          JOIN players p ON ge.player_id = p.id
+          WHERE ge.game_id = ${gameId}
+          ORDER BY ge.created_at ASC
+        `;
+
+        const totalEscrowed = escrows
+          .filter(e => e.status === 'active')
+          .reduce((sum, escrow) => sum + parseFloat(escrow.amount), 0);
+
+        const platformFee = calculatePlatformFee(totalEscrowed);
+
+        return NextResponse.json({
+          escrows,
+          totalEscrowed,
+          platformFeePercentage: 0.04, // 4%
+          estimatedPlatformFee: platformFee,
+          estimatedWinnerAmount: totalEscrowed - platformFee
+        });
+      }
+
       case 'create_escrow': {
-        if (!amount || !transactionData) {
-          return NextResponse.json({ error: 'Amount and transaction data required for escrow creation' }, { status: 400 });
+        if (!amount || !transactionData || !playerWallet) {
+          return NextResponse.json({ error: 'Amount, transaction data, and playerWallet required for escrow creation' }, { status: 400 });
         }
+
+        const playerKey = new PublicKey(playerWallet);
 
         // Get player ID
         const playerResult = await db`
@@ -81,8 +153,8 @@ export async function POST(
       case 'release_escrow': {
         const { winnerId } = await request.json();
         
-        if (!winnerId) {
-          return NextResponse.json({ error: 'Winner ID required' }, { status: 400 });
+        if (!winnerId || !playerWallet) {
+          return NextResponse.json({ error: 'Winner ID and playerWallet required' }, { status: 400 });
         }
 
         // Get all active escrows for this game
@@ -156,6 +228,10 @@ export async function POST(
       }
 
       case 'refund_escrow': {
+        if (!playerWallet) {
+          return NextResponse.json({ error: 'playerWallet required' }, { status: 400 });
+        }
+
         // Get player ID
         const playerResult = await db`
           SELECT id FROM players WHERE wallet_address = ${playerWallet}
@@ -213,37 +289,15 @@ export async function POST(
         }
       }
 
-      case 'get_escrow_status': {
-        // Get escrow status for the game
-        const escrows = await db`
-          SELECT ge.*, p.username, p.wallet_address
-          FROM game_escrows ge
-          JOIN players p ON ge.player_id = p.id
-          WHERE ge.game_id = ${gameId}
-          ORDER BY ge.created_at ASC
-        `;
-
-        const totalEscrowed = escrows
-          .filter(e => e.status === 'active')
-          .reduce((sum, escrow) => sum + parseFloat(escrow.amount), 0);
-
-        const platformFee = calculatePlatformFee(totalEscrowed);
-
-        return NextResponse.json({
-          escrows,
-          totalEscrowed,
-          platformFeePercentage: 0.04, // 4%
-          estimatedPlatformFee: platformFee,
-          estimatedWinnerAmount: totalEscrowed - platformFee
-        });
-      }
-
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
   } catch (error) {
     console.error('Error in escrow API:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }

@@ -595,23 +595,29 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       if (response.ok) {
         const data = await response.json();
         setEscrowStatus(data);
+      } else {
+        console.error('Escrow status fetch failed:', response.status, response.statusText);
+        // Don't set escrow status on error to avoid infinite polling
       }
     } catch (error) {
       console.error('Error fetching escrow status:', error);
+      // Don't continue polling if there are persistent errors
     }
   }, [gameId, publicKey]);
 
-  // Add to existing polling effect
+  // Add to existing polling effect - but reduce frequency and add error handling
   useEffect(() => {
     if (gameId && publicKey) {
       fetchGameState();
+      
+      // Only fetch escrow status once on mount, not in polling loop
       fetchEscrowStatus();
       
-      // Poll for updates every 3 seconds
+      // Poll for game state updates every 5 seconds (reduced from 3)
       const interval = setInterval(() => {
         fetchGameState();
-        fetchEscrowStatus();
-      }, 3000);
+        // Don't poll escrow status continuously to avoid 500 errors
+      }, 5000);
       
       return () => clearInterval(interval);
     }
