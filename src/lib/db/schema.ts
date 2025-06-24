@@ -98,6 +98,17 @@ export interface OnlineUser {
   is_online: boolean;
 }
 
+export interface GameStat {
+  id: string;
+  game_id: string;
+  player_id: string;
+  game_type: 'checkers' | 'chess' | 'go' | 'poker';
+  result: 'win' | 'loss';
+  amount: number;
+  opponent_id: string;
+  created_at: Date;
+}
+
 // Database initialization
 export async function initializeDatabase() {
   try {
@@ -212,6 +223,20 @@ export async function initializeDatabase() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(player_id, friend_id)
+      );
+    `;
+
+    // Create game_stats table
+    await db`
+      CREATE TABLE IF NOT EXISTS game_stats (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID REFERENCES games(id),
+        player_id UUID REFERENCES players(id),
+        game_type TEXT NOT NULL,
+        result TEXT NOT NULL CHECK (result IN ('win', 'loss')),
+        amount DECIMAL NOT NULL,
+        opponent_id UUID REFERENCES players(id),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
 

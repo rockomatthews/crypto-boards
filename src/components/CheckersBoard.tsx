@@ -241,6 +241,45 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     return null;
   }, []);
 
+  // Complete the game and record stats
+  const completeGame = useCallback(async (winner: Player) => {
+    if (!publicKey) return;
+
+    try {
+      // Get player information to determine winner ID
+      const gameResponse = await fetch(`/api/games/${gameId}`);
+      if (gameResponse.ok) {
+        const gameData = await gameResponse.json();
+        
+        if (gameData.players && gameData.players.length >= 2) {
+          const redPlayer = gameData.players[0];
+          const blackPlayer = gameData.players[1];
+          const winnerId = winner === 'red' ? redPlayer.id : blackPlayer.id;
+          
+          console.log(`🏆 Completing game with winner: ${winner} (ID: ${winnerId})`);
+          
+          const response = await fetch(`/api/games/${gameId}/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              winnerId,
+              gameType: 'checkers'
+            })
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log('Game completed successfully:', result);
+          } else {
+            console.error('Failed to complete game:', response.statusText);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error completing game:', error);
+    }
+  }, [gameId, publicKey]);
+
   // Make a move and save to database
   const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
     setLoading(true);
@@ -294,10 +333,12 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     
     if (winner) {
       setGameEndDialog(true);
+      // Complete the game and record stats
+      await completeGame(winner);
     }
     
     setLoading(false);
-  }, [gameState, saveGameState, checkWinner]);
+  }, [gameState, saveGameState, checkWinner, completeGame]);
 
   // Handle square click
   const handleSquareClick = useCallback((row: number, col: number) => {

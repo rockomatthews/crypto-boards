@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
 import PhoneInput from './PhoneInput';
+import { StatsModal } from './StatsModal';
 
 interface ProfileData {
   username: string;
@@ -37,6 +38,7 @@ export const Profile: FC = () => {
   const [newPhoneNumber, setNewPhoneNumber] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProfile = useCallback(async () => {
@@ -210,17 +212,30 @@ export const Profile: FC = () => {
             <Typography variant="h5" gutterBottom>
               {profile?.username}
             </Typography>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                setNewUsername(profile?.username || '');
-                setNewPhoneNumber(profile?.phone_number || '');
-                setIsEditing(true);
-              }}
-            >
-              Edit Profile
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  setNewUsername(profile?.username || '');
+                  setNewPhoneNumber(profile?.phone_number || '');
+                  setIsEditing(true);
+                }}
+              >
+                Edit Profile
+              </Button>
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() => setShowStats(true)}
+                sx={{ 
+                  bgcolor: '#8B4513', 
+                  '&:hover': { bgcolor: '#654321' } 
+                }}
+              >
+                📊 Stats
+              </Button>
+            </Box>
           </Box>
         </Box>
 
@@ -292,6 +307,8 @@ export const Profile: FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <StatsModal open={showStats} onClose={() => setShowStats(false)} />
     </Card>
   );
 }; 
