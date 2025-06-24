@@ -53,20 +53,20 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   function initializeBoard(): (GamePiece | null)[][] {
     const board: (GamePiece | null)[][] = Array(8).fill(null).map(() => Array(8).fill(null));
     
-    // Place red pieces (bottom 3 rows)
+    // Place black pieces (top 3 rows)
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 8; col++) {
         if ((row + col) % 2 === 1) {
-          board[row][col] = { type: 'red', isKing: false };
+          board[row][col] = { type: 'black', isKing: false };
         }
       }
     }
     
-    // Place black pieces (top 3 rows)
+    // Place red pieces (bottom 3 rows)
     for (let row = 5; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         if ((row + col) % 2 === 1) {
-          board[row][col] = { type: 'black', isKing: false };
+          board[row][col] = { type: 'red', isKing: false };
         }
       }
     }
