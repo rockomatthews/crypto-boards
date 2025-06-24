@@ -2,6 +2,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 
+// Skip database operations during build
+if (!process.env.DATABASE_URL && process.env.NODE_ENV !== 'development') {
+  console.log('Skipping database operations during build');
+}
+
 // Our actual game state structure from CheckersBoard
 interface GamePiece {
   type: 'red' | 'black' | null;
@@ -27,6 +32,11 @@ export async function GET(
   context: any
 ) {
   try {
+    // Skip during build
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json({ error: 'Database not available during build' }, { status: 503 });
+    }
+
     const gameId = context?.params?.id;
 
     if (!gameId) {
@@ -62,6 +72,11 @@ export async function PUT(
   context: any
 ) {
   try {
+    // Skip during build
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json({ error: 'Database not available during build' }, { status: 503 });
+    }
+
     const gameId = context?.params?.id;
     const { newState, playerId } = await request.json();
 
@@ -82,6 +97,16 @@ export async function PUT(
 
     if (gameExists.length === 0) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+    }
+
+    // Validate that the player is in the game
+    const playerInGameResult = await db`
+      SELECT game_status FROM game_players 
+      WHERE game_id = ${gameId} AND player_id = ${playerId}
+    `;
+
+    if (playerInGameResult.length === 0) {
+      return NextResponse.json({ error: 'Player not in game' }, { status: 403 });
     }
 
     // Insert new game state (we'll keep all moves as history)

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { 
   Button, 
   Menu, 
@@ -98,10 +99,12 @@ export default function CustomWalletButton() {
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           {wallet?.adapter.icon && (
-            <img 
+            <Image 
               src={wallet.adapter.icon} 
               alt={wallet.adapter.name}
-              style={{ width: 20, height: 20 }}
+              width={20}
+              height={20}
+              style={{ borderRadius: '50%' }}
             />
           )}
           <Typography variant="body2" sx={{ fontWeight: 'bold' }}>

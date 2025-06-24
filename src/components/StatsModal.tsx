@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -10,7 +10,6 @@ import {
   Typography,
   Box,
   Paper,
-  Grid,
   Chip,
   Table,
   TableBody,
@@ -66,7 +65,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ open, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     if (!publicKey) return;
 
     setLoading(true);
@@ -86,13 +85,13 @@ export const StatsModal: React.FC<StatsModalProps> = ({ open, onClose }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [publicKey]);
 
   useEffect(() => {
     if (open && publicKey) {
       fetchStats();
     }
-  }, [open, publicKey]);
+  }, [open, publicKey, fetchStats]);
 
   const getGameTypeEmoji = (gameType: string) => {
     switch (gameType) {
@@ -104,7 +103,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ open, onClose }) => {
     }
   };
 
-  const getStreakColor = (streakType: string) => {
+  const getStreakColor = (streakType: string): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
     switch (streakType) {
       case 'win': return 'success';
       case 'loss': return 'error';
@@ -152,89 +151,75 @@ export const StatsModal: React.FC<StatsModalProps> = ({ open, onClose }) => {
                 🏆 Overall Performance
               </Typography>
               
-              <Grid container spacing={3}>
-                <Grid item xs={6} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
-                      {stats.summary.totalGames}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Total Games
-                    </Typography>
-                  </Box>
-                </Grid>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 3 }}>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
+                    {stats.summary.totalGames}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Total Games
+                  </Typography>
+                </Box>
                 
-                <Grid item xs={6} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
-                      {stats.summary.winRate}%
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Win Rate
-                    </Typography>
-                  </Box>
-                </Grid>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                    {stats.summary.winRate}%
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Win Rate
+                  </Typography>
+                </Box>
                 
-                <Grid item xs={6} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h4" sx={{ 
-                      fontWeight: 'bold', 
-                      color: parseFloat(stats.summary.netProfit) >= 0 ? '#2e7d32' : '#d32f2f'
-                    }}>
-                      {parseFloat(stats.summary.netProfit) >= 0 ? '+' : ''}{formatSOL(stats.summary.netProfit)}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Net Profit/Loss
-                    </Typography>
-                  </Box>
-                </Grid>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h4" sx={{ 
+                    fontWeight: 'bold', 
+                    color: parseFloat(stats.summary.netProfit) >= 0 ? '#2e7d32' : '#d32f2f'
+                  }}>
+                    {parseFloat(stats.summary.netProfit) >= 0 ? '+' : ''}{formatSOL(stats.summary.netProfit)}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Net Profit/Loss
+                  </Typography>
+                </Box>
                 
-                <Grid item xs={6} md={3}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Chip 
-                      label={`${stats.summary.currentStreak} ${stats.summary.streakType} streak`}
-                      color={getStreakColor(stats.summary.streakType) as any}
-                      sx={{ fontWeight: 'bold' }}
-                    />
-                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                      Current Streak
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Chip 
+                    label={`${stats.summary.currentStreak} ${stats.summary.streakType} streak`}
+                    color={getStreakColor(stats.summary.streakType)}
+                    sx={{ fontWeight: 'bold' }}
+                  />
+                  <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                    Current Streak
+                  </Typography>
+                </Box>
+              </Box>
 
-              <Grid container spacing={2} sx={{ mt: 2 }}>
-                <Grid item xs={4}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h6" sx={{ color: '#2e7d32' }}>
-                      {stats.summary.wins}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Wins
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={4}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h6" sx={{ color: '#d32f2f' }}>
-                      {stats.summary.losses}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Losses
-                    </Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={4}>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="h6" sx={{ color: '#ff9800' }}>
-                      {formatSOL(stats.summary.totalWinnings)}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Total Winnings
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, mt: 2 }}>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h6" sx={{ color: '#2e7d32' }}>
+                    {stats.summary.wins}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Wins
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h6" sx={{ color: '#d32f2f' }}>
+                    {stats.summary.losses}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Losses
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h6" sx={{ color: '#ff9800' }}>
+                    {formatSOL(stats.summary.totalWinnings)}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Total Winnings
+                  </Typography>
+                </Box>
+              </Box>
             </Paper>
 
             {/* Game Type Breakdown */}
@@ -244,35 +229,33 @@ export const StatsModal: React.FC<StatsModalProps> = ({ open, onClose }) => {
                   🎮 Performance by Game Type
                 </Typography>
                 
-                <Grid container spacing={2}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2 }}>
                   {Object.entries(stats.gameTypeStats).map(([gameType, typeStats]) => (
-                    <Grid item xs={12} md={6} key={gameType}>
-                      <Paper sx={{ p: 2, border: '1px solid #e0e0e0' }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
-                          {getGameTypeEmoji(gameType)} {gameType.charAt(0).toUpperCase() + gameType.slice(1)}
-                        </Typography>
-                        <Grid container spacing={1}>
-                          <Grid item xs={6}>
-                            <Typography variant="body2">
-                              <strong>Games:</strong> {typeStats.total}
-                            </Typography>
-                            <Typography variant="body2">
-                              <strong>W/L:</strong> {typeStats.wins}/{typeStats.losses}
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={6}>
-                            <Typography variant="body2">
-                              <strong>Win Rate:</strong> {typeStats.total > 0 ? ((typeStats.wins / typeStats.total) * 100).toFixed(1) : '0.0'}%
-                            </Typography>
-                            <Typography variant="body2">
-                              <strong>Net:</strong> {formatSOL(typeStats.winnings - typeStats.lossAmount)}
-                            </Typography>
-                          </Grid>
-                        </Grid>
-                      </Paper>
-                    </Grid>
+                    <Paper key={gameType} sx={{ p: 2, border: '1px solid #e0e0e0' }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                        {getGameTypeEmoji(gameType)} {gameType.charAt(0).toUpperCase() + gameType.slice(1)}
+                      </Typography>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                        <Box>
+                          <Typography variant="body2">
+                            <strong>Games:</strong> {typeStats.total}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>W/L:</strong> {typeStats.wins}/{typeStats.losses}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="body2">
+                            <strong>Win Rate:</strong> {typeStats.total > 0 ? ((typeStats.wins / typeStats.total) * 100).toFixed(1) : '0.0'}%
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Net:</strong> {formatSOL(typeStats.winnings - typeStats.lossAmount)}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Paper>
                   ))}
-                </Grid>
+                </Box>
               </Paper>
             )}
 

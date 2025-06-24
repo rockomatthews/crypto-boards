@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless';
 
 // Database connection
-export const db = neon(process.env.DATABASE_URL!);
+export const db = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : neon('postgresql://dummy:dummy@localhost:5432/dummy');
 
 // Types
 export interface Player {
