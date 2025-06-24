@@ -152,12 +152,12 @@ a {
 
 .piece.red.king {
   background: linear-gradient(145deg, #FF6B6B, #FF4444, #FFD700);
-  border-color: #FFD700;
+  border-color: #CC0000;
 }
 
 .piece.black.king {
   background: linear-gradient(145deg, #333333, #111111, #FFD700);
-  border-color: #FFD700;
+  border-color: #000000;
 }
 
 .piece:hover {
