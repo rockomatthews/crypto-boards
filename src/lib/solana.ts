@@ -6,8 +6,11 @@ import {
 } from '@solana/web3.js';
 
 // Use proper RPC URL for environment
-const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-export const PLATFORM_WALLET = new PublicKey(process.env.NEXT_PUBLIC_PLATFORM_WALLET_ADDRESS || '11111111111111111111111111111111');
+const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+export const PLATFORM_WALLET = new PublicKey(
+  process.env.NEXT_PUBLIC_PLATFORM_WALLET_ADDRESS || 
+  'CHyQpdkGgoQbQDdm9vgjc3NpiBQ9wQ8Fu8LHQaPwoNdN'
+);
 
 export interface PaymentResult {
   success: boolean;
