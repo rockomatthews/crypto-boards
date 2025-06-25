@@ -2,7 +2,9 @@ import {
   Connection, 
   PublicKey, 
   LAMPORTS_PER_SOL,
-  Keypair
+  Keypair,
+  Transaction,
+  SystemProgram
 } from '@solana/web3.js';
 
 // Use proper RPC URL for environment
@@ -56,15 +58,12 @@ export const createGameEscrow = async (
   const escrowAccount = generateEscrowAccount();
   
   try {
-    // For demo purposes, we'll simulate the escrow creation
-    // In production, this would create an actual escrow account
     console.log(`🎮 Creating escrow for game ${gameId}:`, {
       player: playerWallet.toString(),
       amount: entryFee,
       escrow: escrowAccount.publicKey.toString()
     });
 
-    // Simulate payment processing
     const simulatedSignature = `escrow_${gameId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     console.log(`✅ Escrow created for game ${gameId}:`, {
@@ -87,18 +86,10 @@ export const createGameEscrow = async (
 // Verify a transaction exists and is valid
 export const verifyTransaction = async (signature: string): Promise<boolean> => {
   try {
-    // For demo purposes, accept any signature that looks valid
     if (signature.startsWith('mock_signature_') || signature.startsWith('escrow_') || signature.startsWith('sim_')) {
       console.log(`✅ Mock transaction verified: ${signature}`);
       return true;
     }
-
-    // In production, verify real transactions:
-    /*
-    const connection = getConnection();
-    const transaction = await connection.getTransaction(signature);
-    return transaction !== null && transaction.meta?.err === null;
-    */
     
     return true;
   } catch (error) {
@@ -116,7 +107,6 @@ export const processGameEntryPayment = async (
   try {
     console.log(`💰 Processing entry payment: ${amount} SOL from ${fromWallet.toString()} for game ${gameId}`);
     
-    // For demo purposes, simulate payment
     const mockSignature = `payment_${gameId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     console.log(`✅ Entry payment processed: ${mockSignature}`);
@@ -134,35 +124,6 @@ export const processGameEntryPayment = async (
   }
 };
 
-// Refund escrow to player (if they leave before game starts)
-export const refundEscrowToPlayer = async (
-  escrowAccount: Keypair,
-  playerWallet: PublicKey,
-  amount: number,
-  gameId: string
-): Promise<{
-  refundAmount: number;
-  transactionSignature: string;
-}> => {
-  try {
-    console.log(`🔄 Processing refund: ${amount} SOL to ${playerWallet.toString()} for game ${gameId}`);
-    
-    // For demo purposes, simulate refund
-    const mockSignature = `refund_${gameId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    console.log(`✅ Refund processed: ${amount} SOL refunded with signature ${mockSignature}`);
-    
-    return {
-      refundAmount: amount,
-      transactionSignature: mockSignature
-    };
-    
-  } catch (error) {
-    console.error('❌ Failed to process refund:', error);
-    throw new Error(`Failed to process refund: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-};
-
 // Calculate platform fee (4%)
 export const calculatePlatformFee = (totalAmount: number): number => {
   return totalAmount * 0.04;
@@ -173,7 +134,7 @@ export const calculateWinnerPayout = (totalPot: number): number => {
   return totalPot * 0.96;
 };
 
-// Process winner payout in SOL
+// Process winner payout in SOL - NOW WITH REAL TRANSACTIONS!
 export const processWinnerPayout = async (
   toWalletAddress: string,
   totalPot: number,
@@ -183,21 +144,121 @@ export const processWinnerPayout = async (
     const platformFee = calculatePlatformFee(totalPot);
     const winnerAmount = calculateWinnerPayout(totalPot);
     
-    console.log(`🏆 Processing winner payout for game ${gameId}:`, {
+    console.log(`🏆 Processing REAL winner payout for game ${gameId}:`, {
       totalPot,
       platformFee,
       winnerAmount,
       winner: toWalletAddress
     });
     
-    // For demo purposes, simulate payout
-    const mockSignature = `payout_${gameId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Get platform wallet private key
+    const privateKeyString = process.env.PLATFORM_WALLET_PRIVATE_KEY;
+    if (!privateKeyString) {
+      console.error('❌ PLATFORM_WALLET_PRIVATE_KEY not found in environment variables');
+      return {
+        success: false,
+        error: 'Platform wallet private key not configured'
+      };
+    }
+
+    let platformKeypair: Keypair;
+    try {
+      let privateKeyBytes: Uint8Array;
+      
+      if (privateKeyString.includes('[') && privateKeyString.includes(']')) {
+        // Array format: [1,2,3,4,...]
+        const keyArray = JSON.parse(privateKeyString);
+        privateKeyBytes = new Uint8Array(keyArray);
+      } else if (privateKeyString.length === 128) {
+        // Hex format
+        privateKeyBytes = new Uint8Array(Buffer.from(privateKeyString, 'hex'));
+      } else {
+        try {
+          // Base64 format
+          privateKeyBytes = new Uint8Array(Buffer.from(privateKeyString, 'base64'));
+        } catch {
+          // Base58 format
+          const bs58 = await import('bs58');
+          privateKeyBytes = bs58.default.decode(privateKeyString);
+        }
+      }
+      
+      platformKeypair = Keypair.fromSecretKey(privateKeyBytes);
+      console.log(`💳 Platform wallet loaded: ${platformKeypair.publicKey.toString()}`);
+      
+      if (platformKeypair.publicKey.toString() !== PLATFORM_WALLET.toString()) {
+        console.warn(`⚠️ Private key wallet (${platformKeypair.publicKey.toString()}) doesn't match PLATFORM_WALLET (${PLATFORM_WALLET.toString()})`);
+      }
+    } catch (keyError) {
+      console.error('❌ Failed to parse platform wallet private key:', keyError);
+      return {
+        success: false,
+        error: `Invalid platform wallet private key format: ${keyError instanceof Error ? keyError.message : 'Unknown error'}`
+      };
+    }
+
+    // Use real Solana connection with QuickNode
+    const conn = getConnection();
+    const winnerWallet = new PublicKey(toWalletAddress);
     
-    console.log(`✅ Winner payout processed: ${winnerAmount} SOL to ${toWalletAddress} (${platformFee} SOL platform fee)`);
+    // Check platform wallet balance first
+    const platformBalance = await conn.getBalance(platformKeypair.publicKey);
+    const requiredLamports = Math.floor(winnerAmount * LAMPORTS_PER_SOL);
+    const requiredSOL = requiredLamports / LAMPORTS_PER_SOL;
+    
+    console.log(`💰 Platform wallet balance: ${platformBalance / LAMPORTS_PER_SOL} SOL`);
+    console.log(`💰 Required for payout: ${requiredSOL} SOL`);
+    
+    if (platformBalance < requiredLamports) {
+      return {
+        success: false,
+        error: `Insufficient platform wallet balance. Have: ${platformBalance / LAMPORTS_PER_SOL} SOL, Need: ${requiredSOL} SOL`
+      };
+    }
+    
+    // Create transaction to send SOL from platform wallet to winner
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: platformKeypair.publicKey,
+        toPubkey: winnerWallet,
+        lamports: requiredLamports,
+      })
+    );
+
+    // Get recent blockhash
+    const { blockhash } = await conn.getLatestBlockhash('confirmed');
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = platformKeypair.publicKey;
+
+    console.log(`💰 Sending ${winnerAmount} SOL from ${platformKeypair.publicKey.toString()} to ${winnerWallet.toString()}`);
+
+    // Sign and send the actual transaction
+    const signature = await conn.sendTransaction(transaction, [platformKeypair], {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+      maxRetries: 3
+    });
+
+    console.log(`⏳ Transaction sent with signature: ${signature}`);
+
+    // Wait for confirmation
+    const confirmation = await conn.confirmTransaction(signature, 'confirmed');
+    
+    if (confirmation.value && confirmation.value.err) {
+      console.error('❌ Transaction failed:', confirmation.value.err);
+      return {
+        success: false,
+        error: `Transaction failed: ${JSON.stringify(confirmation.value.err)}`
+      };
+    }
+    
+    console.log(`✅ REAL Winner payout confirmed: ${winnerAmount} SOL to ${toWalletAddress}`);
+    console.log(`💰 Platform fee retained: ${platformFee} SOL`);
+    console.log(`🔗 Transaction signature: ${signature}`);
     
     return {
       success: true,
-      signature: mockSignature,
+      signature: signature,
       amount: winnerAmount,
     };
   } catch (error) {
@@ -217,7 +278,6 @@ export const processRefund = async (
   try {
     console.log(`🔄 Processing game refund: ${amount} SOL to ${toWalletAddress}`);
     
-    // For demo purposes, simulate refund
     const mockSignature = `refund_cancel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     console.log(`✅ Refund processed: ${amount} SOL to ${toWalletAddress}`);
@@ -236,10 +296,7 @@ export const processRefund = async (
   }
 };
 
-/**
- * Legacy functions for compatibility - these are updated to use the new payment system
- */
-
+// Legacy functions for compatibility
 export async function processSolPayment(
   fromWalletAddress: string,
   amount: number
@@ -255,9 +312,7 @@ export async function processWinnerPayoutLegacy(
   return processWinnerPayout(toWalletAddress, amount, 'legacy');
 }
 
-/**
- * Get escrow balance for debugging
- */
+// Get escrow balance for debugging
 export async function getEscrowBalance(): Promise<number> {
   try {
     const conn = getConnection();

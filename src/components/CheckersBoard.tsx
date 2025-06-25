@@ -281,7 +281,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   }, [gameId, publicKey, saveGameState, initializeGameState]);
 
-  // Get valid moves for a piece
+  // Get valid moves for a piece - NOW WITH MULTIPLE JUMPS!
   const getValidMoves = useCallback((row: number, col: number, piece: GamePiece): [number, number][] => {
     const moves: [number, number][] = [];
     if (!piece) return moves;
@@ -296,6 +296,32 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
 
     console.log('Piece directions:', directions);
 
+    // Check for jumps first (mandatory in checkers)
+    const jumpMoves: [number, number][] = [];
+    
+    for (const [dr, dc] of directions) {
+      const jumpRow = row + dr * 2;
+      const jumpCol = col + dc * 2;
+      
+      if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+        const jumpedPiece = gameState.board[row + dr][col + dc];
+        const destination = gameState.board[jumpRow][jumpCol];
+        
+        if (jumpedPiece && jumpedPiece.type !== piece.type && !destination) {
+          console.log(`Jump move possible: (${jumpRow}, ${jumpCol}) jumping over (${row + dr}, ${col + dc})`);
+          jumpMoves.push([jumpRow, jumpCol]);
+        }
+      }
+    }
+    
+    // If jumps are available, ONLY return jump moves (checkers rule)
+    if (jumpMoves.length > 0) {
+      // TODO: Check for additional jumps from each landing position
+      // This would require recursive checking for multiple consecutive jumps
+      return jumpMoves;
+    }
+    
+    // Only check regular moves if no jumps are available
     for (const [dr, dc] of directions) {
       const newRow = row + dr;
       const newCol = col + dc;
@@ -305,25 +331,38 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         console.log(`Regular move possible: (${newRow}, ${newCol})`);
         moves.push([newRow, newCol]);
       }
-      
-      // Check for jumps
-      const jumpRow = row + dr * 2;
-      const jumpCol = col + dc * 2;
-      
-      if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
-        const jumpedPiece = gameState.board[newRow][newCol];
-        const destination = gameState.board[jumpRow][jumpCol];
-        
-        if (jumpedPiece && jumpedPiece.type !== piece.type && !destination) {
-          console.log(`Jump move possible: (${jumpRow}, ${jumpCol}) jumping over (${newRow}, ${newCol})`);
-          moves.push([jumpRow, jumpCol]);
-        }
+    }
+    
+    console.log('Final valid moves:', jumpMoves.length > 0 ? jumpMoves : moves);
+    return jumpMoves.length > 0 ? jumpMoves : moves;
+  }, [gameState.board]);
+
+  // Count pieces for each player
+  const countPieces = useCallback((board: (GamePiece | null)[][]): { red: number; black: number } => {
+    let redCount = 0;
+    let blackCount = 0;
+    
+    for (let row = 0; row < 8; row++) {
+      for (let col = 0; col < 8; col++) {
+        const piece = board[row][col];
+        if (piece?.type === 'red') redCount++;
+        if (piece?.type === 'black') blackCount++;
       }
     }
     
-    console.log('Final valid moves:', moves);
-    return moves;
-  }, [gameState.board]);
+    return { red: redCount, black: blackCount };
+  }, []);
+
+  // Determine winner by piece count when time runs out
+  const determineWinnerByPieceCount = useCallback((board: (GamePiece | null)[][]): Player | null => {
+    const { red, black } = countPieces(board);
+    
+    console.log(`⏰ TIME UP! Piece count - Red: ${red}, Black: ${black}`);
+    
+    if (red > black) return 'red';
+    if (black > red) return 'black';
+    return null; // Draw - same number of pieces
+  }, [countPieces]);
 
   // Check for winner
   const checkWinner = useCallback((board: (GamePiece | null)[][]): Player | null => {
@@ -338,6 +377,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       }
     }
     
+    // Normal win conditions - all opponent pieces captured
     if (redPieces === 0) return 'black';
     if (blackPieces === 0) return 'red';
     return null;
@@ -404,6 +444,37 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       console.error('Error completing game:', error);
     }
   }, [gameId, publicKey]);
+
+  // Handle game timeout
+  const handleGameTimeout = useCallback(async () => {
+    if (gameState.gameStatus !== 'active') return;
+    
+    console.log('⏰ GAME TIMEOUT! Determining winner by piece count...');
+    
+    const winner = determineWinnerByPieceCount(gameState.board);
+    const { red, black } = countPieces(gameState.board);
+    
+    const newState: GameState = {
+      ...gameState,
+      gameStatus: 'finished',
+      winner
+    };
+    
+    setGameState(newState);
+    
+    // Save the final state
+    await saveGameState(newState);
+    
+    if (winner) {
+      console.log(`🏆 ${winner.toUpperCase()} wins by piece count! (${winner === 'red' ? red : black} vs ${winner === 'red' ? black : red})`);
+      setGameEndDialog(true);
+      await completeGame(winner);
+    } else {
+      console.log(`🤝 It&apos;s a draw! Well played by both players!`);
+      setGameEndDialog(true);
+      // Handle draw case - could split pot or return entry fees
+    }
+  }, [gameState, determineWinnerByPieceCount, countPieces, saveGameState, completeGame]);
 
   // Make a move - now with MagicBlock real-time integration!
   const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
@@ -577,6 +648,33 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   }, [gameState.gameStatus, gameStartTime]);
 
+  // ADD TIMER COUNTDOWN - Decrements every second and handles timeout
+  useEffect(() => {
+    let timerInterval: NodeJS.Timeout;
+    
+    if (gameState.gameStatus === 'active' && gameStartTime) {
+      timerInterval = setInterval(() => {
+        const now = new Date();
+        const elapsed = now.getTime() - gameStartTime.getTime();
+        const remaining = Math.max(0, GAME_TIME_LIMIT - elapsed);
+        setTimeLeft(remaining);
+        
+        // Auto-complete game if time runs out
+        if (remaining <= 0 && gameState.gameStatus === 'active') {
+          console.log('⏰ TIME UP! Auto-completing game...');
+          handleGameTimeout();
+          clearInterval(timerInterval); // Stop the timer
+        }
+      }, 1000); // Update every second
+    }
+    
+    return () => {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    };
+  }, [gameState.gameStatus, gameStartTime, handleGameTimeout]);
+
   // Fetch escrow status
   const fetchEscrowStatus = useCallback(async () => {
     if (!publicKey) return;
@@ -707,6 +805,11 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             <Typography variant="body2">
               {gameState.redPlayer ? `${gameState.redPlayer.slice(0, 8)}...` : 'Waiting...'}
             </Typography>
+            {gameState.gameStatus === 'active' && (
+              <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#FF6B6B' }}>
+                Pieces: {countPieces(gameState.board).red}
+              </Typography>
+            )}
             {escrowStatus && escrowStatus.escrows.find(e => e.wallet_address === gameState.redPlayer && e.status === 'active') && (
               <Typography variant="caption" sx={{ color: '#90EE90' }}>
                 ✅ {escrowStatus.escrows.find(e => e.wallet_address === gameState.redPlayer)?.amount} SOL Escrowed
@@ -720,6 +823,11 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             <Typography variant="body2">
               {gameState.blackPlayer ? `${gameState.blackPlayer.slice(0, 8)}...` : 'Waiting...'}
             </Typography>
+            {gameState.gameStatus === 'active' && (
+              <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#333' }}>
+                Pieces: {countPieces(gameState.board).black}
+              </Typography>
+            )}
             {escrowStatus && escrowStatus.escrows.find(e => e.wallet_address === gameState.blackPlayer && e.status === 'active') && (
               <Typography variant="caption" sx={{ color: '#90EE90' }}>
                 ✅ {escrowStatus.escrows.find(e => e.wallet_address === gameState.blackPlayer)?.amount} SOL Escrowed
@@ -787,8 +895,47 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
             fontWeight: 'bold',
             mb: 2
           }}>
-            {gameState.winner?.toUpperCase()} WINS!
+            {gameState.winner ? `${gameState.winner.toUpperCase()} WINS!` : 'DRAW!'}
           </Typography>
+          
+          {/* Show piece count for all games */}
+          {gameState.gameStatus === 'finished' && (
+            <Box sx={{ textAlign: 'center', mb: 2 }}>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Final Piece Count:
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
+                <Box>
+                  <Typography variant="body1" sx={{ color: '#FF6B6B', fontWeight: 'bold' }}>
+                    🔴 Red: {countPieces(gameState.board).red}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="body1" sx={{ color: '#333', fontWeight: 'bold' }}>
+                    ⚫ Black: {countPieces(gameState.board).black}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              {/* Show win reason */}
+              {gameState.winner && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  {countPieces(gameState.board).red === 0 || countPieces(gameState.board).black === 0 
+                    ? 'Won by capturing all opponent pieces!'
+                    : timeLeft <= 0 
+                      ? 'Won by having more pieces when time ran out!'
+                      : 'Victory achieved!'}
+                </Typography>
+              )}
+              
+              {!gameState.winner && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Both players have the same number of pieces!
+                </Typography>
+              )}
+            </Box>
+          )}
+          
           {gameState.winner === playerColor && (
             <Typography align="center" sx={{ 
               mt: 2, 
@@ -799,13 +946,22 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
               🏆 Congratulations! You are the champion! 🏆
             </Typography>
           )}
-          {gameState.winner !== playerColor && playerColor && (
+          {gameState.winner !== playerColor && playerColor && gameState.winner && (
             <Typography align="center" sx={{ 
               mt: 2, 
               color: 'error.main', 
               fontSize: '1.1rem'
             }}>
               Better luck next time! 💪
+            </Typography>
+          )}
+          {!gameState.winner && (
+            <Typography align="center" sx={{ 
+              mt: 2, 
+              color: 'warning.main', 
+              fontSize: '1.1rem'
+            }}>
+              🤝 It&apos;s a draw! Well played by both players!
             </Typography>
           )}
         </DialogContent>
