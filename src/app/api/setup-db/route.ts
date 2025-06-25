@@ -20,7 +20,7 @@ export async function POST() {
     `;
     console.log('✅ Players table created');
 
-    // Create games table
+    // Create games table with proper decimal precision for SOL amounts
     await db`
       CREATE TABLE IF NOT EXISTS games (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -30,7 +30,7 @@ export async function POST() {
         started_at TIMESTAMP WITH TIME ZONE,
         ended_at TIMESTAMP WITH TIME ZONE,
         max_players INTEGER NOT NULL,
-        entry_fee DECIMAL NOT NULL,
+        entry_fee DECIMAL(18, 9) NOT NULL,
         is_private BOOLEAN NOT NULL DEFAULT false,
         creator_id UUID REFERENCES players(id)
       );

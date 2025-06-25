@@ -14,7 +14,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 
 interface EscrowPaymentProps {
   gameId: string;
-  entryFee: number;
+  entryFee: string | number;
   onPaymentSuccess: () => void;
   onPaymentError: (error: string) => void;
 }
@@ -29,6 +29,15 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // Convert entryFee to number for calculations
+  const entryFeeNumber = typeof entryFee === 'string' ? parseFloat(entryFee) : entryFee;
+
+  // Helper function to safely format SOL amounts
+  const formatSOL = (amount: number | string): string => {
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    return `${num.toFixed(4)} SOL`;
+  };
 
   const handleEscrowPayment = async () => {
     if (!publicKey || !signTransaction) {
@@ -47,7 +56,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
         body: JSON.stringify({
           action: 'create_escrow',
           playerWallet: publicKey.toString(),
-          amount: entryFee,
+          amount: entryFeeNumber,
           transactionData: {
             signature: `temp_${Date.now()}` // This would be replaced with actual transaction
           }
@@ -81,7 +90,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
     }
   };
 
-  const totalPot = entryFee * 2; // Assuming 2 players
+  const totalPot = entryFeeNumber * 2; // Assuming 2 players
   const winnerAmount = totalPot - (totalPot * 0.04);
 
   if (success) {
@@ -92,7 +101,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
             ✅ Payment Successful!
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Your {entryFee.toFixed(4)} SOL has been placed in escrow.
+            Your {formatSOL(entryFeeNumber)} has been placed in escrow.
           </Typography>
         </Box>
       </Paper>
@@ -107,7 +116,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
       
       <Box sx={{ mb: 2 }}>
         <Typography variant="body1" sx={{ mb: 1 }}>
-          <strong>Entry Fee:</strong> {entryFee.toFixed(4)} SOL
+          <strong>Entry Fee:</strong> {formatSOL(entryFeeNumber)}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           Your SOL will be held in escrow until the game ends.
@@ -115,12 +124,12 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
         
         <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
           <Chip 
-            label={`Total Pot: ${totalPot.toFixed(4)} SOL`}
+            label={`Total Pot: ${formatSOL(totalPot)}`}
             color="primary" 
             size="small" 
           />
           <Chip 
-            label={`Winner Gets: ${winnerAmount.toFixed(4)} SOL`}
+            label={`Winner Gets: ${formatSOL(winnerAmount)}`}
             color="success" 
             size="small" 
           />
@@ -156,7 +165,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
               Processing...
             </>
           ) : (
-            <>💳 Pay {entryFee.toFixed(4)} SOL</>
+            <>💳 Pay {formatSOL(entryFeeNumber)}</>
           )}
         </Button>
       </Box>

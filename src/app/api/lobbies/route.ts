@@ -93,6 +93,37 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // First, cleanup empty lobbies and abandoned games
+    console.log('🧹 Cleaning up empty lobbies...');
+    
+    // Delete lobbies that have no players
+    const emptyLobbiesResult = await db`
+      DELETE FROM games 
+      WHERE status = 'waiting' 
+      AND id NOT IN (
+        SELECT DISTINCT game_id 
+        FROM game_players 
+        WHERE game_id IS NOT NULL
+      )
+      RETURNING id
+    `;
+    
+    if (emptyLobbiesResult.length > 0) {
+      console.log(`✅ Cleaned up ${emptyLobbiesResult.length} empty lobbies`);
+    }
+
+    // Also cleanup lobbies older than 1 hour with no activity
+    const staleLobbiesResult = await db`
+      DELETE FROM games 
+      WHERE status = 'waiting' 
+      AND created_at < NOW() - INTERVAL '1 hour'
+      RETURNING id
+    `;
+    
+    if (staleLobbiesResult.length > 0) {
+      console.log(`✅ Cleaned up ${staleLobbiesResult.length} stale lobbies`);
+    }
+
     // Get player ID
     const playerResult = await db`
       SELECT id FROM players WHERE wallet_address = ${walletAddress}
@@ -105,7 +136,7 @@ export async function GET(request: NextRequest) {
     const playerId = playerResult[0].id;
 
     // Get lobbies where player is involved (creator, invited, or public)
-    const lobbies = await db`
+    const lobbiesResult = await db`
       SELECT 
         g.id,
         g.game_type,
@@ -129,8 +160,16 @@ export async function GET(request: NextRequest) {
           OR (g.is_private = false AND g.creator_id != ${playerId} AND g.status = 'waiting')
         )
       GROUP BY g.id, g.game_type, g.status, g.max_players, g.entry_fee, g.is_private, g.created_at, p.username, p.wallet_address, gp.game_status
+      HAVING COUNT(gp2.player_id) > 0
       ORDER BY g.created_at DESC
     `;
+
+    // Convert entry_fee to number to prevent toFixed errors
+    const lobbies = lobbiesResult.map(lobby => ({
+      ...lobby,
+      entry_fee: parseFloat(lobby.entry_fee),
+      current_players: parseInt(lobby.current_players)
+    }));
 
     return NextResponse.json(lobbies);
   } catch (error) {

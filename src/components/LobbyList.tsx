@@ -20,7 +20,7 @@ interface Lobby {
   game_type: string;
   status: string;
   max_players: number;
-  entry_fee: number;
+  entry_fee: string | number;
   is_private: boolean;
   created_at: string;
   creator_name: string;
@@ -241,7 +241,7 @@ export const LobbyList: FC = () => {
                     Created by {lobby.creator_name}
                   </Typography>
                   <Typography variant="h6" color="primary" gutterBottom>
-                    {lobby.entry_fee} SOL
+                    {Number(lobby.entry_fee).toFixed(4)} SOL
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                     <Chip 

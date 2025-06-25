@@ -48,7 +48,7 @@ interface Lobby {
   game_type: string;
   status: string;
   max_players: number;
-  entry_fee: number;
+  entry_fee: string | number;
   is_private: boolean;
   created_at: string;
   creator_name: string;
@@ -261,7 +261,7 @@ export default function LobbyPage() {
 
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Chip label={`${lobby.players.length}/${lobby.max_players} Players`} />
-            <Chip label={`${lobby.entry_fee} SOL Entry Fee`} color="primary" />
+            <Chip label={`${Number(lobby.entry_fee).toFixed(4)} SOL Entry Fee`} color="primary" />
             <Chip label={lobby.status} color="info" />
           </Box>
         </CardContent>

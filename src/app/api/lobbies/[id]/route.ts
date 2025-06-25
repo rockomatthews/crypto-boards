@@ -49,6 +49,7 @@ export async function GET(
 
     const lobbyWithPlayers = {
       ...lobby,
+      entry_fee: parseFloat(lobby.entry_fee),
       players: playersResult
     };
 

@@ -564,57 +564,18 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const determineWinnerByPieceCount = useCallback((): Player | null => {
-    let redPieces = 0;
-    let blackPieces = 0;
-    
-    for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 8; col++) {
-        const piece = gameState.board[row][col];
-        if (piece?.type === 'red') redPieces++;
-        if (piece?.type === 'black') blackPieces++;
-      }
-    }
-    
-    if (redPieces > blackPieces) return 'red';
-    if (blackPieces > redPieces) return 'black';
-    return null; // It's a tie
-  }, [gameState.board]);
-
-  // Timer effect
+  // Initialize timer when game starts
   useEffect(() => {
-    if (gameState.gameStatus === 'active' && gameStartTime && timeLeft > 0) {
-      const timer = setInterval(() => {
-        const now = new Date();
-        const elapsed = now.getTime() - gameStartTime.getTime();
-        const remaining = GAME_TIME_LIMIT - elapsed;
-        
-        if (remaining <= 0) {
-          // Time's up! Determine winner by piece count
-          const winner = determineWinnerByPieceCount();
-          if (winner) {
-            console.log(`⏰ TIME'S UP! Winner by piece count: ${winner.toUpperCase()}`);
-            
-            const newState: GameState = {
-              ...gameState,
-              gameStatus: 'finished',
-              winner
-            };
-            
-            setGameState(newState);
-            saveGameState(newState);
-            completeGame(winner);
-            setGameEndDialog(true);
-          }
-          setTimeLeft(0);
-        } else {
-          setTimeLeft(remaining);
-        }
-      }, 1000);
-      
-      return () => clearInterval(timer);
+    if (gameState.gameStatus === 'active' && gameStartTime) {
+      const now = new Date();
+      const elapsed = now.getTime() - gameStartTime.getTime();
+      const remaining = Math.max(0, GAME_TIME_LIMIT - elapsed);
+      setTimeLeft(remaining);
+      console.log(`⏰ Timer initialized: ${Math.floor(remaining / 60000)}:${Math.floor((remaining % 60000) / 1000).toString().padStart(2, '0')} remaining`);
+    } else if (gameState.gameStatus === 'waiting') {
+      setTimeLeft(GAME_TIME_LIMIT); // Reset to full time when waiting
     }
-  }, [gameState.gameStatus, gameStartTime, timeLeft, gameState, saveGameState, completeGame, determineWinnerByPieceCount]);
+  }, [gameState.gameStatus, gameStartTime]);
 
   // Fetch escrow status
   const fetchEscrowStatus = useCallback(async () => {
