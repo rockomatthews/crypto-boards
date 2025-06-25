@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 
@@ -22,8 +21,22 @@ export async function GET(request: NextRequest) {
 
     const playerId = playerResult[0].id;
 
-    // Get game statistics
-    const statsResult = await db`
+    // Get aggregated stats from player_stats table
+    const aggregatedStatsResult = await db`
+      SELECT 
+        games_played,
+        games_won,
+        total_winnings,
+        total_losses,
+        current_streak,
+        best_streak,
+        updated_at
+      FROM player_stats
+      WHERE player_id = ${playerId}
+    `;
+
+    // Get individual game statistics for recent games and detailed breakdown
+    const gameStatsResult = await db`
       SELECT 
         gs.game_type,
         gs.result,
@@ -37,37 +50,36 @@ export async function GET(request: NextRequest) {
       JOIN players opponent ON gs.opponent_id = opponent.id
       WHERE gs.player_id = ${playerId}
       ORDER BY gs.created_at DESC
+      LIMIT 50
     `;
 
     // Calculate summary statistics
-    const totalGames = statsResult.length;
-    const wins = statsResult.filter(s => s.result === 'win').length;
-    const losses = statsResult.filter(s => s.result === 'loss').length;
-    const totalWinnings = statsResult
-      .filter(s => s.result === 'win')
-      .reduce((sum, s) => sum + parseFloat(s.amount), 0);
-    const totalLosses = statsResult
-      .filter(s => s.result === 'loss')
-      .reduce((sum, s) => sum + parseFloat(s.amount), 0);
+    const aggregatedStats = aggregatedStatsResult[0] || {
+      games_played: 0,
+      games_won: 0,
+      total_winnings: 0,
+      total_losses: 0,
+      current_streak: 0,
+      best_streak: 0
+    };
 
-    // Calculate current streak
-    let currentStreak = 0;
+    const totalGames = aggregatedStats.games_played;
+    const wins = aggregatedStats.games_won;
+    const losses = totalGames - wins;
+    const totalWinnings = parseFloat(aggregatedStats.total_winnings);
+    const totalLosses = parseFloat(aggregatedStats.total_losses);
+    const currentStreak = aggregatedStats.current_streak;
+    const bestStreak = aggregatedStats.best_streak;
+
+    // Calculate streak type
     let streakType = 'none';
-    
-    if (statsResult.length > 0) {
-      const latestResult = statsResult[0].result;
-      streakType = latestResult;
-      
-      for (const game of statsResult) {
-        if (game.result === latestResult) {
-          currentStreak++;
-        } else {
-          break;
-        }
-      }
+    if (currentStreak > 0) {
+      streakType = 'win';
+    } else if (currentStreak < 0) {
+      streakType = 'loss';
     }
 
-    // Group by game type
+    // Group by game type from recent games
     const gameTypeStats: Record<string, {
       total: number;
       wins: number;
@@ -76,7 +88,7 @@ export async function GET(request: NextRequest) {
       lossAmount: number;
     }> = {};
     
-    statsResult.forEach(stat => {
+    gameStatsResult.forEach(stat => {
       const gameType = stat.game_type;
       if (!gameTypeStats[gameType]) {
         gameTypeStats[gameType] = {
@@ -107,11 +119,12 @@ export async function GET(request: NextRequest) {
         totalWinnings: totalWinnings.toFixed(4),
         totalLosses: totalLosses.toFixed(4),
         netProfit: (totalWinnings - totalLosses).toFixed(4),
-        currentStreak,
-        streakType
+        currentStreak: Math.abs(currentStreak),
+        streakType,
+        bestStreak
       },
       gameTypeStats,
-      recentGames: statsResult.slice(0, 10) // Last 10 games
+      recentGames: gameStatsResult.slice(0, 10) // Last 10 games
     });
 
   } catch (error) {

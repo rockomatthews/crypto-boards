@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 
@@ -30,8 +29,9 @@ export async function GET(request: NextRequest) {
       LIMIT ${limit}
     `;
 
-    const feed = feedResult.map(game => ({
+    const gameFeed = feedResult.map(game => ({
       id: game.id,
+      type: 'game_completed',
       gameType: game.game_type,
       entryFee: parseFloat(game.entry_fee),
       payoutAmount: game.payout_amount ? parseFloat(game.payout_amount) : null,
@@ -45,6 +45,38 @@ export async function GET(request: NextRequest) {
         wallet: game.loser_wallet
       }
     }));
+
+    // TODO: Add stats-based feed items in the future
+    // Examples to implement later:
+    // - Player reaching X win streak
+    // - Player hitting milestone wins (10, 25, 50, 100)
+    // - Big wins (above certain SOL threshold)
+    // - First-time winners
+    // - Player comeback streaks
+    
+    /* Future stats feed items structure:
+    const statsFeed = [
+      {
+        id: 'streak_123',
+        type: 'win_streak',
+        player: { username: 'Player1', wallet: 'xxx' },
+        streakLength: 5,
+        gameType: 'checkers',
+        createdAt: '2024-01-01T00:00:00Z'
+      },
+      {
+        id: 'milestone_456', 
+        type: 'win_milestone',
+        player: { username: 'Player2', wallet: 'yyy' },
+        milestone: 50,
+        totalWins: 50,
+        createdAt: '2024-01-01T00:00:00Z'
+      }
+    ];
+    */
+
+    // For now, return only game completion feed
+    const feed = gameFeed;
 
     return NextResponse.json({ feed });
 

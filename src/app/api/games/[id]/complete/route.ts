@@ -121,6 +121,41 @@ export async function POST(
           (${gameId}, ${loser.id}, ${gameType}, 'loss', ${game.entry_fee}, ${winnerId})
       `;
 
+      // Update aggregated player stats for winner
+      await db`
+        INSERT INTO player_stats (player_id, games_played, games_won, total_winnings, current_streak, best_streak, updated_at)
+        VALUES (${winnerId}, 1, 1, ${winnerPayout}, 1, 1, CURRENT_TIMESTAMP)
+        ON CONFLICT (player_id) DO UPDATE SET
+          games_played = player_stats.games_played + 1,
+          games_won = player_stats.games_won + 1,
+          total_winnings = player_stats.total_winnings + ${winnerPayout},
+          current_streak = CASE 
+            WHEN player_stats.current_streak >= 0 THEN player_stats.current_streak + 1
+            ELSE 1
+          END,
+          best_streak = GREATEST(player_stats.best_streak, 
+            CASE 
+              WHEN player_stats.current_streak >= 0 THEN player_stats.current_streak + 1
+              ELSE 1
+            END
+          ),
+          updated_at = CURRENT_TIMESTAMP
+      `;
+
+      // Update aggregated player stats for loser
+      await db`
+        INSERT INTO player_stats (player_id, games_played, games_won, total_losses, current_streak, best_streak, updated_at)
+        VALUES (${loser.id}, 1, 0, ${game.entry_fee}, -1, 0, CURRENT_TIMESTAMP)
+        ON CONFLICT (player_id) DO UPDATE SET
+          games_played = player_stats.games_played + 1,
+          total_losses = player_stats.total_losses + ${game.entry_fee},
+          current_streak = CASE 
+            WHEN player_stats.current_streak <= 0 THEN player_stats.current_streak - 1
+            ELSE -1
+          END,
+          updated_at = CURRENT_TIMESTAMP
+      `;
+
       return NextResponse.json({ 
         success: true,
         message: 'Game completed successfully',

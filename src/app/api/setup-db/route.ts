@@ -171,6 +171,22 @@ export async function POST() {
     `;
     console.log('✅ Player stats table created');
 
+    // Create game stats table for individual game records
+    await db`
+      CREATE TABLE IF NOT EXISTS game_stats (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        game_id UUID NOT NULL REFERENCES games(id),
+        player_id UUID NOT NULL REFERENCES players(id),
+        opponent_id UUID NOT NULL REFERENCES players(id),
+        game_type TEXT NOT NULL,
+        result TEXT NOT NULL, -- 'win' or 'loss'
+        amount DECIMAL(18, 9) NOT NULL, -- amount won or lost
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(game_id, player_id)
+      );
+    `;
+    console.log('✅ Game stats table created');
+
     // Create indexes for performance
     console.log('🔧 Creating indexes...');
     
@@ -185,6 +201,10 @@ export async function POST() {
     await db`CREATE INDEX IF NOT EXISTS idx_game_players_game_id ON game_players(game_id);`;
     await db`CREATE INDEX IF NOT EXISTS idx_game_players_player_id ON game_players(player_id);`;
     await db`CREATE INDEX IF NOT EXISTS idx_game_players_status ON game_players(game_status);`;
+    await db`CREATE INDEX IF NOT EXISTS idx_game_stats_game_id ON game_stats(game_id);`;
+    await db`CREATE INDEX IF NOT EXISTS idx_game_stats_player_id ON game_stats(player_id);`;
+    await db`CREATE INDEX IF NOT EXISTS idx_game_stats_result ON game_stats(result);`;
+    await db`CREATE INDEX IF NOT EXISTS idx_player_stats_player_id ON player_stats(player_id);`;
     
     console.log('✅ All indexes created');
 
@@ -205,7 +225,8 @@ export async function POST() {
         'friendships',
         'chat_users',
         'chat_messages',
-        'player_stats'
+        'player_stats',
+        'game_stats'
       ]
     });
   } catch (error) {

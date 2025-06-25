@@ -151,21 +151,26 @@ export const GameFeed: React.FC = () => {
                 <Box sx={{ width: '100%' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
                     <Typography variant="body1" sx={{ flexGrow: 1 }}>
-                      <span style={{ fontWeight: 'bold', color: '#d32f2f' }}>
-                        {truncateUsername(item.loser.username)}
-                      </span>
-                      <span style={{ color: '#666', margin: '0 8px' }}>lost</span>
-                      <span style={{ fontWeight: 'bold', color: '#ff9800' }}>
-                        {formatSOL(item.entryFee)}
-                      </span>
-                      <span style={{ color: '#666', margin: '0 8px' }}>to</span>
                       <span style={{ fontWeight: 'bold', color: '#2e7d32' }}>
                         {truncateUsername(item.winner.username)}
                       </span>
-                      <span style={{ color: '#666', margin: '0 8px' }}>playing</span>
+                      <span style={{ color: '#666', margin: '0 4px' }}>just took</span>
+                      <span style={{ fontWeight: 'bold', color: '#d32f2f' }}>
+                        {truncateUsername(item.loser.username)}
+                      </span>
+                      <span style={{ color: '#666', margin: '0 4px' }}>for</span>
+                      <span style={{ fontWeight: 'bold', color: '#ff9800' }}>
+                        {formatSOL(item.entryFee)}
+                      </span>
+                      <span style={{ color: '#666', margin: '0 4px' }}>in a game of</span>
                       <span style={{ fontWeight: 'bold', color: '#8B4513' }}>
                         {getGameTypeEmoji(item.gameType)} {item.gameType}
                       </span>
+                      <span style={{ color: '#666', margin: '0 4px' }}>. Too bad</span>
+                      <span style={{ fontWeight: 'bold', color: '#d32f2f' }}>
+                        {truncateUsername(item.loser.username)}
+                      </span>
+                      <span style={{ color: '#666' }}>...</span>
                     </Typography>
                     
                     <Typography variant="caption" color="textSecondary" sx={{ ml: 2 }}>
