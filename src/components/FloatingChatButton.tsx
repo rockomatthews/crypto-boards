@@ -23,9 +23,6 @@ export default function FloatingChatButton({
 
   return (
     <>
-      {/* Invisible sticky footer to ensure proper spacing */}
-      <div style={{ height: '80px', width: '100%' }} />
-      
       {/* Floating Chat Button */}
       <Fab
         color="primary"

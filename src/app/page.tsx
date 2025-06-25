@@ -5,7 +5,7 @@ import { Box, Paper, Typography } from '@mui/material';
 
 export default function Home() {
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: '#f5f5f5' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#000000' }}>
       {/* Header with enhanced branding */}
       <Paper sx={{ 
         p: 4, 
