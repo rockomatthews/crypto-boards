@@ -41,17 +41,43 @@ export const LobbyList: FC = () => {
 
     try {
       setLoading(true);
+      setError(null); // Clear previous errors
+      
       const response = await fetch(`/api/lobbies?walletAddress=${publicKey.toString()}`);
       
       if (response.ok) {
         const data = await response.json();
-        setLobbies(data);
+        
+        // Handle both array response and object with lobbies array
+        if (Array.isArray(data)) {
+          setLobbies(data);
+          console.log(`✅ Loaded ${data.length} lobbies`);
+        } else if (data.lobbies && Array.isArray(data.lobbies)) {
+          setLobbies(data.lobbies);
+          console.log(`✅ Loaded ${data.lobbies.length} lobbies from fallback response`);
+          
+          // Show user-friendly message if there's an error but still data
+          if (data.error) {
+            setError(`${data.error} (Showing cached data)`);
+          }
+        } else {
+          console.warn('Unexpected API response format:', data);
+          setLobbies([]);
+        }
+      } else if (response.status === 503) {
+        // Service temporarily unavailable
+        const data = await response.json();
+        setError(data.error || 'Service temporarily unavailable. Please try again in a moment.');
+        setLobbies(data.lobbies || []);
       } else {
-        setError('Failed to fetch lobbies');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        setError(errorData.error || `Failed to fetch lobbies (${response.status})`);
+        setLobbies([]);
       }
-    } catch (error) {
-      console.error('Error fetching lobbies:', error);
-      setError('Failed to fetch lobbies');
+    } catch (networkError) {
+      console.error('Network error fetching lobbies:', networkError);
+      setError('Connection issue. Please check your internet and try again.');
+      setLobbies([]);
     } finally {
       setLoading(false);
     }

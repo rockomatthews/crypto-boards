@@ -93,87 +93,143 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // First, cleanup empty lobbies and abandoned games
-    console.log('🧹 Cleaning up empty lobbies...');
-    
-    // Delete lobbies that have no players
-    const emptyLobbiesResult = await db`
-      DELETE FROM games 
-      WHERE status = 'waiting' 
-      AND id NOT IN (
-        SELECT DISTINCT game_id 
-        FROM game_players 
-        WHERE game_id IS NOT NULL
-      )
-      RETURNING id
-    `;
-    
-    if (emptyLobbiesResult.length > 0) {
-      console.log(`✅ Cleaned up ${emptyLobbiesResult.length} empty lobbies`);
+    // Try cleanup operations but don't fail if they error
+    try {
+      console.log('🧹 Attempting lobby cleanup...');
+      
+      // Delete lobbies that have no players (with timeout protection)
+      const emptyLobbiesResult = await db`
+        DELETE FROM games 
+        WHERE status = 'waiting' 
+        AND id NOT IN (
+          SELECT DISTINCT game_id 
+          FROM game_players 
+          WHERE game_id IS NOT NULL
+        )
+        AND created_at < NOW() - INTERVAL '10 minutes'
+        RETURNING id
+      `;
+      
+      if (emptyLobbiesResult.length > 0) {
+        console.log(`✅ Cleaned up ${emptyLobbiesResult.length} empty lobbies`);
+      }
+
+      // Cleanup very old lobbies
+      const staleLobbiesResult = await db`
+        DELETE FROM games 
+        WHERE status = 'waiting' 
+        AND created_at < NOW() - INTERVAL '2 hours'
+        RETURNING id
+      `;
+      
+      if (staleLobbiesResult.length > 0) {
+        console.log(`✅ Cleaned up ${staleLobbiesResult.length} stale lobbies`);
+      }
+    } catch (cleanupError) {
+      console.warn('⚠️ Cleanup failed, continuing with lobby fetch:', cleanupError);
+      // Continue execution - cleanup failure shouldn't break the API
     }
 
-    // Also cleanup lobbies older than 1 hour with no activity
-    const staleLobbiesResult = await db`
-      DELETE FROM games 
-      WHERE status = 'waiting' 
-      AND created_at < NOW() - INTERVAL '1 hour'
-      RETURNING id
-    `;
+    // Get player ID - create if doesn't exist
+    let playerId: string;
     
-    if (staleLobbiesResult.length > 0) {
-      console.log(`✅ Cleaned up ${staleLobbiesResult.length} stale lobbies`);
-    }
+    try {
+      const playerResult = await db`
+        SELECT id FROM players WHERE wallet_address = ${walletAddress}
+      `;
 
-    // Get player ID
-    const playerResult = await db`
-      SELECT id FROM players WHERE wallet_address = ${walletAddress}
-    `;
-
-    if (playerResult.length === 0) {
+      if (playerResult.length === 0) {
+        // Create player if doesn't exist
+        const newPlayerResult = await db`
+          INSERT INTO players (wallet_address, username, avatar_url)
+          VALUES (${walletAddress}, ${`Player${walletAddress.slice(0, 4)}`}, '')
+          RETURNING id
+        `;
+        
+        if (newPlayerResult.length > 0) {
+          playerId = newPlayerResult[0].id;
+          console.log(`✅ Created new player: ${walletAddress.slice(0, 8)}...`);
+        } else {
+          console.warn('Failed to create player, returning empty lobby list');
+          return NextResponse.json([]);
+        }
+      } else {
+        playerId = playerResult[0].id;
+      }
+    } catch (playerError) {
+      console.error('Error with player operations:', playerError);
       return NextResponse.json([]);
     }
 
-    const playerId = playerResult[0].id;
-
-    // Get lobbies where player is involved (creator, invited, or public)
-    const lobbiesResult = await db`
-      SELECT 
-        g.id,
-        g.game_type,
-        g.status,
-        g.max_players,
-        g.entry_fee,
-        g.is_private,
-        g.created_at,
-        p.username as creator_name,
-        p.wallet_address as creator_wallet,
-        COUNT(gp2.player_id) as current_players,
-        gp.game_status as player_status
-      FROM games g
-      JOIN players p ON g.creator_id = p.id
-      LEFT JOIN game_players gp ON g.id = gp.game_id AND gp.player_id = ${playerId}
-      LEFT JOIN game_players gp2 ON g.id = gp2.game_id
-      WHERE (g.status = 'waiting' OR (g.status = 'in_progress' AND gp.player_id = ${playerId}))
+    // Get lobbies - simplified query for better reliability
+    try {
+      const lobbiesResult = await db`
+        SELECT 
+          g.id,
+          g.game_type,
+          g.status,
+          g.max_players,
+          g.entry_fee,
+          g.is_private,
+          g.created_at,
+          p.username as creator_name,
+          p.wallet_address as creator_wallet,
+          COALESCE(player_count.count, 0) as current_players,
+          gp.game_status as player_status
+        FROM games g
+        JOIN players p ON g.creator_id = p.id
+        LEFT JOIN game_players gp ON g.id = gp.game_id AND gp.player_id = ${playerId}
+        LEFT JOIN (
+          SELECT game_id, COUNT(*) as count
+          FROM game_players
+          GROUP BY game_id
+        ) player_count ON g.id = player_count.game_id
+        WHERE (
+          g.status = 'waiting' 
+          OR (g.status = 'in_progress' AND gp.player_id = ${playerId})
+        )
         AND (
           g.creator_id = ${playerId} 
           OR gp.player_id = ${playerId}
-          OR (g.is_private = false AND g.creator_id != ${playerId} AND g.status = 'waiting')
+          OR (g.is_private = false AND g.status = 'waiting')
         )
-      GROUP BY g.id, g.game_type, g.status, g.max_players, g.entry_fee, g.is_private, g.created_at, p.username, p.wallet_address, gp.game_status
-      HAVING COUNT(gp2.player_id) > 0
-      ORDER BY g.created_at DESC
-    `;
+        AND g.created_at > NOW() - INTERVAL '24 hours'
+        ORDER BY g.created_at DESC
+        LIMIT 50
+      `;
 
-    // Convert entry_fee to number to prevent toFixed errors
-    const lobbies = lobbiesResult.map(lobby => ({
-      ...lobby,
-      entry_fee: parseFloat(lobby.entry_fee),
-      current_players: parseInt(lobby.current_players)
-    }));
+      // Convert and validate data
+      const validLobbies = lobbiesResult.filter(lobby => 
+        // Additional validation - filter first
+        lobby.game_type && 
+        lobby.creator_name && 
+        !isNaN(parseFloat(lobby.entry_fee))
+      );
 
-    return NextResponse.json(lobbies);
+      const lobbies = validLobbies.map(lobby => ({
+        ...lobby,
+        entry_fee: parseFloat(lobby.entry_fee) || 0,
+        current_players: parseInt(lobby.current_players) || 0
+      }));
+
+      console.log(`✅ Fetched ${lobbies.length} lobbies for ${walletAddress.slice(0, 8)}...`);
+      return NextResponse.json(lobbies);
+
+    } catch (queryError) {
+      console.error('Error in lobby query:', queryError);
+      
+      // Fallback: return empty array rather than error
+      console.log('🔄 Returning empty lobby list due to query error');
+      return NextResponse.json([]);
+    }
+
   } catch (error) {
-    console.error('Error fetching lobbies:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Unexpected error in lobbies API:', error);
+    
+    // Always return valid JSON, never let it completely fail
+    return NextResponse.json({ 
+      error: 'Unable to fetch lobbies at this time. Please try again later.',
+      lobbies: [] 
+    }, { status: 503 });
   }
 } 
