@@ -60,9 +60,12 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
     setError(null);
 
     try {
-      const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+      // Use QuickNode from environment variable!
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://rpc.ankr.com/solana';
+      const connection = new Connection(rpcUrl, 'confirmed');
 
       console.log(`💳 Creating REAL MAINNET transaction for ${entryFeeNumber} SOL...`);
+      console.log(`🔗 Using RPC: ${rpcUrl.includes('quiknode') ? 'QuickNode (Premium)' : 'Fallback RPC'}`);
       console.log(`💰 Sending to platform wallet: ${PLATFORM_WALLET.toString()}`);
 
       const transaction = new Transaction().add(
