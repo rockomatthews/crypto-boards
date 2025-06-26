@@ -34,7 +34,7 @@ export default function MultiplayerCheckersPage() {
 
   const fetchGame = useCallback(async () => {
     try {
-      const response = await fetch(`/api/games/${gameId}`);
+      const response = await fetch('/api/games/' + gameId);
       if (response.ok) {
         const data = await response.json();
         setGame(data);
@@ -52,18 +52,14 @@ export default function MultiplayerCheckersPage() {
   useEffect(() => {
     if (gameId) {
       fetchGame();
-      // Disabled polling to prevent constant refreshing
-      // const interval = setInterval(fetchGame, 3000);
-      // return () => clearInterval(interval);
     }
   }, [gameId, fetchGame]);
 
   const currentPlayer = game?.players.find(p => p.wallet_address === publicKey?.toString());
   const isPlayerInGame = currentPlayer && currentPlayer.game_status === 'active';
   
-  // Determine player color based on join order (first player = white, second = black)
-  const playerColor: 'black' | 'white' = (game?.players && game.players.length >= 2 && currentPlayer) ? 
-    (game.players[0].wallet_address === currentPlayer.wallet_address ? 'white' : 'black') : 'white';
+  const playerColor: 'red' | 'black' = (game?.players && game.players.length >= 2 && currentPlayer) ? 
+    (game.players[0].wallet_address === currentPlayer.wallet_address ? 'red' : 'black') : 'red';
 
   if (loading) {
     return (
@@ -113,7 +109,6 @@ export default function MultiplayerCheckersPage() {
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
-      {/* Game Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Button
           startIcon={<ArrowBackIcon />}
@@ -130,12 +125,11 @@ export default function MultiplayerCheckersPage() {
         </Typography>
       </Box>
 
-      {/* Player Information */}
       {game.players.length >= 2 && (
         <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, mb: 3 }}>
           <Box sx={{ textAlign: 'center', p: 2, border: '1px solid #333', borderRadius: 2 }}>
-            <Typography variant="h6" color="white">
-              ⚪ White Player
+            <Typography variant="h6" color="#FF6B6B">
+              🔴 Red Player
             </Typography>
             <Typography variant="body2">
               {game.players[0]?.username || 'Player 1'}
@@ -145,7 +139,7 @@ export default function MultiplayerCheckersPage() {
             </Typography>
           </Box>
           <Box sx={{ textAlign: 'center', p: 2, border: '1px solid #333', borderRadius: 2 }}>
-            <Typography variant="h6" color="text.secondary">
+            <Typography variant="h6" color="#333">
               ⚫ Black Player
             </Typography>
             <Typography variant="body2">
@@ -158,12 +152,10 @@ export default function MultiplayerCheckersPage() {
         </Box>
       )}
 
-      {/* Game Board */}
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
         <CheckersBoard gameId={gameId} />
       </Box>
 
-      {/* Game Info */}
       <Box sx={{ textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
           Game ID: {gameId}
@@ -174,4 +166,4 @@ export default function MultiplayerCheckersPage() {
       </Box>
     </Box>
   );
-} 
+}
