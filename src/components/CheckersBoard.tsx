@@ -281,6 +281,96 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   }, [gameId, publicKey, saveGameState, initializeGameState]);
 
+  // Helper function to check for jumps from a specific position with a simulated board
+  const getJumpsFromPosition = useCallback((row: number, col: number, piece: GamePiece, board: (GamePiece | null)[][], capturedPositions: Set<string> = new Set()): [number, number][] => {
+    const jumpMoves: [number, number][] = [];
+    
+    const directions = piece.isKing 
+      ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] // Kings can jump in all directions
+      : piece.type === 'red' 
+        ? [[-1, -1], [-1, 1]] // Red moves up (toward row 0)
+        : [[1, -1], [1, 1]]; // Black moves down (toward row 7)
+    
+    for (const [dr, dc] of directions) {
+      const jumpRow = row + dr * 2;
+      const jumpCol = col + dc * 2;
+      const jumpedRow = row + dr;
+      const jumpedCol = col + dc;
+      
+      if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+        const jumpedPiece = board[jumpedRow][jumpedCol];
+        const destination = board[jumpRow][jumpCol];
+        const jumpedPosKey = `${jumpedRow},${jumpedCol}`;
+        
+        // Can jump if there's an opponent piece to jump over, destination is empty, and we haven't already captured this piece in this sequence
+        if (jumpedPiece && 
+            jumpedPiece.type !== piece.type && 
+            !destination && 
+            !capturedPositions.has(jumpedPosKey)) {
+          jumpMoves.push([jumpRow, jumpCol]);
+        }
+      }
+    }
+    
+    return jumpMoves;
+  }, []);
+
+  // Get ALL possible jump sequences (multiple jumps) from a position
+  const getAllJumpSequences = useCallback((startRow: number, startCol: number, piece: GamePiece): [number, number][][] => {
+    const sequences: [number, number][][] = [];
+    
+    // Helper function to recursively find all jump sequences
+    const findSequences = (currentRow: number, currentCol: number, currentPiece: GamePiece, board: (GamePiece | null)[][], sequence: [number, number][], capturedPositions: Set<string>) => {
+      const possibleJumps = getJumpsFromPosition(currentRow, currentCol, currentPiece, board, capturedPositions);
+      
+      if (possibleJumps.length === 0) {
+        // No more jumps possible, save this sequence if it has at least one jump
+        if (sequence.length > 0) {
+          sequences.push([...sequence]);
+        }
+        return;
+      }
+      
+      // Try each possible jump
+      for (const [jumpRow, jumpCol] of possibleJumps) {
+        const jumpedRow = Math.floor((currentRow + jumpRow) / 2);
+        const jumpedCol = Math.floor((currentCol + jumpCol) / 2);
+        const jumpedPosKey = `${jumpedRow},${jumpedCol}`;
+        
+        // Create new board state for this jump
+        const newBoard = board.map(row => [...row]);
+        newBoard[jumpRow][jumpCol] = currentPiece;
+        newBoard[currentRow][currentCol] = null;
+        newBoard[jumpedRow][jumpedCol] = null;
+        
+        // Check for king promotion
+        let newPiece = currentPiece;
+        if (currentPiece.type && ((currentPiece.type === 'red' && jumpRow === 0) || (currentPiece.type === 'black' && jumpRow === 7))) {
+          newPiece = { ...currentPiece, isKing: true };
+          newBoard[jumpRow][jumpCol] = newPiece;
+        }
+        
+        // Continue searching from the new position
+        const newCapturedPositions = new Set(capturedPositions);
+        newCapturedPositions.add(jumpedPosKey);
+        
+        findSequences(
+          jumpRow, 
+          jumpCol, 
+          newPiece, 
+          newBoard, 
+          [...sequence, [jumpRow, jumpCol]], 
+          newCapturedPositions
+        );
+      }
+    };
+    
+    // Start the recursive search
+    findSequences(startRow, startCol, piece, gameState.board, [], new Set());
+    
+    return sequences;
+  }, [gameState.board, getJumpsFromPosition]);
+
   // Get valid moves for a piece - NOW WITH MULTIPLE JUMPS!
   const getValidMoves = useCallback((row: number, col: number, piece: GamePiece): [number, number][] => {
     const moves: [number, number][] = [];
@@ -288,40 +378,32 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
 
     console.log(`Getting valid moves for ${piece.type} piece at (${row}, ${col})`);
 
+    // Check for jump sequences first (mandatory in checkers)
+    const jumpSequences = getAllJumpSequences(row, col, piece);
+    
+    if (jumpSequences.length > 0) {
+      console.log(`Found ${jumpSequences.length} possible jump sequences:`, jumpSequences);
+      
+      // For UI purposes, we only show the first move of each possible sequence
+      // The longest sequence will be automatically selected when the move is made
+      const firstJumps = jumpSequences.map(sequence => sequence[0]);
+      
+      // Remove duplicates (multiple sequences might start with the same first jump)
+      const uniqueFirstJumps = firstJumps.filter((jump, index, self) => 
+        index === self.findIndex(j => j[0] === jump[0] && j[1] === jump[1])
+      );
+      
+      console.log('Showing first jumps for UI:', uniqueFirstJumps);
+      return uniqueFirstJumps;
+    }
+    
+    // Only check regular moves if no jumps are available
     const directions = piece.isKing 
       ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] // Kings can move in all directions
       : piece.type === 'red' 
         ? [[-1, -1], [-1, 1]] // Red moves up (toward row 0)
         : [[1, -1], [1, 1]]; // Black moves down (toward row 7)
 
-    console.log('Piece directions:', directions);
-
-    // Check for jumps first (mandatory in checkers)
-    const jumpMoves: [number, number][] = [];
-    
-    for (const [dr, dc] of directions) {
-      const jumpRow = row + dr * 2;
-      const jumpCol = col + dc * 2;
-      
-      if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
-        const jumpedPiece = gameState.board[row + dr][col + dc];
-        const destination = gameState.board[jumpRow][jumpCol];
-        
-        if (jumpedPiece && jumpedPiece.type !== piece.type && !destination) {
-          console.log(`Jump move possible: (${jumpRow}, ${jumpCol}) jumping over (${row + dr}, ${col + dc})`);
-          jumpMoves.push([jumpRow, jumpCol]);
-        }
-      }
-    }
-    
-    // If jumps are available, ONLY return jump moves (checkers rule)
-    if (jumpMoves.length > 0) {
-      // TODO: Check for additional jumps from each landing position
-      // This would require recursive checking for multiple consecutive jumps
-      return jumpMoves;
-    }
-    
-    // Only check regular moves if no jumps are available
     for (const [dr, dc] of directions) {
       const newRow = row + dr;
       const newCol = col + dc;
@@ -333,9 +415,9 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       }
     }
     
-    console.log('Final valid moves:', jumpMoves.length > 0 ? jumpMoves : moves);
-    return jumpMoves.length > 0 ? jumpMoves : moves;
-  }, [gameState.board]);
+    console.log('Final valid moves:', moves);
+    return moves;
+  }, [gameState.board, getAllJumpSequences]);
 
   // Count pieces for each player
   const countPieces = useCallback((board: (GamePiece | null)[][]): { red: number; black: number } => {
@@ -476,7 +558,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   }, [gameState, determineWinnerByPieceCount, countPieces, saveGameState, completeGame]);
 
-  // Make a move - now with MagicBlock real-time integration!
+  // Make a move - now with MagicBlock real-time integration and MULTIPLE JUMPS!
   const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
     setLoading(true);
     const moveStartTime = Date.now();
@@ -489,24 +571,86 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       return;
     }
     
-    // Move piece
-    newBoard[toRow][toCol] = piece;
-    newBoard[fromRow][fromCol] = null;
-    
-    // Check for jump
-    const jumpedRow = Math.floor((fromRow + toRow) / 2);
-    const jumpedCol = Math.floor((fromCol + toCol) / 2);
     const capturedPieces: [number, number][] = [];
+    let finalRow = toRow;
+    let finalCol = toCol;
+    let currentPiece = piece;
     
+    // Check if this is a jump move
     if (Math.abs(toRow - fromRow) === 2) {
-      newBoard[jumpedRow][jumpedCol] = null; // Remove jumped piece
-      capturedPieces.push([jumpedRow, jumpedCol]);
-    }
-    
-    // Check for king promotion
-    if ((piece.type === 'red' && toRow === 0) || (piece.type === 'black' && toRow === 7)) {
-      newBoard[toRow][toCol] = { ...piece, isKing: true };
-      console.log(`🎉 ${piece.type.toUpperCase()} PIECE PROMOTED TO KING at (${toRow}, ${toCol})! 👑`);
+      // This is a jump - find the longest jump sequence starting with this move
+      const jumpSequences = getAllJumpSequences(fromRow, fromCol, piece);
+      
+      // Find the sequence that starts with our intended move
+      const matchingSequence = jumpSequences.find(sequence => 
+        sequence.length > 0 && sequence[0][0] === toRow && sequence[0][1] === toCol
+      );
+      
+      if (matchingSequence && matchingSequence.length > 0) {
+        console.log(`🚀 Executing ${matchingSequence.length}-jump sequence:`, matchingSequence);
+        
+        // Execute the full jump sequence
+        let currentRow = fromRow;
+        let currentCol = fromCol;
+        
+        for (const [jumpRow, jumpCol] of matchingSequence) {
+          // Calculate the piece being jumped over
+          const jumpedRow = Math.floor((currentRow + jumpRow) / 2);
+          const jumpedCol = Math.floor((currentCol + jumpCol) / 2);
+          
+          // Remove the jumped piece
+          newBoard[jumpedRow][jumpedCol] = null;
+          capturedPieces.push([jumpedRow, jumpedCol]);
+          
+          // Move the piece to the new position
+          newBoard[jumpRow][jumpCol] = currentPiece;
+          newBoard[currentRow][currentCol] = null;
+          
+          // Check for king promotion at each step
+          if (currentPiece.type && ((currentPiece.type === 'red' && jumpRow === 0) || (currentPiece.type === 'black' && jumpRow === 7))) {
+            currentPiece = { ...currentPiece, isKing: true };
+            newBoard[jumpRow][jumpCol] = currentPiece;
+            console.log(`🎉 ${currentPiece.type === 'red' ? 'RED' : 'BLACK'} PIECE PROMOTED TO KING at (${jumpRow}, ${jumpCol}) during jump sequence! 👑`);
+          }
+          
+          // Update position for next iteration
+          currentRow = jumpRow;
+          currentCol = jumpCol;
+          finalRow = jumpRow;
+          finalCol = jumpCol;
+          
+          console.log(`Jump ${capturedPieces.length}: (${currentRow}, ${currentCol}) captured piece at (${jumpedRow}, ${jumpedCol})`);
+        }
+        
+        console.log(`🎯 Multiple jump completed! Captured ${capturedPieces.length} pieces: ${capturedPieces.map(([r, c]) => `(${r},${c})`).join(', ')}`);
+      } else {
+        // Fallback to single jump if sequence not found
+        const jumpedRow = Math.floor((fromRow + toRow) / 2);
+        const jumpedCol = Math.floor((fromCol + toCol) / 2);
+        
+        newBoard[toRow][toCol] = currentPiece;
+        newBoard[fromRow][fromCol] = null;
+        newBoard[jumpedRow][jumpedCol] = null;
+        capturedPieces.push([jumpedRow, jumpedCol]);
+        
+        // Check for king promotion
+        if (currentPiece.type && ((currentPiece.type === 'red' && toRow === 0) || (currentPiece.type === 'black' && toRow === 7))) {
+          currentPiece = { ...currentPiece, isKing: true };
+          newBoard[toRow][toCol] = currentPiece;
+          console.log(`🎉 ${currentPiece.type === 'red' ? 'RED' : 'BLACK'} PIECE PROMOTED TO KING at (${toRow}, ${toCol})! 👑`);
+        }
+      }
+    } else {
+      // Regular move (not a jump)
+      newBoard[toRow][toCol] = currentPiece;
+      newBoard[fromRow][fromCol] = null;
+      
+      // Check for king promotion
+      if (currentPiece.type && ((currentPiece.type === 'red' && toRow === 0) || (currentPiece.type === 'black' && toRow === 7))) {
+        currentPiece = { ...currentPiece, isKing: true };
+        newBoard[toRow][toCol] = currentPiece;
+        console.log(`🎉 ${currentPiece.type === 'red' ? 'RED' : 'BLACK'} PIECE PROMOTED TO KING at (${toRow}, ${toCol})! 👑`);
+      }
     }
     
     // Check for winner
@@ -520,7 +664,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       winner,
       lastMove: {
         from: [fromRow, fromCol],
-        to: [toRow, toCol],
+        to: [finalRow, finalCol], // Use final position after all jumps
         capturedPieces: capturedPieces.length > 0 ? capturedPieces : undefined
       }
     };
@@ -573,7 +717,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
     
     setLoading(false);
-  }, [gameState, saveGameState, checkWinner, completeGame, ephemeralSession, publicKey, gameId]);
+  }, [gameState, saveGameState, checkWinner, completeGame, ephemeralSession, publicKey, gameId, getAllJumpSequences]);
 
   // Handle square click
   const handleSquareClick = useCallback((row: number, col: number) => {
