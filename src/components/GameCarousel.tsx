@@ -122,19 +122,6 @@ export default function GameCarousel() {
           >
             In the land of no copyRIGHTS, will you bet your SOL?
           </Typography>
-          <Typography 
-            variant="h4" 
-            component="h2" 
-            sx={{ 
-              fontFamily: 'MK5Style, monospace',
-              fontSize: { xs: '1.2rem', sm: '1.5rem', md: '2rem' },
-              color: '#00e676',
-              textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
-              fontStyle: 'italic'
-            }}
-          >
-            ... then why did you come here... oh come right in.
-          </Typography>
         </Box>
       </Box>
 
