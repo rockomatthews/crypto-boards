@@ -371,14 +371,14 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     return sequences;
   }, [gameState.board, getJumpsFromPosition]);
 
-  // Get valid moves for a piece - NOW WITH MULTIPLE JUMPS!
+  // Get valid moves for a piece - NOW WITH OPTIONAL JUMPS!
   const getValidMoves = useCallback((row: number, col: number, piece: GamePiece): [number, number][] => {
     const moves: [number, number][] = [];
     if (!piece) return moves;
 
     console.log(`Getting valid moves for ${piece.type} piece at (${row}, ${col})`);
 
-    // Check for jump sequences first (mandatory in checkers)
+    // Check for jump sequences (optional - player can choose)
     const jumpSequences = getAllJumpSequences(row, col, piece);
     
     if (jumpSequences.length > 0) {
@@ -393,11 +393,11 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         index === self.findIndex(j => j[0] === jump[0] && j[1] === jump[1])
       );
       
-      console.log('Showing first jumps for UI:', uniqueFirstJumps);
-      return uniqueFirstJumps;
+      console.log('Adding possible jumps to moves:', uniqueFirstJumps);
+      moves.push(...uniqueFirstJumps);
     }
     
-    // Only check regular moves if no jumps are available
+    // Always check regular moves (player has choice between jumps and regular moves)
     const directions = piece.isKing 
       ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] // Kings can move in all directions
       : piece.type === 'red' 
@@ -415,7 +415,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       }
     }
     
-    console.log('Final valid moves:', moves);
+    console.log('Final valid moves (including both jumps and regular moves):', moves);
     return moves;
   }, [gameState.board, getAllJumpSequences]);
 
@@ -558,7 +558,8 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   }, [gameState, determineWinnerByPieceCount, countPieces, saveGameState, completeGame]);
 
-  // Make a move - now with MagicBlock real-time integration and MULTIPLE JUMPS!
+  // Make a move - now with MagicBlock real-time integration and OPTIONAL MULTIPLE JUMPS!
+  // Players can choose between jump moves and regular moves - jumps are NOT mandatory
   const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
     setLoading(true);
     const moveStartTime = Date.now();
