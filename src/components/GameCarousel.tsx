@@ -31,12 +31,12 @@ const games = [
   {
     id: 3,
     title: 'Stratego',
-    description: 'The most fun board game ever hooked on SOL',
+    description: 'Deploy your army and capture the enemy flag in this classic strategy battle!',
     image: '/images/stratego.png',
     minPlayers: 2,
     maxPlayers: 2,
     entryFee: '0.15 SOL',
-    route: '/go'
+    route: '/stratego'
   },
   {
     id: 4,

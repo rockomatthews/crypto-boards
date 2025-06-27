@@ -177,13 +177,15 @@ export default function LobbyPage() {
   const getGameIcon = (gameType: string) => {
     switch (gameType.toLowerCase()) {
       case 'checkers':
-        return '♟️';
+        return '🏁';
       case 'chess':
         return '♔';
       case 'go':
         return '⚫';
       case 'poker':
         return '🃏';
+      case 'stratego':
+        return '🎖️';
       default:
         return '🎮';
     }
