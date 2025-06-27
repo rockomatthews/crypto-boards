@@ -10,13 +10,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // First, try to get the basic profile
+    // Get the basic profile with stats in one query
     const result = await db`
       SELECT 
         p.username,
         p.avatar_url,
-        p.phone_number
+        p.phone_number,
+        COALESCE(ps.games_played, 0) as games_played,
+        COALESCE(ps.games_won, 0) as games_won,
+        COALESCE(ps.total_winnings, 0) as total_winnings
       FROM players p
+      LEFT JOIN player_stats ps ON p.id = ps.player_id
       WHERE p.wallet_address = ${walletAddress}
     `;
 
@@ -25,19 +29,30 @@ export async function GET(request: NextRequest) {
         username: result[0].username,
         avatar_url: result[0].avatar_url,
         phone_number: result[0].phone_number,
-        games_played: 0,
-        games_won: 0,
-        total_winnings: 0,
+        games_played: parseInt(result[0].games_played) || 0,
+        games_won: parseInt(result[0].games_won) || 0,
+        total_winnings: parseFloat(result[0].total_winnings) || 0,
       });
     } else {
       // Create new profile if it doesn't exist
       const newProfile = await db`
         INSERT INTO players (wallet_address, username, avatar_url, phone_number)
         VALUES (${walletAddress}, ${`Player${walletAddress.slice(0, 4)}`}, '', NULL)
-        RETURNING username, avatar_url, phone_number
+        RETURNING id, username, avatar_url, phone_number
       `;
 
       if (newProfile.length > 0) {
+        // Also create initial player stats record
+        try {
+          await db`
+            INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+            VALUES (${newProfile[0].id}, 0, 0, 0)
+          `;
+        } catch (statsError) {
+          console.warn('Failed to create initial player stats:', statsError);
+          // Continue even if stats creation fails
+        }
+
         return NextResponse.json({
           username: newProfile[0].username,
           avatar_url: newProfile[0].avatar_url,

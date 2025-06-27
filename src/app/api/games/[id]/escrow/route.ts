@@ -50,7 +50,8 @@ export async function POST(
 ) {
   try {
     const gameId = context?.params?.id;
-    const { action, playerWallet, amount, transactionData } = await request.json();
+    const requestBody = await request.json();
+    const { action, playerWallet, amount, transactionData, winnerId } = requestBody;
 
     if (!gameId || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -151,11 +152,11 @@ export async function POST(
       }
 
       case 'release_escrow': {
-        const { winnerId } = await request.json();
-        
         if (!winnerId || !playerWallet) {
           return NextResponse.json({ error: 'Winner ID and playerWallet required' }, { status: 400 });
         }
+
+        console.log(`💰 Releasing escrow for game ${gameId}, winner: ${winnerId}`);
 
         // Get all active escrows for this game
         const escrows = await db`
@@ -165,14 +166,47 @@ export async function POST(
           WHERE ge.game_id = ${gameId} AND ge.status = 'active'
         `;
 
+        console.log(`Found ${escrows.length} active escrows`);
+
         if (escrows.length === 0) {
-          return NextResponse.json({ error: 'No active escrows found' }, { status: 404 });
+          console.log('⚠️ No active escrows found, checking for any escrows...');
+          
+          // Check if any escrows exist at all
+          const allEscrows = await db`
+            SELECT ge.*, p.wallet_address
+            FROM game_escrows ge
+            JOIN players p ON ge.player_id = p.id
+            WHERE ge.game_id = ${gameId}
+          `;
+          
+          if (allEscrows.length === 0) {
+            console.log('⚠️ No escrows found for this game at all');
+            // This is fine - game might not have required escrows
+            return NextResponse.json({ 
+              success: true,
+              message: 'No escrows to release - game completed without escrow funds',
+              winnerAmount: 0,
+              platformFee: 0,
+              totalAmount: 0
+            });
+          } else {
+            console.log(`⚠️ Found ${allEscrows.length} escrows but none are active:`, allEscrows.map(e => ({ status: e.status, amount: e.amount })));
+            return NextResponse.json({ 
+              success: true,
+              message: 'Escrows already processed',
+              winnerAmount: 0,
+              platformFee: 0,
+              totalAmount: 0
+            });
+          }
         }
 
         // Calculate total amount
         const totalAmount = escrows.reduce((sum, escrow) => sum + parseFloat(escrow.amount), 0);
         const platformFee = calculatePlatformFee(totalAmount);
         const winnerAmount = totalAmount - platformFee;
+
+        console.log(`💰 Escrow totals: ${totalAmount} SOL total, ${platformFee} SOL fee, ${winnerAmount} SOL to winner`);
 
         // Get winner wallet address
         const winnerResult = await db`
@@ -184,14 +218,18 @@ export async function POST(
         }
 
         const winnerWallet = winnerResult[0].wallet_address;
+        console.log(`🏆 Winner wallet: ${winnerWallet}`);
 
         try {
           // Process the winner payout
           const payoutResult = await processWinnerPayout(winnerWallet, totalAmount, gameId);
 
           if (!payoutResult.success) {
+            console.error('❌ Payout failed:', payoutResult.error);
             throw new Error(payoutResult.error || 'Payout failed');
           }
+
+          console.log(`✅ Payout successful: ${payoutResult.signature}`);
 
           // Update escrows as released
           await db`
@@ -206,11 +244,16 @@ export async function POST(
             VALUES (${gameId}, ${platformFee}, ${payoutResult.signature})
           `;
 
-          // Update game payout record
-          await db`
-            INSERT INTO game_payouts (game_id, winner_wallet, amount, transaction_signature)
-            VALUES (${gameId}, ${winnerWallet}, ${winnerAmount}, ${payoutResult.signature})
-          `;
+          // Update game payout record (try-catch in case table doesn't exist)
+          try {
+            await db`
+              INSERT INTO game_payouts (game_id, winner_wallet, amount, transaction_signature)
+              VALUES (${gameId}, ${winnerWallet}, ${winnerAmount}, ${payoutResult.signature})
+            `;
+          } catch (payoutRecordError) {
+            console.warn('⚠️ Failed to record payout (table may not exist):', payoutRecordError);
+            // Continue - this is not critical
+          }
 
           return NextResponse.json({
             success: true,
@@ -222,8 +265,11 @@ export async function POST(
           });
 
         } catch (releaseError) {
-          console.error('Error releasing escrow:', releaseError);
-          return NextResponse.json({ error: 'Failed to release escrow' }, { status: 500 });
+          console.error('❌ Error releasing escrow:', releaseError);
+          return NextResponse.json({ 
+            error: 'Failed to release escrow',
+            details: releaseError instanceof Error ? releaseError.message : 'Unknown error'
+          }, { status: 500 });
         }
       }
 

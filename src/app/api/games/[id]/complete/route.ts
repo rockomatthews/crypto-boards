@@ -124,6 +124,66 @@ export async function POST(
         // Continue execution - this is not critical for game completion
       }
 
+      // Update player stats (with error handling)
+      try {
+        // Ensure player_stats table exists and initialize stats if needed
+        await db`
+          INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+          VALUES (${winnerId}, 0, 0, 0)
+          ON CONFLICT (player_id) DO NOTHING
+        `;
+
+        await db`
+          INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+          VALUES (${loser.id}, 0, 0, 0)
+          ON CONFLICT (player_id) DO NOTHING
+        `;
+
+        // Update winner stats
+        await db`
+          UPDATE player_stats 
+          SET 
+            games_played = games_played + 1,
+            games_won = games_won + 1,
+            total_winnings = total_winnings + ${winnerPayout},
+            updated_at = CURRENT_TIMESTAMP
+          WHERE player_id = ${winnerId}
+        `;
+
+        // Update loser stats
+        await db`
+          UPDATE player_stats 
+          SET 
+            games_played = games_played + 1,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE player_id = ${loser.id}
+        `;
+
+        console.log('✅ Player stats updated successfully');
+
+        // Try to create game_stats records
+        try {
+          await db`
+            INSERT INTO game_stats (game_id, player_id, opponent_id, game_type, result, amount)
+            VALUES (${gameId}, ${winnerId}, ${loser.id}, ${gameType}, 'win', ${winnerPayout})
+          `;
+
+          await db`
+            INSERT INTO game_stats (game_id, player_id, opponent_id, game_type, result, amount)
+            VALUES (${gameId}, ${loser.id}, ${winnerId}, ${gameType}, 'loss', ${parseFloat(game.entry_fee)})
+          `;
+
+          console.log('✅ Game stats recorded successfully');
+        } catch (gameStatsError) {
+          console.warn('Failed to insert game stats (table may not exist):', gameStatsError);
+          // Continue execution - this is not critical
+        }
+
+      } catch (statsError) {
+        console.warn('Failed to update player stats (tables may not exist):', statsError);
+        // Continue execution - this is not critical for game completion
+      }
+
       console.log(`🎉 Game completion successful for game ${gameId}`);
 
       return NextResponse.json({ 
