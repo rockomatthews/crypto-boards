@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
-import { processWinnerPayout } from '@/lib/solana';
 import smsService from '@/lib/sms';
 
 export async function POST(
