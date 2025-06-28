@@ -29,6 +29,8 @@ export async function GET(request: NextRequest) {
         username: result[0].username,
         avatar_url: result[0].avatar_url,
         phone_number: result[0].phone_number,
+        sms_notifications_enabled: result[0].sms_notifications_enabled || false,
+        sms_opted_in_at: result[0].sms_opted_in_at,
         games_played: parseInt(result[0].games_played) || 0,
         games_won: parseInt(result[0].games_won) || 0,
         total_winnings: parseFloat(result[0].total_winnings) || 0,

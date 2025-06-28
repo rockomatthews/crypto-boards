@@ -16,8 +16,13 @@ import {
   DialogActions,
   CircularProgress,
   Fab,
+  FormControlLabel,
+  Switch,
+  Alert,
+  Divider,
+  Paper,
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Sms as SmsIcon } from '@mui/icons-material';
 import PhoneInput from './PhoneInput';
 import { StatsModal } from './StatsModal';
 
@@ -25,6 +30,8 @@ interface ProfileData {
   username: string;
   avatar_url: string;
   phone_number?: string;
+  sms_notifications_enabled: boolean;
+  sms_opted_in_at?: string;
   games_played: number;
   games_won: number;
   total_winnings: number;
@@ -36,9 +43,11 @@ export const Profile: FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPhoneNumber, setNewPhoneNumber] = useState<string>('');
+  const [smsNotificationsEnabled, setSmsNotificationsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showSmsDialog, setShowSmsDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProfile = useCallback(async () => {
@@ -49,6 +58,7 @@ export const Profile: FC = () => {
       if (response.ok) {
         const data = await response.json();
         setProfile(data);
+        setSmsNotificationsEnabled(data.sms_notifications_enabled || false);
       } else {
         console.error('Error fetching profile:', response.statusText);
       }
@@ -99,29 +109,65 @@ export const Profile: FC = () => {
     }
   };
 
+  const updateSmsPreferences = async (enabled: boolean) => {
+    if (!publicKey) return;
+
+    try {
+      const response = await fetch('/api/profile/sms-preferences', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          walletAddress: publicKey.toString(),
+          smsNotificationsEnabled: enabled,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (profile) {
+          setProfile({
+            ...profile,
+            sms_notifications_enabled: data.sms_notifications_enabled,
+            sms_opted_in_at: data.sms_opted_in_at,
+          });
+        }
+        setSmsNotificationsEnabled(enabled);
+        if (enabled) {
+          setShowSmsDialog(false);
+        }
+      } else {
+        console.error('Error updating SMS preferences:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error updating SMS preferences:', error);
+    }
+  };
+
+  const handleSmsToggle = (enabled: boolean) => {
+    if (enabled && (!profile?.phone_number)) {
+      // Show dialog to enter phone number first
+      setShowSmsDialog(true);
+      return;
+    }
+    updateSmsPreferences(enabled);
+  };
+
+  const triggerFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !publicKey) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image size must be less than 5MB');
-      return;
-    }
-
     setUploadingImage(true);
+    const formData = new FormData();
+    formData.append('avatar', file);
+    formData.append('walletAddress', publicKey.toString());
 
     try {
-      const formData = new FormData();
-      formData.append('image', file);
-      formData.append('walletAddress', publicKey.toString());
-
       const response = await fetch('/api/profile/avatar', {
         method: 'POST',
         body: formData,
@@ -136,37 +182,29 @@ export const Profile: FC = () => {
           });
         }
       } else {
-        console.error('Error uploading image:', response.statusText);
-        alert('Failed to upload image');
+        console.error('Error uploading avatar:', response.statusText);
       }
     } catch (error) {
-      console.error('Error uploading image:', error);
-      alert('Failed to upload image');
+      console.error('Error uploading avatar:', error);
     } finally {
       setUploadingImage(false);
     }
   };
 
-  const triggerFileUpload = () => {
-    fileInputRef.current?.click();
-  };
-
-  if (!publicKey) {
+  if (loading) {
     return (
-      <Card sx={{ maxWidth: 600, mx: 'auto', mt: 4 }}>
-        <CardContent>
-          <Typography variant="h6" align="center">
-            Please connect your wallet to view your profile
-          </Typography>
-        </CardContent>
-      </Card>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <CircularProgress />
+      </Box>
     );
   }
 
-  if (loading) {
+  if (!publicKey) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-        <CircularProgress />
+      <Box sx={{ mt: 4, textAlign: 'center' }}>
+        <Typography variant="h6" color="text.secondary">
+          Connect your wallet to view your profile
+        </Typography>
       </Box>
     );
   }
@@ -239,7 +277,7 @@ export const Profile: FC = () => {
           </Box>
         </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, mb: 3 }}>
           <Box>
             <Typography variant="subtitle2" color="text.secondary">
               Games Played
@@ -265,6 +303,57 @@ export const Profile: FC = () => {
             </Typography>
           </Box>
         </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        {/* SMS Notifications Section */}
+        <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <SmsIcon sx={{ mr: 1 }} />
+            <Typography variant="h6">
+              Text Notifications
+            </Typography>
+          </Box>
+          
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Get notified about game invitations, game starts, and important updates.
+          </Typography>
+
+          {profile?.phone_number ? (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Phone: {profile.phone_number}
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={smsNotificationsEnabled}
+                    onChange={(e) => handleSmsToggle(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label={smsNotificationsEnabled ? "Notifications ON" : "Notifications OFF"}
+              />
+              {profile.sms_opted_in_at && (
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                  Enabled on {new Date(profile.sms_opted_in_at).toLocaleDateString()}
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Add a phone number to enable text notifications.
+              <Button
+                size="small"
+                variant="outlined"
+                sx={{ ml: 2 }}
+                onClick={() => setShowSmsDialog(true)}
+              >
+                Add Phone Number
+              </Button>
+            </Alert>
+          )}
+        </Paper>
       </CardContent>
 
       {/* Hidden file input */}
@@ -276,6 +365,7 @@ export const Profile: FC = () => {
         onChange={handleImageUpload}
       />
 
+      {/* Edit Profile Dialog */}
       <Dialog open={isEditing} onClose={() => setIsEditing(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Profile</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
@@ -296,7 +386,7 @@ export const Profile: FC = () => {
             }}
             label="Phone Number (Private)"
             placeholder="Select country and enter number"
-            helperText="Your phone number is private and only used to help friends find you"
+            helperText="Your phone number is private and only used for notifications and finding friends"
             fullWidth
           />
         </DialogContent>
@@ -304,6 +394,50 @@ export const Profile: FC = () => {
           <Button onClick={() => setIsEditing(false)}>Cancel</Button>
           <Button onClick={updateProfile} variant="contained">
             Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* SMS Setup Dialog */}
+      <Dialog open={showSmsDialog} onClose={() => setShowSmsDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Enable Text Notifications</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography variant="body1" gutterBottom>
+            To receive text notifications about game invitations and updates, please enter your phone number.
+          </Typography>
+          
+          <PhoneInput
+            value={newPhoneNumber}
+            onChange={(value) => setNewPhoneNumber(value || '')}
+            label="Phone Number"
+            placeholder="Select country and enter number"
+            helperText="Standard messaging rates may apply"
+            fullWidth
+          />
+
+          <Alert severity="info" sx={{ mt: 2 }}>
+                         <strong>What you&apos;ll receive:</strong>
+             <br />• Game invitations from friends
+             <br />• Game start notifications
+             <br />• Game completion updates
+             <br />• Reply STOP to opt out anytime
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowSmsDialog(false)}>Cancel</Button>
+          <Button 
+            onClick={async () => {
+              if (newPhoneNumber) {
+                // First update phone number
+                await updateProfile();
+                // Then enable SMS notifications
+                await updateSmsPreferences(true);
+              }
+            }} 
+            variant="contained"
+            disabled={!newPhoneNumber}
+          >
+            Enable Notifications
           </Button>
         </DialogActions>
       </Dialog>

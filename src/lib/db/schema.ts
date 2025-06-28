@@ -10,6 +10,8 @@ export interface Player {
   username: string;
   avatar_url: string;
   phone_number?: string;
+  sms_notifications_enabled: boolean;
+  sms_opted_in_at?: Date;
   is_online: boolean;
   created_at: Date;
   last_login: Date;
@@ -140,6 +142,8 @@ export async function initializeDatabase() {
         username TEXT UNIQUE NOT NULL,
         avatar_url TEXT,
         phone_number TEXT,
+        sms_notifications_enabled BOOLEAN NOT NULL DEFAULT false,
+        sms_opted_in_at TIMESTAMP WITH TIME ZONE,
         is_online BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         last_login TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

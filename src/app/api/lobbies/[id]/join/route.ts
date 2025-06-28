@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
+import smsService from '@/lib/sms';
 
 export async function POST(
   request: NextRequest,
@@ -33,14 +34,17 @@ export async function POST(
     const lobbyResult = await db`
       SELECT 
         g.id,
+        g.game_type,
         g.max_players,
         g.entry_fee,
         g.status,
-        COUNT(gp.player_id) as current_players
+        COUNT(gp.player_id) as current_players,
+        creator.username as creator_name
       FROM games g
       LEFT JOIN game_players gp ON g.id = gp.game_id
+      LEFT JOIN players creator ON g.creator_id = creator.id
       WHERE g.id = ${lobbyId}
-      GROUP BY g.id, g.max_players, g.entry_fee, g.status
+      GROUP BY g.id, g.game_type, g.max_players, g.entry_fee, g.status, creator.username
     `;
 
     if (lobbyResult.length === 0) {
@@ -84,6 +88,29 @@ export async function POST(
         INSERT INTO game_players (game_id, player_id, game_status)
         VALUES (${lobbyId}, ${playerId}, 'waiting')
       `;
+
+      // Send SMS notification to the joining player if they have SMS enabled
+      try {
+        const playerInfo = await db`
+          SELECT phone_number, username, sms_notifications_enabled 
+          FROM players 
+          WHERE id = ${playerId}
+        `;
+
+        if (playerInfo.length > 0 && playerInfo[0].phone_number && playerInfo[0].sms_notifications_enabled) {
+          await smsService.sendGameInvitation(
+            playerInfo[0].phone_number,
+            lobby.creator_name,
+            lobby.game_type,
+            parseFloat(lobby.entry_fee),
+            lobbyId
+          );
+          console.log(`📱 SMS invitation sent to ${playerInfo[0].username}`);
+        }
+      } catch (smsError) {
+        console.error('Failed to send SMS notification:', smsError);
+        // Don't fail the join operation if SMS fails
+      }
 
       return NextResponse.json({ 
         success: true, 
