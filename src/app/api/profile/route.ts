@@ -10,32 +10,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Get the basic profile with stats in one query
-    const result = await db`
+    // Get the basic profile first
+    const playerResult = await db`
       SELECT 
-        p.username,
-        p.avatar_url,
-        p.phone_number,
-        COALESCE(ps.games_played, 0) as games_played,
-        COALESCE(ps.games_won, 0) as games_won,
-        COALESCE(ps.total_winnings, 0) as total_winnings
-      FROM players p
-      LEFT JOIN player_stats ps ON p.id = ps.player_id
-      WHERE p.wallet_address = ${walletAddress}
+        id,
+        username,
+        avatar_url,
+        phone_number,
+        sms_notifications_enabled,
+        sms_opted_in_at
+      FROM players 
+      WHERE wallet_address = ${walletAddress}
     `;
 
-    if (result.length > 0) {
-      return NextResponse.json({
-        username: result[0].username,
-        avatar_url: result[0].avatar_url,
-        phone_number: result[0].phone_number,
-        sms_notifications_enabled: result[0].sms_notifications_enabled || false,
-        sms_opted_in_at: result[0].sms_opted_in_at,
-        games_played: parseInt(result[0].games_played) || 0,
-        games_won: parseInt(result[0].games_won) || 0,
-        total_winnings: parseFloat(result[0].total_winnings) || 0,
-      });
-    } else {
+    if (playerResult.length === 0) {
       // Create new profile if it doesn't exist
       const newProfile = await db`
         INSERT INTO players (wallet_address, username, avatar_url, phone_number)
@@ -44,7 +32,7 @@ export async function GET(request: NextRequest) {
       `;
 
       if (newProfile.length > 0) {
-        // Also create initial player stats record
+        // Create initial player stats record
         try {
           await db`
             INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
@@ -52,19 +40,64 @@ export async function GET(request: NextRequest) {
           `;
         } catch (statsError) {
           console.warn('Failed to create initial player stats:', statsError);
-          // Continue even if stats creation fails
         }
 
         return NextResponse.json({
           username: newProfile[0].username,
           avatar_url: newProfile[0].avatar_url,
           phone_number: newProfile[0].phone_number,
+          sms_notifications_enabled: false,
           games_played: 0,
           games_won: 0,
           total_winnings: 0,
         });
       }
     }
+
+    const player = playerResult[0];
+
+    // Get player stats separately
+    const statsResult = await db`
+      SELECT 
+        games_played,
+        games_won,
+        total_winnings
+      FROM player_stats 
+      WHERE player_id = ${player.id}
+    `;
+
+    // If no stats exist, create them
+    let gamesPlayed = 0;
+    let gamesWon = 0; 
+    let totalWinnings = 0;
+    
+    if (statsResult.length === 0) {
+      try {
+        await db`
+          INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+          VALUES (${player.id}, 0, 0, 0)
+        `;
+        console.log(`✅ Created initial player stats for ${walletAddress}`);
+      } catch (statsError) {
+        console.warn('Failed to create player stats:', statsError);
+      }
+    } else {
+      const stats = statsResult[0];
+      gamesPlayed = parseInt(stats.games_played?.toString() || '0') || 0;
+      gamesWon = parseInt(stats.games_won?.toString() || '0') || 0;
+      totalWinnings = parseFloat(stats.total_winnings?.toString() || '0') || 0;
+    }
+
+    return NextResponse.json({
+      username: player.username,
+      avatar_url: player.avatar_url,
+      phone_number: player.phone_number,
+      sms_notifications_enabled: player.sms_notifications_enabled || false,
+      sms_opted_in_at: player.sms_opted_in_at,
+      games_played: gamesPlayed,
+      games_won: gamesWon,
+      total_winnings: totalWinnings,
+    });
 
     return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 });
   } catch (error) {

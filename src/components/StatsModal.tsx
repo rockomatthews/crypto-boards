@@ -146,8 +146,8 @@ export const StatsModal: React.FC<StatsModalProps> = ({ open, onClose }) => {
         {stats && (
           <Box>
             {/* Summary Stats */}
-            <Paper sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#8B4513' }}>
+            <Paper sx={{ p: 3, mb: 3, bgcolor: '#2d2d2d', color: 'white' }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#DEB887' }}>
                 🏆 Overall Performance
               </Typography>
               
@@ -156,7 +156,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ open, onClose }) => {
                   <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#2e7d32' }}>
                     {stats.summary.totalGames}
                   </Typography>
-                  <Typography variant="body2" color="textSecondary">
+                  <Typography variant="body2" sx={{ color: '#ccc' }}>
                     Total Games
                   </Typography>
                 </Box>

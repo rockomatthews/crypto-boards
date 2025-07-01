@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { Box, Typography, Paper, Alert } from '@mui/material';
+import { Box, Typography, Paper, Alert, Button, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress } from '@mui/material';
 import GameEndModal from './GameEndModal';
 import { PublicKey } from '@solana/web3.js';
 import { magicBlockManager, GameMove } from '../lib/magicblock';
@@ -86,6 +86,10 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     platformFee?: number;
     message?: string;
   } | null>(null);
+
+  // Forfeit dialog state
+  const [showForfeitDialog, setShowForfeitDialog] = useState(false);
+  const [forfeitLoading, setForfeitLoading] = useState(false);
   
   // Multi-jump state
   const [multiJumpMode, setMultiJumpMode] = useState(false);
@@ -222,6 +226,40 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       setError('Unable to complete game - network error');
     }
   }, [gameId, publicKey, gameState.redPlayer, gameState.blackPlayer]);
+
+  // Handle forfeit game
+  const handleForfeit = useCallback(async () => {
+    if (!publicKey || !playerColor || gameState.gameStatus !== 'active') return;
+    
+    setForfeitLoading(true);
+    try {
+      const opponent = playerColor === 'red' ? 'black' : 'red';
+      
+      console.log(`🏳️ Player ${playerColor} is forfeiting! ${opponent} wins!`);
+      
+      // Update game state to show forfeit
+      const forfeitState: GameState = {
+        ...gameState,
+        gameStatus: 'finished',
+        winner: opponent
+      };
+      
+      setGameState(forfeitState);
+      await saveGameState(forfeitState);
+      
+      // Complete the game with opponent as winner
+      await completeGame(opponent);
+      
+      setGameEndDialog(true);
+      setShowForfeitDialog(false);
+      
+    } catch (error) {
+      console.error('❌ Error forfeiting game:', error);
+      setError('Failed to forfeit game');
+    } finally {
+      setForfeitLoading(false);
+    }
+  }, [publicKey, playerColor, gameState, saveGameState, completeGame]);
 
   // Check for winner
   const checkWinner = useCallback((board: (GamePiece | null)[][]): Player | null => {
@@ -1022,6 +1060,28 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         </Alert>
       )}
 
+      {/* Game Controls */}
+      {gameState.gameStatus === 'active' && playerColor && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={() => setShowForfeitDialog(true)}
+            sx={{ 
+              borderColor: '#d32f2f', 
+              color: '#d32f2f',
+              bgcolor: 'rgba(211, 47, 47, 0.1)',
+              '&:hover': { 
+                bgcolor: 'rgba(211, 47, 47, 0.2)',
+                borderColor: '#b71c1c'
+              }
+            }}
+          >
+            🏳️ Forfeit Game
+          </Button>
+        </Box>
+      )}
+
       {/* Checkerboard */}
       <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
         <div className="checkers-board">
@@ -1053,6 +1113,59 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         winnerAmount={gameCompletionResult?.winnerAmount}
         platformFee={gameCompletionResult?.platformFee}
       />
+
+      {/* Forfeit Confirmation Dialog */}
+      <Dialog 
+        open={showForfeitDialog} 
+        onClose={() => setShowForfeitDialog(false)}
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: { bgcolor: '#2d2d2d', color: 'white' }
+        }}
+      >
+        <DialogTitle sx={{ bgcolor: '#d32f2f', color: 'white', fontWeight: 'bold' }}>
+          🏳️ Forfeit Game?
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3, bgcolor: '#2d2d2d' }}>
+          <Typography variant="body1" gutterBottom sx={{ color: 'white' }}>
+            Are you sure you want to forfeit this game?
+          </Typography>
+          <Typography variant="body2" color="warning.main" sx={{ fontWeight: 'bold' }}>
+            ⚠️ This will automatically give the win to your opponent and they will receive the full pot!
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 2, color: '#ccc' }}>
+            You will lose your entry fee and this will count as a loss in your stats.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, bgcolor: '#2d2d2d' }}>
+          <Button 
+            onClick={() => setShowForfeitDialog(false)} 
+            sx={{ color: 'white' }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleForfeit}
+            disabled={forfeitLoading}
+            color="error" 
+            variant="contained"
+            sx={{ 
+              bgcolor: '#d32f2f',
+              '&:hover': { bgcolor: '#b71c1c' }
+            }}
+          >
+            {forfeitLoading ? (
+              <>
+                <CircularProgress size={16} sx={{ mr: 1, color: 'white' }} />
+                Forfeiting...
+              </>
+            ) : (
+              '🏳️ Yes, Forfeit'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <style jsx>{`
         .checkers-board {

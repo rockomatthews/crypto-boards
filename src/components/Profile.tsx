@@ -307,15 +307,15 @@ export const Profile: FC = () => {
         <Divider sx={{ my: 3 }} />
 
         {/* SMS Notifications Section */}
-        <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+        <Paper sx={{ p: 2, bgcolor: '#2d2d2d', color: 'white' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <SmsIcon sx={{ mr: 1 }} />
-            <Typography variant="h6">
+            <SmsIcon sx={{ mr: 1, color: 'white' }} />
+            <Typography variant="h6" sx={{ color: 'white' }}>
               Text Notifications
             </Typography>
           </Box>
           
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" sx={{ color: '#ccc' }} gutterBottom>
             Get notified about game invitations, game starts, and important updates.
           </Typography>
 
