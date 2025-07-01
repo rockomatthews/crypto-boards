@@ -47,8 +47,80 @@ export async function POST(
     const game = gameResult[0];
 
     if (game.status === 'completed') {
-      console.log(`⚠️ Game ${gameId} already completed`);
-      return NextResponse.json({ error: 'Game already completed' }, { status: 400 });
+      console.log(`⚠️ Game ${gameId} already completed - checking if escrow was released...`);
+      
+      // Game is already completed, but check if escrow was properly released
+      try {
+        const escrowResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/games/${gameId}/escrow`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'get_escrow_status'
+          })
+        });
+
+        if (escrowResponse.ok) {
+          const escrowData = await escrowResponse.json();
+          const hasActiveEscrow = escrowData.escrows.some((e: { status: string }) => e.status === 'active');
+          
+          if (hasActiveEscrow && winnerWallet && loserWallet) {
+            console.log(`💰 Found active escrow for completed game - attempting to release...`);
+            
+            // Get player information
+            const playersResult = await db`
+              SELECT 
+                p.wallet_address,
+                gp.player_id
+              FROM game_players gp
+              JOIN players p ON gp.player_id = p.id
+              WHERE gp.game_id = ${gameId}
+            `;
+            
+            const winnerPlayer = playersResult.find(p => p.wallet_address === winnerWallet);
+            
+            if (winnerPlayer) {
+              const escrowReleaseResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/games/${gameId}/escrow`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  action: 'release_escrow',
+                  winnerId: winnerPlayer.player_id,
+                  playerWallet: winnerWallet
+                })
+              });
+
+              if (escrowReleaseResponse.ok) {
+                const escrowResult = await escrowReleaseResponse.json();
+                console.log(`✅ Escrow released for completed game:`, escrowResult);
+                
+                return NextResponse.json({ 
+                  success: true,
+                  alreadyCompleted: true,
+                  winner: winnerWallet,
+                  loser: loserWallet,
+                  winnerAmount: escrowResult.winnerAmount,
+                  platformFee: escrowResult.platformFee,
+                  gameId: gameId,
+                  escrowReleased: true,
+                  escrowTransactionSignature: escrowResult.transactionSignature,
+                  message: `Game was already completed - escrow payout of ${escrowResult.winnerAmount} SOL processed now.`
+                });
+              }
+            }
+          }
+        }
+      } catch (escrowError) {
+        console.warn('⚠️ Error checking escrow for completed game:', escrowError);
+      }
+      
+      // Game already completed and no active escrow to process
+      return NextResponse.json({ 
+        success: true,
+        alreadyCompleted: true,
+        message: 'Game was already completed',
+        gameId: gameId,
+        escrowReleased: false
+      });
     }
 
     // Get player information for SMS notifications

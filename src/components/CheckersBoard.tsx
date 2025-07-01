@@ -635,7 +635,49 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       if (response.ok) {
         const data = await response.json();
         if (data.currentState) {
-          setGameState(data.currentState);
+          const newState = data.currentState;
+          
+          // 🚀 Check if game just finished for this player
+          const gameJustFinished = gameState.gameStatus !== 'finished' && newState.gameStatus === 'finished' && newState.winner;
+          
+          setGameState(newState);
+          
+          // Show game end modal to both players when game finishes
+          if (gameJustFinished) {
+            console.log(`🏁 Game finished detected via polling! Winner: ${newState.winner}`);
+            setGameEndDialog(true);
+            
+            // Try to trigger completion if not already done
+            if (newState.winner) {
+              try {
+                const response = await fetch(`/api/games/${gameId}/complete`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    winnerWallet: newState.winner === 'red' ? newState.redPlayer : newState.blackPlayer,
+                    loserWallet: newState.winner === 'red' ? newState.blackPlayer : newState.redPlayer
+                  })
+                });
+                
+                if (response.ok) {
+                  const result = await response.json();
+                  console.log('✅ Game completion via polling:', result);
+                  
+                  setGameCompletionResult({
+                    escrowReleased: result.escrowReleased || false,
+                    escrowTransactionSignature: result.escrowTransactionSignature,
+                    winnerAmount: result.winnerAmount,
+                    platformFee: result.platformFee,
+                    message: result.message
+                  });
+                } else {
+                  console.log('⚠️ Game completion via polling failed (likely already completed)');
+                }
+              } catch (completionError) {
+                console.warn('⚠️ Error triggering completion via polling:', completionError);
+              }
+            }
+          }
           
           if (publicKey) {
             const gameResponse = await fetch(`/api/games/${gameId}`);
@@ -670,7 +712,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       console.error('Error fetching game state:', error);
       setError('Failed to load game state');
     }
-  }, [gameId, publicKey, saveGameState, initializeGameState]);
+  }, [gameId, publicKey, saveGameState, initializeGameState, gameState.gameStatus]);
 
   // Handle square click
   const handleSquareClick = useCallback((row: number, col: number) => {
@@ -794,13 +836,16 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       fetchGameState();
       fetchEscrowStatus();
       
+      // Poll more frequently during active games to catch endings quickly
+      const pollInterval = gameState.gameStatus === 'active' ? 2000 : 5000; // 2s during game, 5s otherwise
+      
       const interval = setInterval(() => {
         fetchGameState();
-      }, 5000);
+      }, pollInterval);
       
       return () => clearInterval(interval);
     }
-  }, [gameId, publicKey, fetchGameState, fetchEscrowStatus]);
+  }, [gameId, publicKey, fetchGameState, fetchEscrowStatus, gameState.gameStatus]);
 
   // Initialize game on mount
   useEffect(() => {
