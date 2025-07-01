@@ -11,8 +11,19 @@ export async function POST(
     const { winnerWallet, loserWallet } = await request.json();
     const gameId = context?.params?.id;
 
-    if (!winnerWallet || !loserWallet || !gameId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    console.log(`🏁 Starting game completion for ${gameId}...`);
+    console.log(`📝 Request data:`, { winnerWallet: winnerWallet?.slice(0, 8), loserWallet: loserWallet?.slice(0, 8) });
+
+    if (!gameId) {
+      return NextResponse.json({ error: 'Game ID is required' }, { status: 400 });
+    }
+
+    if (!winnerWallet || !loserWallet) {
+      console.error('❌ Missing winner or loser wallet addresses');
+      return NextResponse.json({ 
+        error: 'Winner and loser wallet addresses are required',
+        details: { winnerWallet: !!winnerWallet, loserWallet: !!loserWallet }
+      }, { status: 400 });
     }
 
     console.log(`🏁 Completing game ${gameId} - Winner: ${winnerWallet.slice(0, 8)}..., Loser: ${loserWallet.slice(0, 8)}...`);
@@ -29,12 +40,14 @@ export async function POST(
     `;
 
     if (gameResult.length === 0) {
+      console.error(`❌ Game ${gameId} not found`);
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
 
     const game = gameResult[0];
 
     if (game.status === 'completed') {
+      console.log(`⚠️ Game ${gameId} already completed`);
       return NextResponse.json({ error: 'Game already completed' }, { status: 400 });
     }
 
@@ -143,13 +156,51 @@ export async function POST(
       }
     }
 
+    // 🚀 AUTOMATICALLY RELEASE ESCROW FUNDS TO WINNER
+    let escrowReleaseResult = null;
+    try {
+      console.log(`💰 Automatically releasing escrow for winner: ${winnerWallet.slice(0, 8)}...`);
+      
+      const escrowResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/games/${gameId}/escrow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'release_escrow',
+          winnerId: winnerPlayer?.player_id,
+          playerWallet: winnerWallet
+        })
+      });
+
+      if (escrowResponse.ok) {
+        escrowReleaseResult = await escrowResponse.json();
+        console.log(`✅ Escrow released successfully:`, {
+          winnerAmount: escrowReleaseResult.winnerAmount,
+          platformFee: escrowReleaseResult.platformFee,
+          totalAmount: escrowReleaseResult.totalAmount,
+          transactionSignature: escrowReleaseResult.transactionSignature
+        });
+      } else {
+        const escrowError = await escrowResponse.text();
+        console.warn(`⚠️ Escrow release failed (${escrowResponse.status}):`, escrowError);
+        // Don't fail the game completion if escrow release fails
+      }
+    } catch (escrowError) {
+      console.warn('⚠️ Failed to release escrow automatically:', escrowError);
+      // Don't fail the game completion if escrow release fails
+    }
+
     return NextResponse.json({ 
       success: true,
       winner: winnerWallet,
       loser: loserWallet,
-      winnerAmount: winnerAmount,
-      platformFee: platformFee,
-      gameId: gameId
+      winnerAmount: escrowReleaseResult?.winnerAmount || winnerAmount,
+      platformFee: escrowReleaseResult?.platformFee || platformFee,
+      gameId: gameId,
+      escrowReleased: !!escrowReleaseResult,
+      escrowTransactionSignature: escrowReleaseResult?.transactionSignature,
+      message: escrowReleaseResult 
+        ? `Game completed! Winner payout of ${escrowReleaseResult.winnerAmount} SOL processed successfully.`
+        : `Game completed! Winner recorded, but escrow payout may need manual processing.`
     });
 
   } catch (error) {

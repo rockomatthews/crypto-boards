@@ -22,7 +22,7 @@ import {
 interface EscrowPaymentProps {
   gameId: string;
   entryFee: string | number;
-  onPaymentSuccess: () => void;
+  onPaymentSuccess: (transactionSignature: string) => void;
   onPaymentError: (error: string) => void;
 }
 
@@ -111,7 +111,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
 
       if (response.ok) {
         setSuccess(true);
-        onPaymentSuccess();
+        onPaymentSuccess(signature);
         setTimeout(() => setSuccess(false), 3000);
       } else {
         const errorData = await response.json();

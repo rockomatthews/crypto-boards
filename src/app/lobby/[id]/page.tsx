@@ -328,8 +328,10 @@ export default function LobbyPage() {
           <EscrowPayment
             gameId={lobbyId}
             entryFee={lobby.entry_fee}
-            onPaymentSuccess={async () => {
-              // Update player status to ready after successful payment
+            onPaymentSuccess={async (realTransactionSignature: string) => {
+              console.log(`💰 Real payment processed with signature: ${realTransactionSignature}`);
+              
+              // Update player status to ready after successful payment - NOW USING REAL SIGNATURE
               const response = await fetch(`/api/lobbies/${lobbyId}/pay`, {
                 method: 'POST',
                 headers: {
@@ -337,12 +339,12 @@ export default function LobbyPage() {
                 },
                 body: JSON.stringify({
                   walletAddress: publicKey?.toString(),
-                  transactionSignature: 'escrow_payment_' + Date.now(),
+                  transactionSignature: realTransactionSignature, // ✅ REAL SIGNATURE!
                 }),
               });
 
               if (response.ok) {
-                console.log('✅ Payment verified and player marked as ready');
+                console.log('✅ REAL payment verified and player marked as ready');
                 await fetchLobby(); // Refresh lobby data
               } else {
                 const error = await response.json();

@@ -86,11 +86,42 @@ export const createGameEscrow = async (
 // Verify a transaction exists and is valid
 export const verifyTransaction = async (signature: string): Promise<boolean> => {
   try {
+    // Allow mock signatures for development/testing
     if (signature.startsWith('mock_signature_') || signature.startsWith('escrow_') || signature.startsWith('sim_')) {
       console.log(`✅ Mock transaction verified: ${signature}`);
       return true;
     }
     
+    // For real transaction signatures, verify on blockchain
+    console.log(`🔍 Verifying REAL transaction on blockchain: ${signature}`);
+    
+    const conn = getConnection();
+    const transaction = await conn.getTransaction(signature, {
+      commitment: 'confirmed',
+      maxSupportedTransactionVersion: 0
+    });
+    
+    if (!transaction) {
+      console.log(`❌ Transaction not found on blockchain: ${signature}`);
+      return false;
+    }
+    
+    if (transaction.meta?.err) {
+      console.log(`❌ Transaction failed on blockchain: ${signature}`, transaction.meta.err);
+      return false;
+    }
+    
+    // Additional validation: Check if transaction involves our platform wallet
+    const involvesPlatformWallet = transaction.transaction.message.staticAccountKeys.some(
+      key => key.toString() === PLATFORM_WALLET.toString()
+    );
+    
+    if (!involvesPlatformWallet) {
+      console.log(`❌ Transaction doesn't involve platform wallet: ${signature}`);
+      return false;
+    }
+    
+    console.log(`✅ REAL transaction verified on blockchain: ${signature}`);
     return true;
   } catch (error) {
     console.error('❌ Transaction verification failed:', error);

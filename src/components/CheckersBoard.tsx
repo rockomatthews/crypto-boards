@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert } from '@mui/material';
+import { Box, Typography, Paper, Alert } from '@mui/material';
+import GameEndModal from './GameEndModal';
 import { PublicKey } from '@solana/web3.js';
 import { magicBlockManager, GameMove } from '../lib/magicblock';
 
@@ -78,6 +79,13 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   const [gameEndDialog, setGameEndDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [gameCompletionResult, setGameCompletionResult] = useState<{
+    escrowReleased: boolean;
+    escrowTransactionSignature?: string;
+    winnerAmount?: number;
+    platformFee?: number;
+    message?: string;
+  } | null>(null);
   
   // Turn timer state
   const [turnTimeLeft, setTurnTimeLeft] = useState<number>(TURN_TIME_LIMIT);
@@ -141,8 +149,30 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         const gameData = await gameResponse.json();
         
         if (gameData.players && gameData.players.length >= 2) {
-          const winnerWallet = winner === 'red' ? gameData.players[0].wallet_address : gameData.players[1].wallet_address;
-          const loserWallet = winner === 'red' ? gameData.players[1].wallet_address : gameData.players[0].wallet_address;
+          // 🔧 FIXED: Properly determine red/black players based on actual game state
+          const redPlayerWallet = gameState.redPlayer;
+          const blackPlayerWallet = gameState.blackPlayer;
+          
+          if (!redPlayerWallet || !blackPlayerWallet) {
+            console.error('❌ Could not determine red/black players:', { 
+              redPlayer: redPlayerWallet, 
+              blackPlayer: blackPlayerWallet,
+              gameStatePlayers: { red: gameState.redPlayer, black: gameState.blackPlayer }
+            });
+            setError('Unable to complete game - player assignment unclear');
+            return;
+          }
+          
+          const winnerWallet = winner === 'red' ? redPlayerWallet : blackPlayerWallet;
+          const loserWallet = winner === 'red' ? blackPlayerWallet : redPlayerWallet;
+          
+          console.log(`🏁 Completing game: ${winner} wins!`, {
+            winner: winner,
+            winnerWallet: winnerWallet.slice(0, 8) + '...',
+            loserWallet: loserWallet.slice(0, 8) + '...',
+            redPlayer: redPlayerWallet.slice(0, 8) + '...',
+            blackPlayer: blackPlayerWallet.slice(0, 8) + '...'
+          });
           
           const response = await fetch(`/api/games/${gameId}/complete`, {
             method: 'POST',
@@ -154,14 +184,39 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           });
           
           if (!response.ok) {
-            console.error('Failed to complete game:', response.status);
+            const errorText = await response.text();
+            console.error('❌ Failed to complete game:', response.status, errorText);
+            setError(`Failed to complete game: ${response.status}`);
+          } else {
+            const result = await response.json();
+            console.log('✅ Game completed successfully:', result);
+            
+            // Store completion result for GameEndModal
+            setGameCompletionResult({
+              escrowReleased: result.escrowReleased || false,
+              escrowTransactionSignature: result.escrowTransactionSignature,
+              winnerAmount: result.winnerAmount,
+              platformFee: result.platformFee,
+              message: result.message
+            });
+            
+            // Show brief success message
+            setError(result.message || '✅ Game completed successfully!');
+            setTimeout(() => setError(null), 3000);
           }
+        } else {
+          console.error('❌ Invalid player data:', gameData.players);
+          setError('Unable to complete game - invalid player data');
         }
+      } else {
+        console.error('❌ Failed to fetch game data:', gameResponse.status);
+        setError('Unable to complete game - failed to fetch game data');
       }
     } catch (error) {
-      console.error('Error completing game:', error);
+      console.error('❌ Error completing game:', error);
+      setError('Unable to complete game - network error');
     }
-  }, [gameId, publicKey]);
+  }, [gameId, publicKey, gameState.redPlayer, gameState.blackPlayer]);
 
   // Check for winner
   const checkWinner = useCallback((board: (GamePiece | null)[][]): Player | null => {
@@ -763,10 +818,17 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         )}
 
         {gameState.gameStatus === 'active' && (
-          <Box sx={{ mt: 2, p: 1, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 1 }}>
-            <Typography variant="caption" align="center" display="block">
-              ⏰ Each turn has 1 minute. No move = random move!
-            </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Box sx={{ p: 1, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 1, mb: 1 }}>
+              <Typography variant="caption" align="center" display="block">
+                ⏰ Each turn has 1 minute. No move = random move!
+              </Typography>
+            </Box>
+            <Box sx={{ p: 1, bgcolor: 'rgba(255,193,7,0.1)', borderRadius: 1 }}>
+              <Typography variant="caption" align="center" display="block" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+                💡 Small gas fees (~0.0000008 SOL) are normal blockchain transaction costs
+              </Typography>
+            </Box>
           </Box>
         )}
       </Paper>
@@ -786,55 +848,28 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         </div>
       </Box>
 
-      {/* Game End Dialog */}
-      <Dialog open={gameEndDialog} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ textAlign: 'center', fontSize: '1.8rem', fontWeight: 'bold' }}>
-          🎉 Game Over! 🎉
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="h4" align="center" sx={{ 
-            color: gameState.winner === 'red' ? '#FF6B6B' : '#333',
-            fontWeight: 'bold',
-            mb: 2
-          }}>
-            {gameState.winner ? `${gameState.winner.toUpperCase()} WINS!` : 'DRAW!'}
-          </Typography>
-          
-          <Box sx={{ textAlign: 'center', mb: 2 }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Final Piece Count:
-            </Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
-              <Typography variant="body1" sx={{ color: '#FF6B6B', fontWeight: 'bold' }}>
-                🔴 Red: {countPieces(gameState.board).red}
-              </Typography>
-              <Typography variant="body1" sx={{ color: '#333', fontWeight: 'bold' }}>
-                ⚫ Black: {countPieces(gameState.board).black}
-              </Typography>
-            </Box>
-          </Box>
-          
-          {gameState.winner === playerColor && (
-            <Typography align="center" sx={{ 
-              mt: 2, 
-              color: 'success.main', 
-              fontSize: '1.2rem',
-              fontWeight: 'bold'
-            }}>
-              🏆 Congratulations! You won! 🏆
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ justifyContent: 'center' }}>
-          <Button 
-            onClick={() => setGameEndDialog(false)}
-            variant="contained"
-            sx={{ bgcolor: '#8B4513', '&:hover': { bgcolor: '#654321' } }}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Game End Modal */}
+      <GameEndModal
+        open={gameEndDialog}
+        onClose={() => {
+          setGameEndDialog(false);
+          setGameCompletionResult(null);
+        }}
+        winner={gameState.winner ? {
+          username: gameState.winner === 'red' ? 
+            (gameState.redPlayer?.slice(0, 8) + '...' || 'Red Player') : 
+            (gameState.blackPlayer?.slice(0, 8) + '...' || 'Black Player'),
+          walletAddress: gameState.winner === 'red' ? 
+            (gameState.redPlayer || '') : 
+            (gameState.blackPlayer || '')
+        } : undefined}
+        isDraw={!gameState.winner}
+        totalPot={escrowStatus?.totalEscrowed || 0}
+        escrowReleased={gameCompletionResult?.escrowReleased || false}
+        escrowTransactionSignature={gameCompletionResult?.escrowTransactionSignature}
+        winnerAmount={gameCompletionResult?.winnerAmount}
+        platformFee={gameCompletionResult?.platformFee}
+      />
 
       <style jsx>{`
         .checkers-board {
