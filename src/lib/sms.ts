@@ -87,20 +87,23 @@ class TextGridProvider implements SMSProvider {
 }
 
 class SMSService {
-  private provider: SMSProvider;
+  private provider: SMSProvider | null = null;
 
-  constructor() {
-    const smsProvider = process.env.SMS_PROVIDER || 'twilio';
-    
-    switch (smsProvider.toLowerCase()) {
-      case 'textgrid':
-        this.provider = new TextGridProvider();
-        break;
-      case 'twilio':
-      default:
-        this.provider = new TwilioProvider();
-        break;
+  private getProvider(): SMSProvider {
+    if (!this.provider) {
+      const smsProvider = process.env.SMS_PROVIDER || 'twilio';
+      
+      switch (smsProvider.toLowerCase()) {
+        case 'textgrid':
+          this.provider = new TextGridProvider();
+          break;
+        case 'twilio':
+        default:
+          this.provider = new TwilioProvider();
+          break;
+      }
     }
+    return this.provider;
   }
 
   async sendGameInvitation(
@@ -115,7 +118,7 @@ class SMSService {
       `🔗 Join: ${process.env.NEXT_PUBLIC_APP_URL}/lobby/${lobbyId}\n\n` +
       `Reply STOP to opt out.`;
 
-    return await this.provider.sendSMS(playerPhone, message);
+    return await this.getProvider().sendSMS(playerPhone, message);
   }
 
   async sendGameStarting(
@@ -127,7 +130,7 @@ class SMSService {
       `🎯 Play now: ${process.env.NEXT_PUBLIC_APP_URL}/${gameType}/${gameId}\n\n` +
       `Good luck! 🍀`;
 
-    return await this.provider.sendSMS(playerPhone, message);
+    return await this.getProvider().sendSMS(playerPhone, message);
   }
 
   async sendGameCompleted(
@@ -143,7 +146,7 @@ class SMSService {
       : `😔 Game over! Better luck next time in ${gameType.toUpperCase()}.\n\n` +
         `🎮 Play again: ${process.env.NEXT_PUBLIC_APP_URL}`;
 
-    return await this.provider.sendSMS(playerPhone, message);
+    return await this.getProvider().sendSMS(playerPhone, message);
   }
 
   async sendFriendRequest(
@@ -154,16 +157,26 @@ class SMSService {
       `🔗 Accept: ${process.env.NEXT_PUBLIC_APP_URL}/profile\n\n` +
       `Reply STOP to opt out.`;
 
-    return await this.provider.sendSMS(playerPhone, message);
+    return await this.getProvider().sendSMS(playerPhone, message);
   }
 
   async sendCustomMessage(
     playerPhone: string,
     message: string
   ): Promise<{ success: boolean; error?: string }> {
-    return await this.provider.sendSMS(playerPhone, message);
+    return await this.getProvider().sendSMS(playerPhone, message);
   }
 }
 
-export const smsService = new SMSService();
+// Lazy-loaded instance
+let smsServiceInstance: SMSService | null = null;
+
+export const getSMSService = (): SMSService => {
+  if (!smsServiceInstance) {
+    smsServiceInstance = new SMSService();
+  }
+  return smsServiceInstance;
+};
+
+export const smsService = getSMSService();
 export default smsService; 

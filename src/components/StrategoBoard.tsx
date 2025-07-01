@@ -3,9 +3,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert } from '@mui/material';
-import { PublicKey } from '@solana/web3.js';
-import { magicBlockManager, GameMove } from '../lib/magicblock';
-import { EscrowPayment } from './EscrowPayment';
 
 // Game types
 type PieceColor = 'red' | 'blue' | null;
@@ -46,7 +43,7 @@ interface GameState {
   currentPlayer: Player;
   redPlayer: string | null;
   bluePlayer: string | null;
-  gameStatus: 'waiting' | 'active' | 'finished';
+  gameStatus: 'waiting' | 'setup' | 'active' | 'finished';
   winner: Player | null;
   setupPhase: boolean;
   setupTimeLeft: number; // 3 minutes for setup
@@ -104,11 +101,6 @@ const RANK_VALUES: Record<PieceRank, number> = {
   'Flag': 100
 };
 
-// Initialize empty 10x10 board
-function createInitialBoard(): (StrategoPiece | null)[][] {
-  return Array(10).fill(null).map(() => Array(10).fill(null));
-}
-
 // Check if position is a lake
 function isLakePosition(row: number, col: number): boolean {
   return LAKE_POSITIONS.some(([lakeRow, lakeCol]) => lakeRow === row && lakeCol === col);
@@ -142,7 +134,7 @@ function resolveCombat(attacker: StrategoPiece, defender: StrategoPiece): 'attac
 }
 
 export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
-  const { publicKey, signTransaction } = useWallet();
+  const { publicKey } = useWallet();
   const [gameState, setGameState] = useState<GameState>(() => ({
     board: Array(10).fill(null).map(() => Array(10).fill(null)),
     currentPlayer: 'red',
@@ -163,32 +155,11 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   
-  // Betting and game state
-  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
-  const [escrowStatus, setEscrowStatus] = useState<{
-    escrows: {
-      id: string;
-      wallet_address: string;
-      amount: string;
-      status: string;
-      username: string;
-    }[];
-    totalEscrowed: number;
-    platformFeePercentage: number;
-    estimatedPlatformFee: number;
-    estimatedWinnerAmount: number;
-  } | null>(null);
-  
   // Setup state
   const [availablePieces, setAvailablePieces] = useState<Record<PieceRank, number>>(PIECE_COUNTS);
   const [selectedPieceType, setSelectedPieceType] = useState<PieceRank>('Scout');
   const [setupStartTime, setSetupStartTime] = useState<Date | null>(null);
   const [turnStartTime, setTurnStartTime] = useState<Date | null>(null);
-  
-  // MagicBlock state
-  const [ephemeralSession, setEphemeralSession] = useState<string | null>(null);
-  const [moveLatency, setMoveLatency] = useState<number>(0);
-  const [realTimeMoves, setRealTimeMoves] = useState<number>(0);
   
   // For demo purposes - log the game ID and wallet
   console.log('Game ID:', gameId, 'Wallet:', publicKey?.toString());
@@ -584,7 +555,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                 // Fallback to emoji if image fails to load
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
-                target.nextElementSibling!.style.display = 'block';
+                (target.nextElementSibling as HTMLElement)!.style.display = 'block';
               }}
             />
             <span className="piece-fallback" style={{ display: 'none' }}>
