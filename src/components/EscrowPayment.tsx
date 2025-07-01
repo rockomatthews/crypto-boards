@@ -42,8 +42,32 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [userBalance, setUserBalance] = useState<number | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
 
   const entryFeeNumber = typeof entryFee === 'string' ? parseFloat(entryFee) : entryFee;
+
+  // Load user's SOL balance
+  React.useEffect(() => {
+    const loadBalance = async () => {
+      if (!publicKey) return;
+      
+      setBalanceLoading(true);
+      try {
+        const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://rpc.ankr.com/solana';
+        const connection = new Connection(rpcUrl, 'confirmed');
+        const balance = await connection.getBalance(publicKey);
+        setUserBalance(balance / LAMPORTS_PER_SOL);
+      } catch (error) {
+        console.error('Error loading balance:', error);
+        setUserBalance(null);
+      } finally {
+        setBalanceLoading(false);
+      }
+    };
+
+    loadBalance();
+  }, [publicKey]);
 
   const formatSOL = (amount: number | string): string => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -68,6 +92,29 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
       console.log(`🔗 Using RPC: ${rpcUrl.includes('quiknode') ? 'QuickNode (Premium)' : 'Fallback RPC'}`);
       console.log(`💰 Sending to platform wallet: ${PLATFORM_WALLET.toString()}`);
 
+      // 🔍 CRITICAL: Check user's SOL balance BEFORE creating transaction
+      const userBalance = await connection.getBalance(publicKey);
+      const userBalanceSOL = userBalance / LAMPORTS_PER_SOL;
+      const requiredAmount = entryFeeNumber;
+      const estimatedGasFee = 0.00001; // Typical gas fee
+      const totalRequired = requiredAmount + estimatedGasFee;
+
+      console.log(`💰 Balance check:`, {
+        userBalance: `${userBalanceSOL.toFixed(6)} SOL`,
+        entryFee: `${requiredAmount.toFixed(6)} SOL`, 
+        estimatedGas: `${estimatedGasFee.toFixed(6)} SOL`,
+        totalRequired: `${totalRequired.toFixed(6)} SOL`,
+        sufficient: userBalanceSOL >= totalRequired
+      });
+
+      if (userBalanceSOL < totalRequired) {
+        const shortfall = totalRequired - userBalanceSOL;
+        throw new Error(
+          `Insufficient SOL balance! You need ${totalRequired.toFixed(6)} SOL but only have ${userBalanceSOL.toFixed(6)} SOL. ` +
+          `Please add ${shortfall.toFixed(6)} SOL to your wallet and try again.`
+        );
+      }
+
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: publicKey,
@@ -79,6 +126,21 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
       const { blockhash } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
+
+      // 🔍 SIMULATE transaction before asking user to sign
+      try {
+        const simulation = await connection.simulateTransaction(transaction);
+        
+        if (simulation.value.err) {
+          console.error('❌ Transaction simulation failed:', simulation.value.err);
+          throw new Error(`Transaction would fail: ${JSON.stringify(simulation.value.err)}`);
+        }
+        
+        console.log('✅ Transaction simulation successful');
+      } catch (simError) {
+        console.error('❌ Failed to simulate transaction:', simError);
+        throw new Error(`Transaction simulation failed - this would likely cause wallet to warn about revert`);
+      }
 
       console.log('📝 Asking user to sign MAINNET transaction...');
 
@@ -141,6 +203,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
 
   const totalPot = entryFeeNumber * 2;
   const winnerAmount = totalPot - (totalPot * 0.04);
+  const hasInsufficientBalance = userBalance !== null && userBalance < (entryFeeNumber + 0.00001);
 
   if (success) {
     return (
@@ -167,6 +230,34 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
         <Typography variant="body1" sx={{ mb: 1 }}>
           <strong>Entry Fee:</strong> {formatSOL(entryFeeNumber)}
         </Typography>
+        
+        {/* User Balance Display */}
+        <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1, mb: 2 }}>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            <strong>Your Wallet Balance:</strong>{' '}
+            {balanceLoading ? (
+              <CircularProgress size={12} sx={{ ml: 1 }} />
+            ) : userBalance !== null ? (
+              <span style={{ 
+                color: userBalance >= (entryFeeNumber + 0.00001) ? '#2e7d32' : '#d32f2f',
+                fontWeight: 'bold'
+              }}>
+                {userBalance.toFixed(6)} SOL
+              </span>
+            ) : (
+              'Unable to load'
+            )}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Required: {(entryFeeNumber + 0.00001).toFixed(6)} SOL (entry fee + gas)
+          </Typography>
+          {userBalance !== null && userBalance < (entryFeeNumber + 0.00001) && (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              ⚠️ Insufficient balance! You need {((entryFeeNumber + 0.00001) - userBalance).toFixed(6)} more SOL
+            </Alert>
+          )}
+        </Box>
+        
         <Typography variant="body2" color="error" sx={{ mb: 1, fontWeight: 'bold' }}>
           🚨 MAINNET TRANSACTION - REAL SOL WILL BE SENT 🚨
         </Typography>
@@ -194,10 +285,12 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
         <Button
           variant="contained"
           onClick={handleEscrowPayment}
-          disabled={loading || !publicKey}
+          disabled={loading || !publicKey || hasInsufficientBalance}
           sx={{
-            bgcolor: '#d32f2f',
-            '&:hover': { bgcolor: '#b71c1c' },
+            bgcolor: hasInsufficientBalance ? '#757575' : '#d32f2f',
+            '&:hover': { 
+              bgcolor: hasInsufficientBalance ? '#757575' : '#b71c1c' 
+            },
             fontWeight: 'bold',
             px: 4
           }}
@@ -207,6 +300,8 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
               <CircularProgress size={20} sx={{ mr: 1, color: 'white' }} />
               Processing Transaction...
             </>
+          ) : hasInsufficientBalance ? (
+            <>⚠️ Insufficient SOL Balance</>
           ) : (
             <>💳 Send {formatSOL(entryFeeNumber)} SOL</>
           )}
