@@ -87,6 +87,11 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     message?: string;
   } | null>(null);
   
+  // Multi-jump state
+  const [multiJumpMode, setMultiJumpMode] = useState(false);
+  const [multiJumpPiece, setMultiJumpPiece] = useState<[number, number] | null>(null);
+  const [multiJumpTimeout, setMultiJumpTimeout] = useState<NodeJS.Timeout | null>(null);
+  
   // Turn timer state
   const [turnTimeLeft, setTurnTimeLeft] = useState<number>(TURN_TIME_LIMIT);
   const [turnStartTime, setTurnStartTime] = useState<Date | null>(null);
@@ -236,10 +241,49 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     return null;
   }, []);
 
+  // Check if a piece can make jumps from a specific position
+  const getJumpMoves = useCallback((row: number, col: number, piece: GamePiece, board: (GamePiece | null)[][]): [number, number][] => {
+    const jumps: [number, number][] = [];
+    if (!piece) return jumps;
+
+    const directions = piece.isKing 
+      ? [[-1, -1], [-1, 1], [1, -1], [1, 1]]
+      : piece.type === 'red' 
+        ? [[-1, -1], [-1, 1]]
+        : [[1, -1], [1, 1]];
+
+    for (const [dr, dc] of directions) {
+      const jumpedRow = row + dr;
+      const jumpedCol = col + dc;
+      const landingRow = row + dr * 2;
+      const landingCol = col + dc * 2;
+      
+      if (landingRow >= 0 && landingRow < 8 && landingCol >= 0 && landingCol < 8) {
+        const jumpedPiece = board[jumpedRow][jumpedCol];
+        const destination = board[landingRow][landingCol];
+        
+        if (jumpedPiece && jumpedPiece.type !== piece.type && !destination) {
+          jumps.push([landingRow, landingCol]);
+        }
+      }
+    }
+    
+    return jumps;
+  }, []);
+
   // Get valid moves for a piece (simplified for random moves)
   const getValidMoves = useCallback((row: number, col: number, piece: GamePiece): [number, number][] => {
     const moves: [number, number][] = [];
     if (!piece) return moves;
+
+    // In multi-jump mode, only show jump moves for the jumping piece
+    if (multiJumpMode && multiJumpPiece) {
+      const [jumpRow, jumpCol] = multiJumpPiece;
+      if (row === jumpRow && col === jumpCol) {
+        return getJumpMoves(row, col, piece, gameState.board);
+      }
+      return []; // No moves for other pieces during multi-jump
+    }
 
     const directions = piece.isKing 
       ? [[-1, -1], [-1, 1], [1, -1], [1, 1]]
@@ -270,7 +314,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
     
     return moves;
-  }, [gameState.board]);
+  }, [gameState.board, multiJumpMode, multiJumpPiece, getJumpMoves]);
 
   // Get all possible moves for current player
   const getAllPossibleMoves = useCallback((board: (GamePiece | null)[][], currentPlayer: Player): Array<{ from: [number, number], to: [number, number] }> => {
@@ -314,6 +358,18 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     console.log(`⏰ Turn timer reset for ${gameState.currentPlayer}`);
   }, [gameState.currentPlayer]);
 
+  // End multi-jump mode and switch players
+  const endMultiJump = useCallback(() => {
+    if (multiJumpTimeout) {
+      clearTimeout(multiJumpTimeout);
+      setMultiJumpTimeout(null);
+    }
+    setMultiJumpMode(false);
+    setMultiJumpPiece(null);
+    setSelectedSquare(null);
+    setValidMoves([]);
+  }, [multiJumpTimeout]);
+
   // Make a move
   const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
     if (gameState.gameStatus !== 'active' || loading) return;
@@ -356,12 +412,69 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
     
     const winner = checkWinner(newBoard);
-    const nextPlayer = gameState.currentPlayer === 'red' ? 'black' : 'red';
+    
+    // 🚀 MULTI-JUMP LOGIC: Check if we can continue jumping
+    let shouldSwitchPlayers = true;
+    let nextPlayer: Player = gameState.currentPlayer === 'red' ? 'black' : 'red';
+    
+    if (isJump && !winner) {
+      // Check if the piece that just jumped can make another jump
+      const additionalJumps = getJumpMoves(toRow, toCol, finalPiece, newBoard);
+      
+      if (additionalJumps.length > 0) {
+        console.log(`🎯 Multi-jump available! ${gameState.currentPlayer} can continue jumping from (${toRow}, ${toCol})`);
+        
+        // Don't switch players - continue the turn
+        shouldSwitchPlayers = false;
+        nextPlayer = gameState.currentPlayer;
+        
+        // Enter multi-jump mode
+        setMultiJumpMode(true);
+        setMultiJumpPiece([toRow, toCol]);
+        
+        // Auto-select the jumping piece and show available jumps
+        setTimeout(() => {
+          setSelectedSquare([toRow, toCol]);
+          setValidMoves(additionalJumps);
+        }, 100);
+        
+        // Set timeout to end multi-jump mode after 2 seconds if no move is made
+        const timeout = setTimeout(() => {
+          console.log(`⏰ Multi-jump timeout! Ending ${gameState.currentPlayer}'s turn`);
+          endMultiJump();
+          
+                     // Force switch to next player
+           const timeoutState: GameState = {
+             ...gameState,
+             board: newBoard,
+             currentPlayer: (gameState.currentPlayer === 'red' ? 'black' : 'red') as Player,
+             gameStatus: winner ? 'finished' : 'active',
+             winner,
+             lastMove: {
+               from: [fromRow, fromCol],
+               to: [toRow, toCol],
+               capturedPieces: capturedPieces.length > 0 ? capturedPieces : undefined
+             }
+           };
+          setGameState(timeoutState);
+          saveGameState(timeoutState);
+          resetTurnTimer();
+        }, 2000); // 2 second timeout
+        
+        setMultiJumpTimeout(timeout);
+      } else {
+        // No additional jumps, end multi-jump mode
+        endMultiJump();
+      }
+    } else {
+      // Not a jump or game ended, end multi-jump mode
+      endMultiJump();
+    }
     
     const newState: GameState = {
       ...gameState,
       board: newBoard,
-      currentPlayer: nextPlayer,
+      currentPlayer: shouldSwitchPlayers ? nextPlayer : gameState.currentPlayer,
       gameStatus: winner ? 'finished' : 'active',
       winner,
       lastMove: {
@@ -403,8 +516,8 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     
     setGameState(newState);
     
-    // Reset turn timer for next player
-    if (!winner) {
+    // Reset turn timer only if switching players (not during multi-jump)
+    if (!winner && shouldSwitchPlayers) {
       setTimeout(() => {
         resetTurnTimer();
       }, 100);
@@ -418,7 +531,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
     
     setLoading(false);
-  }, [gameState, saveGameState, checkWinner, completeGame, ephemeralSession, publicKey, gameId, resetTurnTimer, loading]);
+  }, [gameState, saveGameState, checkWinner, completeGame, ephemeralSession, publicKey, gameId, resetTurnTimer, loading, getJumpMoves, endMultiJump]);
 
   // Make random move when timer expires
   const makeRandomMove = useCallback(async () => {
@@ -703,6 +816,15 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     }
   }, [gameState.gameStatus, publicKey, signTransaction, ephemeralSession, initializeMagicBlockSession]);
 
+  // Cleanup multi-jump timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (multiJumpTimeout) {
+        clearTimeout(multiJumpTimeout);
+      }
+    };
+  }, [multiJumpTimeout]);
+
   // Render square
   const renderSquare = (row: number, col: number) => {
     const displayRow = playerColor === 'black' ? 7 - row : row;
@@ -716,14 +838,18 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       ((gameState.lastMove.from[0] === displayRow && gameState.lastMove.from[1] === displayCol) ||
        (gameState.lastMove.to[0] === displayRow && gameState.lastMove.to[1] === displayCol));
     
+    // Check if this is the multi-jump piece
+    const isMultiJumpPiece = multiJumpMode && multiJumpPiece && 
+      multiJumpPiece[0] === displayRow && multiJumpPiece[1] === displayCol;
+    
     return (
       <div
         key={`${row}-${col}`}
-        className={`square ${isDarkSquare ? 'dark' : 'light'} ${isSelected ? 'selected' : ''} ${isValidMove ? 'valid-move' : ''} ${isLastMoveSquare ? 'last-move' : ''}`}
+        className={`square ${isDarkSquare ? 'dark' : 'light'} ${isSelected ? 'selected' : ''} ${isValidMove ? 'valid-move' : ''} ${isLastMoveSquare ? 'last-move' : ''} ${isMultiJumpPiece ? 'multi-jump' : ''}`}
         onClick={() => handleSquareClick(displayRow, displayCol)}
       >
         {piece && (
-          <div className={`piece ${piece.type} ${piece.isKing ? 'king' : ''}`}>
+          <div className={`piece ${piece.type} ${piece.isKing ? 'king' : ''} ${isMultiJumpPiece ? 'jumping' : ''}`}>
             {piece.isKing ? '👑' : ''}
           </div>
         )}
@@ -795,13 +921,18 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         
         {gameState.gameStatus === 'active' && (
           <Typography align="center" variant="h6" sx={{ 
-            bgcolor: gameState.currentPlayer === 'red' ? '#FF6B6B' : '#333',
+            bgcolor: multiJumpMode ? '#ff9800' : (gameState.currentPlayer === 'red' ? '#FF6B6B' : '#333'),
             color: 'white',
             p: 1,
             borderRadius: 1,
             fontWeight: 'bold'
           }}>
-            {gameState.currentPlayer === playerColor ? "🎯 Your Turn!" : `${gameState.currentPlayer.toUpperCase()}'s Turn`}
+            {multiJumpMode 
+              ? `🚀 ${gameState.currentPlayer.toUpperCase()} - Continue Jumping! (2s)` 
+              : gameState.currentPlayer === playerColor 
+                ? "🎯 Your Turn!" 
+                : `${gameState.currentPlayer.toUpperCase()}'s Turn`
+            }
             {loading && " (Making move...)"}
           </Typography>
         )}
@@ -824,6 +955,13 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
                 ⏰ Each turn has 1 minute. No move = random move!
               </Typography>
             </Box>
+            {multiJumpMode && (
+              <Box sx={{ p: 1, bgcolor: 'rgba(255,152,0,0.2)', borderRadius: 1, mb: 1 }}>
+                <Typography variant="caption" align="center" display="block" sx={{ color: 'rgba(255,255,255,0.9)', fontWeight: 'bold' }}>
+                  🚀 Multi-jump mode! You have 2 seconds to continue jumping or turn ends
+                </Typography>
+              </Box>
+            )}
             <Box sx={{ p: 1, bgcolor: 'rgba(255,193,7,0.1)', borderRadius: 1 }}>
               <Typography variant="caption" align="center" display="block" sx={{ color: 'rgba(255,255,255,0.8)' }}>
                 💡 Small gas fees (~0.0000008 SOL) are normal blockchain transaction costs
@@ -949,6 +1087,26 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         .piece.king {
           border-color: #FFD700;
           box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+        
+        .square.multi-jump {
+          background-color: #ff9800 !important;
+          animation: pulse 1s infinite;
+        }
+        
+        .piece.jumping {
+          animation: bounce 0.5s infinite alternate;
+        }
+        
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); }
+          70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+        }
+        
+        @keyframes bounce {
+          0% { transform: scale(1.0); }
+          100% { transform: scale(1.1); }
         }
       `}</style>
     </Box>
