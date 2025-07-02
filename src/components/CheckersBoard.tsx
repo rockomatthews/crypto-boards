@@ -200,6 +200,13 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           } else {
             const result = await response.json();
             console.log('✅ Game completed successfully:', result);
+            console.log('🔍 DETAILED RESPONSE ANALYSIS:', {
+              success: result.success,
+              escrowReleased: result.escrowReleased,
+              message: result.message,
+              debugInfo: result.debugInfo || 'No debug info',
+              payoutError: result.payoutError || 'No payout error details'
+            });
             
             // Store completion result for GameEndModal
             setGameCompletionResult({

@@ -17,102 +17,147 @@ async function sendSOLDirectly(
   toWallet: string,
   amount: number,
   gameId: string
-): Promise<{ success: boolean; signature?: string; error?: string }> {
-  console.log(`🚀 ENTERED sendSOLDirectly function with params:`, {
+): Promise<{ success: boolean; signature?: string; error?: string; debugLogs?: string[] }> {
+  const debugLogs: string[] = [];
+  
+  const log = (message: string) => {
+    console.log(message);
+    debugLogs.push(message);
+  };
+  
+  const logError = (message: string, error?: any) => {
+    const fullMessage = error ? `${message}: ${error}` : message;
+    console.error(fullMessage);
+    debugLogs.push(fullMessage);
+  };
+  
+  log(`🚀 ENTERED sendSOLDirectly function with params: ${JSON.stringify({
     toWallet: toWallet.slice(0, 8) + '...',
     amount,
     gameId,
     keyLength: fromPrivateKey.length
-  });
+  })}`);
+  
+  // LOG THE ACTUAL ENVIRONMENT VARIABLE FORMAT
+  log(`🔍 RAW PRIVATE KEY ANALYSIS:`);
+  log(`🔍 Length: ${fromPrivateKey.length}`);
+  log(`🔍 Starts with [: ${fromPrivateKey.startsWith('[')}`);
+  log(`🔍 Ends with ]: ${fromPrivateKey.endsWith(']')}`);
+  log(`🔍 First 50 chars: "${fromPrivateKey.slice(0, 50)}"`);
+  log(`🔍 Last 20 chars: "${fromPrivateKey.slice(-20)}"`);
+  
+  // Check if it's base58, base64, hex, or JSON
+  if (fromPrivateKey.startsWith('[') && fromPrivateKey.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(fromPrivateKey);
+      log(`🔍 JSON array with ${parsed.length} elements`);
+      log(`🔍 First 10 elements: ${parsed.slice(0, 10)}`);
+      log(`🔍 Last 10 elements: ${parsed.slice(-10)}`);
+    } catch (e) {
+      logError(`🔍 Failed to parse as JSON:`, e);
+    }
+  } else {
+    log(`🔍 Not a JSON array - might be base58/base64/hex`);
+  }
   
   try {
-    console.log(`💰 DIRECT SOL TRANSFER: ${amount} SOL to ${toWallet} for game ${gameId}`);
+    log(`💰 DIRECT SOL TRANSFER: ${amount} SOL to ${toWallet} for game ${gameId}`);
 
     // Get connection
     const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
-    console.log(`🔗 Using RPC: ${RPC_URL}`);
+    log(`🔗 Using RPC: ${RPC_URL}`);
     const connection = new Connection(RPC_URL, 'confirmed');
 
     // Parse private key
     let privateKeyBytes: Uint8Array;
-    console.log(`🔑 Parsing private key (length: ${fromPrivateKey.length})`);
-    console.log(`🔑 First 20 chars: ${fromPrivateKey.slice(0, 20)}...`);
-    console.log(`🔑 Last 20 chars: ...${fromPrivateKey.slice(-20)}`);
+    log(`🔑 Parsing private key (length: ${fromPrivateKey.length})`);
+    log(`🔑 First 20 chars: ${fromPrivateKey.slice(0, 20)}...`);
+    log(`🔑 Last 20 chars: ...${fromPrivateKey.slice(-20)}`);
     
     try {
       // Try JSON array format first (most common)
       if (fromPrivateKey.startsWith('[') && fromPrivateKey.endsWith(']')) {
-        console.log(`🔑 Parsing as JSON array`);
+        log(`🔑 Parsing as JSON array`);
         const keyArray = JSON.parse(fromPrivateKey);
         privateKeyBytes = new Uint8Array(keyArray);
-        console.log(`🔑 JSON array has ${keyArray.length} elements`);
-        console.log(`🔑 First 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
+        log(`🔑 JSON array has ${keyArray.length} elements`);
+        log(`🔑 First 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
       } 
       // Try base64 format
       else if (fromPrivateKey.length === 88 || fromPrivateKey.length === 44) {
-        console.log(`🔑 Parsing as base64 (length ${fromPrivateKey.length})`);
-        privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'base64'));
+        log(`🔑 Parsing as base64 (length ${fromPrivateKey.length})`);
+        log(`🔑 Base64 string sample: "${fromPrivateKey.slice(0, 20)}...${fromPrivateKey.slice(-10)}"`);
+        
+        try {
+          privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'base64'));
+          log(`✅ Base64 decoded to ${privateKeyBytes.length} bytes`);
+          log(`🔑 Decoded first 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
+          log(`🔑 Decoded last 10 bytes: ${Array.from(privateKeyBytes.slice(-10))}`);
+        } catch (base64Error) {
+          logError(`❌ Base64 decoding failed`, base64Error);
+          throw new Error(`Failed to decode base64 private key: ${base64Error}`);
+        }
       }
       // Try hex format  
       else if (fromPrivateKey.length === 128) {
-        console.log(`🔑 Parsing as hex string (length ${fromPrivateKey.length})`);
+        log(`🔑 Parsing as hex string (length ${fromPrivateKey.length})`);
         privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'hex'));
       }
       // Try bs58 format
       else {
-        console.log(`🔑 Parsing as bs58 (length ${fromPrivateKey.length})`);
+        log(`🔑 Parsing as bs58 (length ${fromPrivateKey.length})`);
         const bs58 = await import('bs58');
         privateKeyBytes = bs58.default.decode(fromPrivateKey);
       }
       
-      console.log(`🔑 Parsed key bytes length: ${privateKeyBytes.length}`);
+      log(`🔑 Parsed key bytes length: ${privateKeyBytes.length}`);
       
       // Handle different key lengths
       if (privateKeyBytes.length === 64) {
         // Perfect - standard ed25519 keypair (32 private + 32 public)
-        console.log(`✅ Standard 64-byte ed25519 keypair`);
+        log(`✅ Standard 64-byte ed25519 keypair`);
       } else if (privateKeyBytes.length === 66) {
         // Common case: 64 bytes + 2 header bytes - remove the headers
-        console.log(`🔧 66-byte key detected - removing header bytes`);
+        log(`🔧 66-byte key detected - removing header bytes`);
         
         // Check if first 2 bytes look like headers (often [0,0] or similar)
         const firstTwoBytes = Array.from(privateKeyBytes.slice(0, 2));
         const lastTwoBytes = Array.from(privateKeyBytes.slice(-2));
-        console.log(`🔧 First 2 bytes: ${firstTwoBytes}`);
-        console.log(`🔧 Last 2 bytes: ${lastTwoBytes}`);
+        log(`🔧 First 2 bytes: ${firstTwoBytes}`);
+        log(`🔧 Last 2 bytes: ${lastTwoBytes}`);
         
         // Try removing first 2 bytes (most common)
         privateKeyBytes = privateKeyBytes.slice(2, 66);
-        console.log(`🔧 Removed first 2 bytes, new length: ${privateKeyBytes.length}`);
+        log(`🔧 Removed first 2 bytes, new length: ${privateKeyBytes.length}`);
       } else if (privateKeyBytes.length === 96) {
         // Sometimes includes public key at end - extract first 64 bytes
-        console.log(`🔧 96-byte key detected - extracting first 64 bytes`);
+        log(`🔧 96-byte key detected - extracting first 64 bytes`);
         privateKeyBytes = privateKeyBytes.slice(0, 64);
       } else if (privateKeyBytes.length === 32) {
         // This is just the private key portion - need to generate public key
-        console.log(`🔧 32-byte private key detected - this is only half the keypair!`);
+        log(`🔧 32-byte private key detected - this is only half the keypair!`);
         throw new Error(`32-byte private key provided - Solana needs full 64-byte keypair (private + public)`);
       } else {
         throw new Error(`Unsupported key length: ${privateKeyBytes.length} bytes (expected 64 for full keypair)`);
       }
       
-      console.log(`✅ Final key length: ${privateKeyBytes.length} bytes`);
-      console.log(`🔑 Final first 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
-      console.log(`🔑 Final last 10 bytes: ${Array.from(privateKeyBytes.slice(-10))}`);
+      log(`✅ Final key length: ${privateKeyBytes.length} bytes`);
+      log(`🔑 Final first 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
+      log(`🔑 Final last 10 bytes: ${Array.from(privateKeyBytes.slice(-10))}`);
       
     } catch (keyError) {
-      console.error(`❌ Private key parsing failed:`, keyError);
+      logError(`❌ Private key parsing failed`, keyError);
       throw new Error(`Invalid private key format: ${keyError}`);
     }
     
     // Try to create the keypair with the full 64-byte array
     let platformKeypair: Keypair;
     try {
-      console.log(`🔑 Creating keypair from ${privateKeyBytes.length}-byte array...`);
+      log(`🔑 Creating keypair from ${privateKeyBytes.length}-byte array...`);
       platformKeypair = Keypair.fromSecretKey(privateKeyBytes);
-      console.log(`✅ Successfully created keypair!`);
+      log(`✅ Successfully created keypair!`);
     } catch (keypairError) {
-      console.error(`❌ Keypair creation failed:`, keypairError);
+      logError(`❌ Keypair creation failed`, keypairError);
       
       const errorMessage = keypairError instanceof Error ? keypairError.message : 'Unknown keypair error';
       
@@ -122,17 +167,17 @@ async function sendSOLDirectly(
           const keyArray = JSON.parse(fromPrivateKey);
           
           if (keyArray.length === 66) {
-            console.log(`🔧 Trying to remove LAST 2 bytes instead of first 2...`);
+            log(`🔧 Trying to remove LAST 2 bytes instead of first 2...`);
             const alternativeBytes = new Uint8Array(keyArray.slice(0, 64));
-            console.log(`🔧 Alternative array length: ${alternativeBytes.length}`);
+            log(`🔧 Alternative array length: ${alternativeBytes.length}`);
             
             platformKeypair = Keypair.fromSecretKey(alternativeBytes);
-            console.log(`✅ SUCCESS with removing last 2 bytes!`);
+            log(`✅ SUCCESS with removing last 2 bytes!`);
           } else {
             throw new Error(`Can't create alternative - array length ${keyArray.length}`);
           }
         } catch (alternativeError) {
-          console.error(`❌ Alternative parsing also failed:`, alternativeError);
+          logError(`❌ Alternative parsing also failed`, alternativeError);
           throw new Error(`All key parsing attempts failed: ${errorMessage}`);
         }
       } else {
@@ -141,33 +186,33 @@ async function sendSOLDirectly(
     }
     
     const platformPublicKey = platformKeypair.publicKey.toString();
-    console.log(`💳 Platform wallet: ${platformPublicKey}`);
+    log(`💳 Platform wallet: ${platformPublicKey}`);
     
     let winnerWallet: PublicKey;
     try {
       winnerWallet = new PublicKey(toWallet);
-      console.log(`🏆 Winner wallet: ${winnerWallet.toString()}`);
+      log(`🏆 Winner wallet: ${winnerWallet.toString()}`);
     } catch (walletError) {
-      console.error(`❌ Invalid winner wallet address:`, walletError);
+      logError(`❌ Invalid winner wallet address`, walletError);
       throw new Error(`Invalid winner wallet address: ${toWallet}`);
     }
 
     // Check balance
-    console.log(`💰 Checking platform wallet balance...`);
+    log(`💰 Checking platform wallet balance...`);
     const balance = await connection.getBalance(platformKeypair.publicKey);
     const requiredLamports = Math.floor(amount * LAMPORTS_PER_SOL);
     
-    console.log(`💰 Platform balance: ${balance / LAMPORTS_PER_SOL} SOL (${balance} lamports)`);
-    console.log(`💰 Sending: ${amount} SOL (${requiredLamports} lamports)`);
+    log(`💰 Platform balance: ${balance / LAMPORTS_PER_SOL} SOL (${balance} lamports)`);
+    log(`💰 Sending: ${amount} SOL (${requiredLamports} lamports)`);
     
     if (balance < requiredLamports) {
       const errorMsg = `Insufficient balance: ${balance / LAMPORTS_PER_SOL} SOL < ${amount} SOL required`;
-      console.error(`❌ ${errorMsg}`);
+      logError(`❌ ${errorMsg}`);
       throw new Error(errorMsg);
     }
 
     // Create transaction
-    console.log(`📝 Creating transaction...`);
+    log(`📝 Creating transaction...`);
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: platformKeypair.publicKey,
@@ -179,38 +224,39 @@ async function sendSOLDirectly(
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = platformKeypair.publicKey;
-    console.log(`📝 Transaction created with blockhash: ${blockhash}`);
+    log(`📝 Transaction created with blockhash: ${blockhash}`);
 
     // Send transaction
-    console.log(`🚀 Sending transaction...`);
+    log(`🚀 Sending transaction...`);
     const signature = await connection.sendTransaction(transaction, [platformKeypair], {
       skipPreflight: false,
       preflightCommitment: 'confirmed',
       maxRetries: 3
     });
 
-    console.log(`⏳ Transaction sent: ${signature}`);
+    log(`⏳ Transaction sent: ${signature}`);
 
     // Confirm transaction
-    console.log(`⏳ Confirming transaction...`);
+    log(`⏳ Confirming transaction...`);
     const confirmation = await connection.confirmTransaction(signature, 'confirmed');
     
     if (confirmation.value?.err) {
       const errorMsg = `Transaction failed: ${JSON.stringify(confirmation.value.err)}`;
-      console.error(`❌ ${errorMsg}`);
+      logError(`❌ ${errorMsg}`);
       throw new Error(errorMsg);
     }
     
-    console.log(`✅ REAL SOL TRANSFER CONFIRMED: ${amount} SOL to ${toWallet}`);
-    console.log(`🔗 Signature: ${signature}`);
+    log(`✅ REAL SOL TRANSFER CONFIRMED: ${amount} SOL to ${toWallet}`);
+    log(`🔗 Signature: ${signature}`);
     
-    return { success: true, signature };
+    return { success: true, signature, debugLogs: debugLogs };
 
   } catch (error) {
-    console.error('❌ Direct SOL transfer failed:', error);
+    logError('❌ Direct SOL transfer failed', error);
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: error instanceof Error ? error.message : 'Unknown error',
+      debugLogs: debugLogs
     };
   }
 }
@@ -308,7 +354,9 @@ export async function POST(
               privateKeyLength: privateKey?.length,
               winnerWallet: winnerWallet.slice(0, 8) + '...',
               winnerAmount: winnerAmount,
-              errorDetails: directTransfer.error
+              errorDetails: directTransfer.error,
+              serverLogs: `Check server logs for detailed debugging starting with: "🚀 ENTERED sendSOLDirectly" for game ${gameId}`,
+              detailedLogs: directTransfer.debugLogs || []
             }
           });
         }
