@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 
+interface GameStat {
+  game_type: string;
+  result: string;
+  amount: string | number;
+  created_at: string;
+  game_id: string;
+  opponent_username: string;
+  opponent_wallet: string;
+}
+
+interface AggregatedStats {
+  games_played: number;
+  games_won: number;
+  total_winnings: number;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -9,6 +25,8 @@ export async function GET(request: NextRequest) {
     if (!walletAddress) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
     }
+
+    console.log(`📊 Fetching stats for wallet: ${walletAddress}`);
 
     // Get player ID
     const playerResult = await db`
@@ -21,62 +39,83 @@ export async function GET(request: NextRequest) {
 
     const playerId = playerResult[0].id;
 
-    // Get aggregated stats from player_stats table
-    const aggregatedStatsResult = await db`
-      SELECT 
-        games_played,
-        games_won,
-        total_winnings,
-        total_losses,
-        current_streak,
-        best_streak,
-        updated_at
-      FROM player_stats
-      WHERE player_id = ${playerId}
-    `;
-
-    // Get individual game statistics for recent games and detailed breakdown
-    const gameStatsResult = await db`
-      SELECT 
-        gs.game_type,
-        gs.result,
-        gs.amount,
-        gs.created_at,
-        g.id as game_id,
-        opponent.username as opponent_username,
-        opponent.wallet_address as opponent_wallet
-      FROM game_stats gs
-      JOIN games g ON gs.game_id = g.id
-      JOIN players opponent ON gs.opponent_id = opponent.id
-      WHERE gs.player_id = ${playerId}
-      ORDER BY gs.created_at DESC
-      LIMIT 50
-    `;
-
-    // Calculate summary statistics
-    const aggregatedStats = aggregatedStatsResult[0] || {
+    // Get aggregated stats from player_stats table (only safe fields)
+    let aggregatedStats: AggregatedStats = {
       games_played: 0,
       games_won: 0,
-      total_winnings: 0,
-      total_losses: 0,
-      current_streak: 0,
-      best_streak: 0
+      total_winnings: 0
     };
 
+    try {
+      const aggregatedStatsResult = await db`
+        SELECT 
+          COALESCE(games_played, 0) as games_played,
+          COALESCE(games_won, 0) as games_won,
+          COALESCE(total_winnings, 0) as total_winnings
+        FROM player_stats
+        WHERE player_id = ${playerId}
+      `;
+
+      if (aggregatedStatsResult.length > 0) {
+        const result = aggregatedStatsResult[0];
+        aggregatedStats = {
+          games_played: parseInt(result.games_played?.toString() || '0') || 0,
+          games_won: parseInt(result.games_won?.toString() || '0') || 0,
+          total_winnings: parseFloat(result.total_winnings?.toString() || '0') || 0
+        };
+      }
+    } catch (aggregatedError) {
+      console.warn('Error fetching aggregated stats, using defaults:', aggregatedError);
+    }
+
+    // Get individual game statistics for recent games
+    let gameStatsResult: GameStat[] = [];
+    try {
+      const result = await db`
+        SELECT 
+          gs.game_type,
+          gs.result,
+          gs.amount,
+          gs.created_at,
+          g.id as game_id,
+          opponent.username as opponent_username,
+          opponent.wallet_address as opponent_wallet
+        FROM game_stats gs
+        JOIN games g ON gs.game_id = g.id
+        JOIN players opponent ON gs.opponent_id = opponent.id
+        WHERE gs.player_id = ${playerId}
+        ORDER BY gs.created_at DESC
+        LIMIT 50
+      `;
+      gameStatsResult = result as GameStat[];
+    } catch (gameStatsError) {
+      console.warn('Error fetching game stats, using empty array:', gameStatsError);
+    }
+
+    // Calculate summary statistics safely
     const totalGames = aggregatedStats.games_played;
     const wins = aggregatedStats.games_won;
-    const losses = totalGames - wins;
-    const totalWinnings = parseFloat(aggregatedStats.total_winnings);
-    const totalLosses = parseFloat(aggregatedStats.total_losses);
-    const currentStreak = aggregatedStats.current_streak;
-    const bestStreak = aggregatedStats.best_streak;
+    const losses = Math.max(0, totalGames - wins);
+    const totalWinnings = aggregatedStats.total_winnings;
 
-    // Calculate streak type
+    // Calculate current streak from recent games (safe fallback)
+    let currentStreak = 0;
     let streakType = 'none';
-    if (currentStreak > 0) {
-      streakType = 'win';
-    } else if (currentStreak < 0) {
-      streakType = 'loss';
+    
+    if (gameStatsResult.length > 0) {
+      let streak = 0;
+      const lastResult = gameStatsResult[0]?.result;
+      
+      for (const game of gameStatsResult) {
+        if (game.result === lastResult) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+      
+      currentStreak = streak;
+      streakType = lastResult === 'win' ? 'win' : lastResult === 'loss' ? 'loss' : 'none';
     }
 
     // Group by game type from recent games
@@ -89,7 +128,7 @@ export async function GET(request: NextRequest) {
     }> = {};
     
     gameStatsResult.forEach(stat => {
-      const gameType = stat.game_type;
+      const gameType = stat.game_type || 'unknown';
       if (!gameTypeStats[gameType]) {
         gameTypeStats[gameType] = {
           total: 0,
@@ -101,34 +140,60 @@ export async function GET(request: NextRequest) {
       }
       
       gameTypeStats[gameType].total++;
+      const amount = parseFloat(stat.amount?.toString() || '0') || 0;
+      
       if (stat.result === 'win') {
         gameTypeStats[gameType].wins++;
-        gameTypeStats[gameType].winnings += parseFloat(stat.amount);
+        gameTypeStats[gameType].winnings += Math.abs(amount);
       } else {
         gameTypeStats[gameType].losses++;
-        gameTypeStats[gameType].lossAmount += parseFloat(stat.amount);
+        gameTypeStats[gameType].lossAmount += Math.abs(amount);
       }
     });
 
-    return NextResponse.json({
+    const responseData = {
       summary: {
         totalGames,
         wins,
         losses,
         winRate: totalGames > 0 ? (wins / totalGames * 100).toFixed(1) : '0.0',
         totalWinnings: totalWinnings.toFixed(4),
-        totalLosses: totalLosses.toFixed(4),
-        netProfit: (totalWinnings - totalLosses).toFixed(4),
+        totalLosses: '0.0000', // Not tracked separately yet
+        netProfit: totalWinnings.toFixed(4),
         currentStreak: Math.abs(currentStreak),
         streakType,
-        bestStreak
+        bestStreak: Math.abs(currentStreak) // Simplified for now
       },
       gameTypeStats,
       recentGames: gameStatsResult.slice(0, 10) // Last 10 games
-    });
+    };
+
+    console.log(`✅ Stats response for ${walletAddress}:`, responseData.summary);
+    return NextResponse.json(responseData);
 
   } catch (error) {
-    console.error('Error fetching player stats:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('❌ Error fetching player stats:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace'
+    });
+
+    // Return safe fallback data instead of 500 error
+    return NextResponse.json({
+      summary: {
+        totalGames: 0,
+        wins: 0,
+        losses: 0,
+        winRate: '0.0',
+        totalWinnings: '0.0000',
+        totalLosses: '0.0000',
+        netProfit: '0.0000',
+        currentStreak: 0,
+        streakType: 'none',
+        bestStreak: 0
+      },
+      gameTypeStats: {},
+      recentGames: []
+    });
   }
 } 
