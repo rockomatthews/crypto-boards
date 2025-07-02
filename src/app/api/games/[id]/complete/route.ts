@@ -208,20 +208,24 @@ export async function POST(
       WHERE id = ${gameId}
     `;
 
-    // Update game players
+    // Update game players - FIX THE BROKEN SQL
+    // First, set all players in this game as losers
     await db`
       UPDATE game_players 
       SET 
         game_status = 'completed',
-        is_winner = CASE 
-          WHEN EXISTS (
-            SELECT 1 FROM players p 
-            WHERE p.id = game_players.player_id 
-            AND p.wallet_address = ${winnerWallet}
-          ) THEN true
-          ELSE false
-        END
+        is_winner = false
       WHERE game_id = ${gameId}
+    `;
+
+    // Then, mark the winner as true
+    await db`
+      UPDATE game_players 
+      SET is_winner = true
+      WHERE game_id = ${gameId} 
+        AND player_id = (
+          SELECT id FROM players WHERE wallet_address = ${winnerWallet}
+        )
     `;
 
     console.log(`💰 Game completion: Total pot: ${totalPot} SOL, Winner gets: ${winnerAmount} SOL, Platform fee: ${platformFee} SOL`);
