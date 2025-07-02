@@ -77,6 +77,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
   const [validMoves, setValidMoves] = useState<[number, number][]>([]);
   const [playerColor, setPlayerColor] = useState<Player | null>(null);
   const [gameEndDialog, setGameEndDialog] = useState(false);
+  const [gameEndWinner, setGameEndWinner] = useState<Player | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [gameCompletionResult, setGameCompletionResult] = useState<{
@@ -565,6 +566,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
     
     if (winner) {
       setGameEndDialog(true);
+      setGameEndWinner(winner);
       await completeGame(winner);
     }
     
@@ -590,6 +592,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
       setGameState(newState);
       await saveGameState(newState);
       setGameEndDialog(true);
+      setGameEndWinner(winner);
       await completeGame(winner);
       return;
     }
@@ -683,6 +686,7 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           // Show game end modal to both players when game finishes
           if (gameJustFinished) {
             console.log(`🏁 Game finished detected via polling! Winner: ${newState.winner}`);
+            setGameEndWinner(newState.winner);
             setGameEndDialog(true);
             
             // Try to trigger completion if not already done
@@ -1096,17 +1100,18 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         open={gameEndDialog}
         onClose={() => {
           setGameEndDialog(false);
+          setGameEndWinner(null);
           setGameCompletionResult(null);
         }}
-        winner={gameState.winner ? {
-          username: gameState.winner === 'red' ? 
+        winner={gameEndWinner ? {
+          username: gameEndWinner === 'red' ? 
             (gameState.redPlayer?.slice(0, 8) + '...' || 'Red Player') : 
             (gameState.blackPlayer?.slice(0, 8) + '...' || 'Black Player'),
-          walletAddress: gameState.winner === 'red' ? 
+          walletAddress: gameEndWinner === 'red' ? 
             (gameState.redPlayer || '') : 
             (gameState.blackPlayer || '')
         } : undefined}
-        isDraw={!gameState.winner}
+        isDraw={!gameEndWinner}
         totalPot={escrowStatus?.totalEscrowed || 0}
         escrowReleased={gameCompletionResult?.escrowReleased || false}
         escrowTransactionSignature={gameCompletionResult?.escrowTransactionSignature}
