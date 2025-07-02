@@ -18,6 +18,13 @@ async function sendSOLDirectly(
   amount: number,
   gameId: string
 ): Promise<{ success: boolean; signature?: string; error?: string }> {
+  console.log(`🚀 ENTERED sendSOLDirectly function with params:`, {
+    toWallet: toWallet.slice(0, 8) + '...',
+    amount,
+    gameId,
+    keyLength: fromPrivateKey.length
+  });
+  
   try {
     console.log(`💰 DIRECT SOL TRANSFER: ${amount} SOL to ${toWallet} for game ${gameId}`);
 
@@ -227,9 +234,16 @@ export async function POST(
       
       // Game already completed - try direct SOL transfer
       const privateKey = process.env.PLATFORM_WALLET_PRIVATE_KEY;
+      console.log(`🔍 PLATFORM_WALLET_PRIVATE_KEY exists: ${!!privateKey}`);
+      console.log(`🔍 Private key length: ${privateKey?.length || 'undefined'}`);
+      
       if (privateKey) {
         console.log(`🔑 Platform private key found, attempting direct transfer of ${winnerAmount} SOL...`);
+        console.log(`🚀 About to call sendSOLDirectly function...`);
+        
         const directTransfer = await sendSOLDirectly(privateKey, winnerWallet, winnerAmount, gameId);
+        
+        console.log(`🔍 sendSOLDirectly returned:`, directTransfer);
         
         if (directTransfer.success) {
           console.log(`✅ Direct SOL transfer successful for completed game!`);

@@ -11,7 +11,10 @@ export async function POST(
     const { walletAddress } = await request.json();
     const lobbyId = context?.params?.id;
 
+    console.log(`🚀 JOIN LOBBY API: lobbyId=${lobbyId}, walletAddress=${walletAddress?.slice(0, 8)}...`);
+
     if (!walletAddress || !lobbyId) {
+      console.error(`❌ Missing required fields: walletAddress=${!!walletAddress}, lobbyId=${!!lobbyId}`);
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -53,11 +56,20 @@ export async function POST(
 
     const lobby = lobbyResult[0];
 
+    console.log(`🔍 Lobby details:`, {
+      status: lobby.status,
+      currentPlayers: lobby.current_players,
+      maxPlayers: lobby.max_players,
+      gameType: lobby.game_type
+    });
+
     if (lobby.status !== 'waiting') {
+      console.error(`❌ Lobby not accepting players - status: ${lobby.status}`);
       return NextResponse.json({ error: 'Lobby is not accepting players' }, { status: 400 });
     }
 
     if (lobby.current_players >= lobby.max_players) {
+      console.error(`❌ Lobby full - current: ${lobby.current_players}, max: ${lobby.max_players}`);
       return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
     }
 
