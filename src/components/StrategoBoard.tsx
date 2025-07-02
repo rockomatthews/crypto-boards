@@ -199,6 +199,9 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   const [moveLatency, setMoveLatency] = useState<number>(0);
   const [realTimeMoves, setRealTimeMoves] = useState<number>(0);
   
+  // Piece image cache to maintain consistent variants
+  const [pieceImageCache] = useState<Map<string, string>>(new Map());
+  
   // For demo purposes - log the game ID and wallet
   console.log('Game ID:', gameId, 'Wallet:', publicKey?.toString());
   
@@ -445,6 +448,41 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     setShowPieceSelector(true);
   }, [playerColor]);
 
+  // Get image for piece rank with cached numbered variants
+  const getPieceImage = useCallback((rank: PieceRank, color: PieceColor, isRevealed: boolean): string => {
+    if (!color) return '';
+    
+    // If piece is not revealed and not your piece, show hidden piece
+    if (!isRevealed && color !== playerColor) {
+      return `/images/stratego/pieces/${color}-hidden.png`;
+    }
+    
+    const rankName = rank.toLowerCase();
+    const cacheKey = `${color}-${rank}`;
+    
+    // Check cache first
+    if (pieceImageCache.has(cacheKey)) {
+      return pieceImageCache.get(cacheKey)!;
+    }
+    
+    let imagePath: string;
+    
+    // For pieces with only 1 copy, use simple naming
+    if (PIECE_COUNTS[rank] === 1) {
+      imagePath = `/images/stratego/pieces/${color}-${rankName}.png`;
+    } else {
+      // For pieces with multiple copies, randomly select a variant (1-indexed)
+      const variantNumber = Math.floor(Math.random() * PIECE_COUNTS[rank]) + 1;
+      imagePath = `/images/stratego/pieces/${color}-${rankName}-${variantNumber}.png`;
+    }
+    
+    // Cache the selection
+    pieceImageCache.set(cacheKey, imagePath);
+    
+    console.log(`Generated piece image: ${imagePath} for ${color} ${rank}`);
+    return imagePath;
+  }, [playerColor, pieceImageCache]);
+
   // Place selected piece on board
   const placePiece = useCallback((pieceRank: PieceRank) => {
     if (!selectedSetupSquare || !playerColor) return;
@@ -533,27 +571,6 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     setTurnStartTime(new Date());
   }, [availablePieces]);
 
-  // Get image for piece rank with numbered variants
-  const getPieceImage = (rank: PieceRank, color: PieceColor, isRevealed: boolean): string => {
-    if (!color) return '';
-    
-    // If piece is not revealed and not your piece, show hidden piece
-    if (!isRevealed && color !== playerColor) {
-      return `/images/stratego/pieces/${color}-hidden.png`;
-    }
-    
-    const rankName = rank.toLowerCase();
-    
-    // For pieces with only 1 copy, use simple naming
-    if (PIECE_COUNTS[rank] === 1) {
-      return `/images/stratego/pieces/${color}-${rankName}.png`;
-    }
-    
-    // For pieces with multiple copies, randomly select a variant (1-indexed)
-    const variantNumber = Math.floor(Math.random() * PIECE_COUNTS[rank]) + 1;
-    return `/images/stratego/pieces/${color}-${rankName}-${variantNumber}.png`;
-  };
-
   // Get symbol for piece rank (fallback if image fails)
   const getPieceSymbol = (rank: PieceRank): string => {
     const symbols: Record<PieceRank, string> = {
@@ -605,18 +622,41 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
               className="piece-image"
               onError={(e) => {
+                console.error(`Failed to load board piece image: ${getPieceImage(piece.rank, piece.color, piece.isRevealed)}`);
                 // Fallback to emoji if image fails to load
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
-                (target.nextElementSibling as HTMLElement)!.style.display = 'block';
+                const fallback = target.nextElementSibling as HTMLElement;
+                if (fallback) {
+                  fallback.style.display = 'flex';
+                }
+              }}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
               }}
             />
-            <span className="piece-fallback" style={{ display: 'none' }}>
+            <div 
+              className="piece-fallback" 
+              style={{ 
+                display: 'none',
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontSize: 'clamp(6px, 1.2vw, 12px)',
+                fontWeight: 'bold',
+                color: 'white',
+                textAlign: 'center',
+                zIndex: 1
+              }}
+            >
               {piece.isRevealed || piece.color === playerColor ? 
                 getPieceSymbol(piece.rank) : 
                 piece.color === 'red' ? '🔴' : '🔵'
               }
-            </span>
+            </div>
           </div>
         )}
       </div>
@@ -996,13 +1036,13 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             display: 'grid', 
             gridTemplateColumns: { 
               xs: 'repeat(4, 1fr)', 
-              sm: 'repeat(6, 1fr)', 
-              md: 'repeat(8, 1fr)' 
+              md: 'repeat(6, 1fr)' 
             },
             gap: 2, 
             mt: 2, 
-            maxHeight: '400px', 
-            overflowY: 'auto' 
+            maxHeight: '500px', 
+            overflowY: 'auto',
+            p: 1
           }}>
             {Object.entries(availablePieces).map(([rank, count]) => {
               const pieceImage = getPieceImage(rank as PieceRank, playerColor, true);
@@ -1013,8 +1053,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                     disabled={count === 0}
                     onClick={() => placePiece(rank as PieceRank)}
                     sx={{
-                      width: 120,
-                      height: 120,
+                      width: { xs: 80, md: 100 },
+                      height: { xs: 80, md: 100 },
                       flexDirection: 'column',
                       p: 1,
                       bgcolor: count > 0 ? '#2E4057' : 'grey.300',
@@ -1022,21 +1062,22 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                         bgcolor: count > 0 ? '#1e2a3a' : 'grey.400' 
                       },
                       position: 'relative',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      border: count > 0 ? '2px solid #4CAF50' : '2px solid #999'
                     }}
                   >
-                    {/* Piece Image */}
+                    {/* Piece Image - FULL SIZE */}
                     <Box sx={{ 
-                      width: 60, 
-                      height: 60, 
+                      width: { xs: 50, md: 70 }, 
+                      height: { xs: 50, md: 70 }, 
                       borderRadius: '50%', 
                       overflow: 'hidden',
-                      mb: 1,
+                      mb: 0.5,
                       border: '2px solid white',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      bgcolor: 'rgba(255,255,255,0.1)'
+                      bgcolor: 'rgba(255,255,255,0.2)'
                     }}>
                       <img 
                         src={pieceImage}
@@ -1044,10 +1085,10 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                         style={{
                           width: '100%',
                           height: '100%',
-                          objectFit: 'cover',
-                          borderRadius: '50%'
+                          objectFit: 'cover'
                         }}
                         onError={(e) => {
+                          console.error(`Failed to load image: ${pieceImage}`);
                           // Fallback to emoji if image fails
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
@@ -1058,13 +1099,14 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                         }}
                       />
                       <Typography 
-                        variant="h4" 
+                        variant="h5" 
                         sx={{ 
                           display: 'none',
                           alignItems: 'center',
                           justifyContent: 'center',
                           width: '100%',
-                          height: '100%'
+                          height: '100%',
+                          color: 'white'
                         }}
                       >
                         {getPieceSymbol(rank as PieceRank)}
@@ -1073,7 +1115,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                     
                     {/* Piece Name */}
                     <Typography variant="caption" sx={{ 
-                      fontSize: '0.7rem',
+                      fontSize: { xs: '0.6rem', md: '0.7rem' },
                       fontWeight: 'bold',
                       color: 'white',
                       textAlign: 'center',
@@ -1085,7 +1127,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                   <Typography variant="caption" display="block" sx={{ 
                     mt: 0.5, 
                     fontWeight: 'bold',
-                    color: count > 0 ? 'text.primary' : 'text.disabled'
+                    color: count > 0 ? 'success.main' : 'text.disabled'
                   }}>
                     {count} left
                   </Typography>
@@ -1330,7 +1372,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           width: 90%;
           height: 90%;
           border-radius: 50%;
-          border: 1px solid #333;
+          border: 2px solid #333;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1341,6 +1383,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           overflow: hidden;
           position: relative;
           box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          background: transparent;
         }
         
         .piece-image {
@@ -1348,6 +1391,10 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           height: 100%;
           object-fit: cover;
           border-radius: 50%;
+          position: absolute;
+          top: 0;
+          left: 0;
+          z-index: 1;
         }
         
         .piece-fallback {
@@ -1356,21 +1403,26 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           left: 50%;
           transform: translate(-50%, -50%);
           font-size: clamp(6px, 1.2vw, 12px);
+          z-index: 2;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
         
         .stratego-piece.red {
-          background: radial-gradient(circle, #FF6B6B, #CC0000);
-          color: white;
+          border-color: #CC0000;
+          box-shadow: 0 2px 4px rgba(204, 0, 0, 0.4);
         }
         
         .stratego-piece.blue {
-          background: radial-gradient(circle, #6BB6FF, #0066CC);
-          color: white;
+          border-color: #0066CC;
+          box-shadow: 0 2px 4px rgba(0, 102, 204, 0.4);
         }
         
         .stratego-piece.hidden {
           background: #666;
           color: white;
+          border-color: #333;
         }
         
         .lake-water {
