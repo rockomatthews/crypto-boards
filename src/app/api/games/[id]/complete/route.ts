@@ -83,8 +83,32 @@ async function sendSOLDirectly(
         log(`🔑 JSON array has ${keyArray.length} elements`);
         log(`🔑 First 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
       } 
-      // Try base64 format
-      else if (fromPrivateKey.length === 88 || fromPrivateKey.length === 44) {
+      // Try base58 format first for 88-character strings (standard Solana format)
+      else if (fromPrivateKey.length === 88) {
+        log(`🔑 Parsing as base58 (length ${fromPrivateKey.length}) - Standard Solana format`);
+        log(`🔑 Base58 string sample: "${fromPrivateKey.slice(0, 20)}...${fromPrivateKey.slice(-10)}"`);
+        
+        try {
+          const bs58 = await import('bs58');
+          privateKeyBytes = bs58.default.decode(fromPrivateKey);
+          log(`✅ Base58 decoded to ${privateKeyBytes.length} bytes`);
+          log(`🔑 Decoded first 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
+          log(`🔑 Decoded last 10 bytes: ${Array.from(privateKeyBytes.slice(-10))}`);
+        } catch (base58Error) {
+          logError(`❌ Base58 decoding failed, trying base64 fallback`, base58Error);
+          
+          // Fallback to base64 if base58 fails
+          try {
+            privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'base64'));
+            log(`✅ Base64 fallback decoded to ${privateKeyBytes.length} bytes`);
+          } catch (base64Error) {
+            logError(`❌ Both base58 and base64 decoding failed`, base64Error);
+            throw new Error(`Failed to decode 88-char key as base58 or base64: ${base58Error}`);
+          }
+        }
+      }
+      // Try base64 format for other lengths
+      else if (fromPrivateKey.length === 44) {
         log(`🔑 Parsing as base64 (length ${fromPrivateKey.length})`);
         log(`🔑 Base64 string sample: "${fromPrivateKey.slice(0, 20)}...${fromPrivateKey.slice(-10)}"`);
         
