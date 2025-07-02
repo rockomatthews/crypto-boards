@@ -106,8 +106,43 @@ async function sendSOLDirectly(
       throw new Error(`Invalid private key format: ${keyError}`);
     }
     
-    const platformKeypair = Keypair.fromSecretKey(privateKeyBytes);
-    console.log(`💳 Platform wallet: ${platformKeypair.publicKey.toString()}`);
+    // Try to create the keypair and catch "provided secretKey is invalid" errors
+    let platformKeypair: Keypair;
+    try {
+      platformKeypair = Keypair.fromSecretKey(privateKeyBytes);
+      console.log(`✅ Successfully created keypair from ${privateKeyBytes.length} byte key`);
+    } catch (keypairError) {
+      console.error(`❌ Keypair creation failed with ${privateKeyBytes.length} bytes:`, keypairError);
+      
+      // If we had a 66-byte key, try the other slicing option
+      if (fromPrivateKey.startsWith('[') && fromPrivateKey.endsWith(']')) {
+        try {
+          const keyArray = JSON.parse(fromPrivateKey);
+          
+          if (keyArray.length === 66) {
+            console.log(`🔧 Trying alternative slicing for 66-byte key...`);
+            
+            // Try removing last 2 bytes instead of first 2
+            const alternativeBytes = new Uint8Array(keyArray.slice(0, 64));
+            console.log(`🔧 Alternative bytes length: ${alternativeBytes.length}`);
+            console.log(`🔧 Alternative first 10 bytes: ${Array.from(alternativeBytes.slice(0, 10))}`);
+            
+            platformKeypair = Keypair.fromSecretKey(alternativeBytes);
+            console.log(`✅ SUCCESS with alternative slicing!`);
+          } else {
+            throw new Error(`Still can't create keypair - array length ${keyArray.length}`);
+          }
+        } catch (alternativeError) {
+          console.error(`❌ Alternative parsing also failed:`, alternativeError);
+          throw new Error(`Failed all key parsing attempts: ${alternativeError}`);
+        }
+      } else {
+        throw new Error(`Keypair creation failed and no alternatives: ${keypairError}`);
+      }
+    }
+    
+    const platformPublicKey = platformKeypair.publicKey.toString();
+    console.log(`💳 Platform wallet: ${platformPublicKey}`);
     
     let winnerWallet: PublicKey;
     try {
@@ -268,7 +303,14 @@ export async function POST(
             message: `Game was already completed but payout failed: ${directTransfer.error}`,
             gameId: gameId,
             escrowReleased: false,
-            payoutError: directTransfer.error
+            payoutError: directTransfer.error,
+            debugInfo: {
+              privateKeyExists: !!privateKey,
+              privateKeyLength: privateKey?.length,
+              winnerWallet: winnerWallet.slice(0, 8) + '...',
+              winnerAmount: winnerAmount,
+              errorDetails: directTransfer.error
+            }
           });
         }
       } else {
