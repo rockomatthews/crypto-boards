@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 
+interface CompletedGameRecord {
+  game_id: string;
+  game_type: string;
+  entry_fee: string | number;
+  ended_at: string;
+  player_id: string;
+  is_winner: boolean;
+  wallet_address: string;
+  username: string;
+}
+
 export async function POST() {
   try {
     console.log('🔄 Starting game stats migration via API...');
@@ -25,7 +36,9 @@ export async function POST() {
       ORDER BY g.ended_at ASC
     `;
 
-    if (completedGames.length === 0) {
+    const typedCompletedGames = completedGames as CompletedGameRecord[];
+
+    if (typedCompletedGames.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No completed games found to migrate',
@@ -34,12 +47,12 @@ export async function POST() {
     }
 
     // Step 2: Process games and create game_stats records
-    const gameGroups = new Map();
-    completedGames.forEach(record => {
+    const gameGroups = new Map<string, CompletedGameRecord[]>();
+    typedCompletedGames.forEach(record => {
       if (!gameGroups.has(record.game_id)) {
         gameGroups.set(record.game_id, []);
       }
-      gameGroups.get(record.game_id).push(record);
+      gameGroups.get(record.game_id)?.push(record);
     });
 
     let gameStatsCreated = 0;
@@ -48,12 +61,12 @@ export async function POST() {
     for (const [gameId, players] of gameGroups) {
       if (players.length !== 2) continue;
 
-      const winner = players.find(p => p.is_winner === true);
-      const loser = players.find(p => p.is_winner === false);
+      const winner = players.find((p: CompletedGameRecord) => p.is_winner === true);
+      const loser = players.find((p: CompletedGameRecord) => p.is_winner === false);
 
       if (!winner || !loser) continue;
 
-      const entryFee = parseFloat(winner.entry_fee);
+      const entryFee = parseFloat(winner.entry_fee.toString());
       const winnerAmount = entryFee * 2 * 0.96; // 96% to winner
       const loserAmount = -entryFee; // Lost entry fee
 
@@ -136,14 +149,14 @@ export async function POST() {
       success: true,
       message: 'Stats migration completed successfully',
       stats: {
-        completedGamesFound: completedGames.length,
+        completedGamesFound: typedCompletedGames.length,
         gameStatsCreated,
         playerStatsUpdated,
         finalCounts: {
-          gameStatsTotal: parseInt(verificationStats.game_stats_count),
-          activePlayerStats: parseInt(verificationStats.active_player_stats_count),
-          gamesWithStats: parseInt(verificationStats.games_with_stats),
-          totalCompletedGames: parseInt(verificationStats.completed_games_count)
+          gameStatsTotal: parseInt(verificationStats.game_stats_count?.toString() || '0'),
+          activePlayerStats: parseInt(verificationStats.active_player_stats_count?.toString() || '0'),
+          gamesWithStats: parseInt(verificationStats.games_with_stats?.toString() || '0'),
+          totalCompletedGames: parseInt(verificationStats.completed_games_count?.toString() || '0')
         }
       },
       processedGames: processedGames.slice(0, 10) // Show first 10 for verification
