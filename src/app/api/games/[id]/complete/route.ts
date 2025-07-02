@@ -69,75 +69,74 @@ async function sendSOLDirectly(
       
       // Handle different key lengths
       if (privateKeyBytes.length === 64) {
-        // Perfect - standard ed25519 private key
-        console.log(`✅ Standard 64-byte ed25519 key`);
+        // Perfect - standard ed25519 keypair (32 private + 32 public)
+        console.log(`✅ Standard 64-byte ed25519 keypair`);
       } else if (privateKeyBytes.length === 66) {
-        // Sometimes keys have 2 extra bytes at the start - remove them
-        console.log(`🔧 66-byte key detected - trying different slicing approaches`);
-        console.log(`🔑 Original first 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
+        // Common case: 64 bytes + 2 header bytes - remove the headers
+        console.log(`🔧 66-byte key detected - removing header bytes`);
         
-        // Try removing first 2 bytes
-        const option1 = privateKeyBytes.slice(2, 66);
-        console.log(`🔧 Option 1 (slice 2-66) first 10 bytes: ${Array.from(option1.slice(0, 10))}`);
+        // Check if first 2 bytes look like headers (often [0,0] or similar)
+        const firstTwoBytes = Array.from(privateKeyBytes.slice(0, 2));
+        const lastTwoBytes = Array.from(privateKeyBytes.slice(-2));
+        console.log(`🔧 First 2 bytes: ${firstTwoBytes}`);
+        console.log(`🔧 Last 2 bytes: ${lastTwoBytes}`);
         
-        // Try removing last 2 bytes  
-        const option2 = privateKeyBytes.slice(0, 64);
-        console.log(`🔧 Option 2 (slice 0-64) first 10 bytes: ${Array.from(option2.slice(0, 10))}`);
-        
-        // Use option 1 first
-        privateKeyBytes = option1;
+        // Try removing first 2 bytes (most common)
+        privateKeyBytes = privateKeyBytes.slice(2, 66);
+        console.log(`🔧 Removed first 2 bytes, new length: ${privateKeyBytes.length}`);
       } else if (privateKeyBytes.length === 96) {
         // Sometimes includes public key at end - extract first 64 bytes
         console.log(`🔧 96-byte key detected - extracting first 64 bytes`);
         privateKeyBytes = privateKeyBytes.slice(0, 64);
       } else if (privateKeyBytes.length === 32) {
-        // This might be just the seed - try to expand it
-        console.log(`🔧 32-byte seed detected - this might not work`);
-        throw new Error(`32-byte seed provided - need full 64-byte private key`);
+        // This is just the private key portion - need to generate public key
+        console.log(`🔧 32-byte private key detected - this is only half the keypair!`);
+        throw new Error(`32-byte private key provided - Solana needs full 64-byte keypair (private + public)`);
       } else {
-        throw new Error(`Invalid key length: ${privateKeyBytes.length} bytes (expected 64, got extra bytes)`);
+        throw new Error(`Unsupported key length: ${privateKeyBytes.length} bytes (expected 64 for full keypair)`);
       }
       
       console.log(`✅ Final key length: ${privateKeyBytes.length} bytes`);
       console.log(`🔑 Final first 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
+      console.log(`🔑 Final last 10 bytes: ${Array.from(privateKeyBytes.slice(-10))}`);
       
     } catch (keyError) {
       console.error(`❌ Private key parsing failed:`, keyError);
       throw new Error(`Invalid private key format: ${keyError}`);
     }
     
-    // Try to create the keypair and catch "provided secretKey is invalid" errors
+    // Try to create the keypair with the full 64-byte array
     let platformKeypair: Keypair;
     try {
+      console.log(`🔑 Creating keypair from ${privateKeyBytes.length}-byte array...`);
       platformKeypair = Keypair.fromSecretKey(privateKeyBytes);
-      console.log(`✅ Successfully created keypair from ${privateKeyBytes.length} byte key`);
+      console.log(`✅ Successfully created keypair!`);
     } catch (keypairError) {
-      console.error(`❌ Keypair creation failed with ${privateKeyBytes.length} bytes:`, keypairError);
+      console.error(`❌ Keypair creation failed:`, keypairError);
       
-      // If we had a 66-byte key, try the other slicing option
+      const errorMessage = keypairError instanceof Error ? keypairError.message : 'Unknown keypair error';
+      
+      // If it's a 66-byte key that failed, try removing last 2 bytes instead
       if (fromPrivateKey.startsWith('[') && fromPrivateKey.endsWith(']')) {
         try {
           const keyArray = JSON.parse(fromPrivateKey);
           
           if (keyArray.length === 66) {
-            console.log(`🔧 Trying alternative slicing for 66-byte key...`);
-            
-            // Try removing last 2 bytes instead of first 2
+            console.log(`🔧 Trying to remove LAST 2 bytes instead of first 2...`);
             const alternativeBytes = new Uint8Array(keyArray.slice(0, 64));
-            console.log(`🔧 Alternative bytes length: ${alternativeBytes.length}`);
-            console.log(`🔧 Alternative first 10 bytes: ${Array.from(alternativeBytes.slice(0, 10))}`);
+            console.log(`🔧 Alternative array length: ${alternativeBytes.length}`);
             
             platformKeypair = Keypair.fromSecretKey(alternativeBytes);
-            console.log(`✅ SUCCESS with alternative slicing!`);
+            console.log(`✅ SUCCESS with removing last 2 bytes!`);
           } else {
-            throw new Error(`Still can't create keypair - array length ${keyArray.length}`);
+            throw new Error(`Can't create alternative - array length ${keyArray.length}`);
           }
         } catch (alternativeError) {
           console.error(`❌ Alternative parsing also failed:`, alternativeError);
-          throw new Error(`Failed all key parsing attempts: ${alternativeError}`);
+          throw new Error(`All key parsing attempts failed: ${errorMessage}`);
         }
       } else {
-        throw new Error(`Keypair creation failed and no alternatives: ${keypairError}`);
+        throw new Error(`Keypair creation failed: ${errorMessage}`);
       }
     }
     
