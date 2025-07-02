@@ -23,43 +23,64 @@ async function sendSOLDirectly(
 
     // Get connection
     const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    console.log(`🔗 Using RPC: ${RPC_URL}`);
     const connection = new Connection(RPC_URL, 'confirmed');
 
     // Parse private key
     let privateKeyBytes: Uint8Array;
+    console.log(`🔑 Parsing private key (length: ${fromPrivateKey.length})`);
     
-    if (fromPrivateKey.includes('[') && fromPrivateKey.includes(']')) {
-      const keyArray = JSON.parse(fromPrivateKey);
-      privateKeyBytes = new Uint8Array(keyArray);
-    } else if (fromPrivateKey.length === 128) {
-      privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'hex'));
-    } else {
-      try {
-        privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'base64'));
-      } catch {
-        const bs58 = await import('bs58');
-        privateKeyBytes = bs58.default.decode(fromPrivateKey);
+    try {
+      if (fromPrivateKey.includes('[') && fromPrivateKey.includes(']')) {
+        console.log(`🔑 Parsing as JSON array`);
+        const keyArray = JSON.parse(fromPrivateKey);
+        privateKeyBytes = new Uint8Array(keyArray);
+      } else if (fromPrivateKey.length === 128) {
+        console.log(`🔑 Parsing as hex string`);
+        privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'hex'));
+      } else {
+        try {
+          console.log(`🔑 Parsing as base64`);
+          privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'base64'));
+        } catch {
+          console.log(`🔑 Parsing as bs58`);
+          const bs58 = await import('bs58');
+          privateKeyBytes = bs58.default.decode(fromPrivateKey);
+        }
       }
+    } catch (keyError) {
+      console.error(`❌ Private key parsing failed:`, keyError);
+      throw new Error(`Invalid private key format: ${keyError}`);
     }
     
     const platformKeypair = Keypair.fromSecretKey(privateKeyBytes);
-    const winnerWallet = new PublicKey(toWallet);
-    
     console.log(`💳 Platform wallet: ${platformKeypair.publicKey.toString()}`);
-    console.log(`🏆 Winner wallet: ${winnerWallet.toString()}`);
+    
+    let winnerWallet: PublicKey;
+    try {
+      winnerWallet = new PublicKey(toWallet);
+      console.log(`🏆 Winner wallet: ${winnerWallet.toString()}`);
+    } catch (walletError) {
+      console.error(`❌ Invalid winner wallet address:`, walletError);
+      throw new Error(`Invalid winner wallet address: ${toWallet}`);
+    }
 
     // Check balance
+    console.log(`💰 Checking platform wallet balance...`);
     const balance = await connection.getBalance(platformKeypair.publicKey);
     const requiredLamports = Math.floor(amount * LAMPORTS_PER_SOL);
     
-    console.log(`💰 Platform balance: ${balance / LAMPORTS_PER_SOL} SOL`);
+    console.log(`💰 Platform balance: ${balance / LAMPORTS_PER_SOL} SOL (${balance} lamports)`);
     console.log(`💰 Sending: ${amount} SOL (${requiredLamports} lamports)`);
     
     if (balance < requiredLamports) {
-      throw new Error(`Insufficient balance: ${balance / LAMPORTS_PER_SOL} SOL < ${amount} SOL required`);
+      const errorMsg = `Insufficient balance: ${balance / LAMPORTS_PER_SOL} SOL < ${amount} SOL required`;
+      console.error(`❌ ${errorMsg}`);
+      throw new Error(errorMsg);
     }
 
     // Create transaction
+    console.log(`📝 Creating transaction...`);
     const transaction = new Transaction().add(
       SystemProgram.transfer({
         fromPubkey: platformKeypair.publicKey,
@@ -71,8 +92,10 @@ async function sendSOLDirectly(
     const { blockhash } = await connection.getLatestBlockhash('confirmed');
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = platformKeypair.publicKey;
+    console.log(`📝 Transaction created with blockhash: ${blockhash}`);
 
     // Send transaction
+    console.log(`🚀 Sending transaction...`);
     const signature = await connection.sendTransaction(transaction, [platformKeypair], {
       skipPreflight: false,
       preflightCommitment: 'confirmed',
@@ -82,10 +105,13 @@ async function sendSOLDirectly(
     console.log(`⏳ Transaction sent: ${signature}`);
 
     // Confirm transaction
+    console.log(`⏳ Confirming transaction...`);
     const confirmation = await connection.confirmTransaction(signature, 'confirmed');
     
     if (confirmation.value?.err) {
-      throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+      const errorMsg = `Transaction failed: ${JSON.stringify(confirmation.value.err)}`;
+      console.error(`❌ ${errorMsg}`);
+      throw new Error(errorMsg);
     }
     
     console.log(`✅ REAL SOL TRANSFER CONFIRMED: ${amount} SOL to ${toWallet}`);
@@ -156,6 +182,7 @@ export async function POST(
       // Game already completed - try direct SOL transfer
       const privateKey = process.env.PLATFORM_WALLET_PRIVATE_KEY;
       if (privateKey) {
+        console.log(`🔑 Platform private key found, attempting direct transfer of ${winnerAmount} SOL...`);
         const directTransfer = await sendSOLDirectly(privateKey, winnerWallet, winnerAmount, gameId);
         
         if (directTransfer.success) {
@@ -174,18 +201,27 @@ export async function POST(
             message: `Game was already completed - payout of ${winnerAmount} SOL sent directly!`
           });
         } else {
-          console.error(`❌ Direct SOL transfer failed:`, directTransfer.error);
+          console.error(`❌ Direct SOL transfer failed for completed game:`, directTransfer.error);
+          return NextResponse.json({ 
+            success: true,
+            alreadyCompleted: true,
+            message: `Game was already completed but payout failed: ${directTransfer.error}`,
+            gameId: gameId,
+            escrowReleased: false,
+            payoutError: directTransfer.error
+          });
         }
+      } else {
+        console.error(`❌ No PLATFORM_WALLET_PRIVATE_KEY found for completed game payout!`);
+        return NextResponse.json({ 
+          success: true,
+          alreadyCompleted: true,
+          message: 'Game was already completed but no platform wallet key configured',
+          gameId: gameId,
+          escrowReleased: false,
+          payoutError: 'No platform wallet private key'
+        });
       }
-      
-      // Fall back to "already completed" response
-      return NextResponse.json({ 
-        success: true,
-        alreadyCompleted: true,
-        message: 'Game was already completed',
-        gameId: gameId,
-        escrowReleased: false
-      });
     }
 
     // Get player information for SMS notifications
