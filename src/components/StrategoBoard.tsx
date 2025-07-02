@@ -821,7 +821,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           
           setGameState(newState);
           
-          if (gameStatus === 'setup' || gameStatus === 'active') {
+          if (gameStatus === 'setup') {
             await saveGameState(newState);
           }
         }
