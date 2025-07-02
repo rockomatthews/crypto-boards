@@ -4,11 +4,11 @@ import { db } from '@/lib/db/schema';
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const image = formData.get('image') as File;
+    const image = formData.get('avatar') as File;
     const walletAddress = formData.get('walletAddress') as string;
 
     if (!image || !walletAddress) {
-      return NextResponse.json({ error: 'Image and wallet address are required' }, { status: 400 });
+      return NextResponse.json({ error: 'Avatar and wallet address are required' }, { status: 400 });
     }
 
     // Validate file type

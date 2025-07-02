@@ -10,25 +10,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
     }
 
-    // Look for existing player
+    console.log(`📡 GET: Fetching profile for wallet ${walletAddress.slice(0, 8)}`);
+
+    // Get player data from players table
     const players = await db`
-      SELECT username, avatar_url, phone_number, sms_notifications_enabled
+      SELECT wallet_address, username, phone_number, avatar_url
       FROM players 
       WHERE wallet_address = ${walletAddress}
     `;
 
+    console.log(`🔍 GET: Database query returned ${players.length} rows:`, players);
+
     if (players.length === 0) {
+      console.log(`⚠️ GET: No player found, creating new player for wallet ${walletAddress.slice(0, 8)}`);
+      
+      const shortWallet = walletAddress.slice(0, 8);
+      const defaultUsername = `Player${shortWallet}`;
+      
       // Create new player
-      const username = `Player${walletAddress.slice(0, 4)}`;
-      await db`
-        INSERT INTO players (wallet_address, username, avatar_url, sms_notifications_enabled)
-        VALUES (${walletAddress}, ${username}, '', false)
+      const newPlayers = await db`
+        INSERT INTO players (wallet_address, username, phone_number, avatar_url)
+        VALUES (${walletAddress}, ${defaultUsername}, null, '')
+        ON CONFLICT (wallet_address) DO UPDATE SET username = ${defaultUsername}
+        RETURNING wallet_address, username, phone_number, avatar_url
       `;
       
+      console.log(`✅ GET: Created new player:`, newPlayers[0]);
+      
       return NextResponse.json({
-        username,
-        avatar_url: '',
-        phone_number: null,
+        username: newPlayers[0].username,
+        avatar_url: newPlayers[0].avatar_url || '',
+        phone_number: newPlayers[0].phone_number,
         sms_notifications_enabled: false,
         games_played: 0,
         games_won: 0,
@@ -36,13 +48,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Return existing player data
     const player = players[0];
+    console.log(`✅ GET: Found existing player - username=${player.username}, phone=${player.phone_number}`);
+
     return NextResponse.json({
-      username: player.username || `Player${walletAddress.slice(0, 4)}`,
+      username: player.username,
       avatar_url: player.avatar_url || '',
-      phone_number: player.phone_number || null,
-      sms_notifications_enabled: Boolean(player.sms_notifications_enabled),
+      phone_number: player.phone_number,
+      sms_notifications_enabled: false,
       games_played: 0,
       games_won: 0,
       total_winnings: 0
@@ -50,17 +63,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('GET Profile error:', error);
-    // Return working fallback
-    const walletAddress = new URL(request.url).searchParams.get('walletAddress') || 'unknown';
-    return NextResponse.json({
-      username: `Player${walletAddress.slice(0, 4)}`,
-      avatar_url: '',
-      phone_number: null,
-      sms_notifications_enabled: false,
-      games_played: 0,
-      games_won: 0,
-      total_winnings: 0
-    });
+    return NextResponse.json({ error: 'Fetch failed' }, { status: 500 });
   }
 }
 
@@ -72,31 +75,50 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
     }
 
-    // Update what we can
+    console.log(`📝 PUT: Updating wallet ${walletAddress.slice(0, 8)} with username=${username}, phone=${phoneNumber}`);
+
+    // Update what we can and verify it worked
+    let updateResult;
+    
     if (username && phoneNumber !== undefined) {
-      await db`
+      updateResult = await db`
         UPDATE players
         SET username = ${username}, phone_number = ${phoneNumber}
         WHERE wallet_address = ${walletAddress}
+        RETURNING username, phone_number
       `;
     } else if (username) {
-      await db`
+      updateResult = await db`
         UPDATE players
         SET username = ${username}
         WHERE wallet_address = ${walletAddress}
+        RETURNING username, phone_number
       `;
     } else if (phoneNumber !== undefined) {
-      await db`
+      updateResult = await db`
         UPDATE players
         SET phone_number = ${phoneNumber}
         WHERE wallet_address = ${walletAddress}
+        RETURNING username, phone_number
       `;
+    } else {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
+
+    console.log(`✅ PUT: Database returned ${updateResult.length} rows:`, updateResult);
+
+    if (updateResult.length === 0) {
+      console.error(`❌ PUT: No rows updated - player not found for wallet ${walletAddress}`);
+      return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+    }
+
+    const result = updateResult[0];
+    console.log(`✅ PUT: Successfully updated to username=${result.username}, phone=${result.phone_number}`);
 
     return NextResponse.json({ 
       success: true,
-      username: username,
-      phone_number: phoneNumber
+      username: result.username,
+      phone_number: result.phone_number
     });
 
   } catch (error) {
