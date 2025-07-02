@@ -65,12 +65,18 @@ export async function POST(
 
     if (lobby.status !== 'waiting') {
       console.error(`❌ Lobby not accepting players - status: ${lobby.status}`);
-      return NextResponse.json({ error: 'Lobby is not accepting players' }, { status: 400 });
+      return NextResponse.json({ 
+        error: `Lobby is not accepting players (status: ${lobby.status})`,
+        details: { actualStatus: lobby.status, expectedStatus: 'waiting' }
+      }, { status: 400 });
     }
 
     if (lobby.current_players >= lobby.max_players) {
       console.error(`❌ Lobby full - current: ${lobby.current_players}, max: ${lobby.max_players}`);
-      return NextResponse.json({ error: 'Lobby is full' }, { status: 400 });
+      return NextResponse.json({ 
+        error: `Lobby is full (${lobby.current_players}/${lobby.max_players})`,
+        details: { currentPlayers: lobby.current_players, maxPlayers: lobby.max_players }
+      }, { status: 400 });
     }
 
     // Check if player is already in the lobby
