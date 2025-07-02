@@ -53,21 +53,21 @@ const GAME_OPTIONS = [
   },
   {
     id: 3,
-    title: 'Go',
-    description: 'Ancient strategy game meets modern crypto gaming.',
-    image: '/images/go.jpg',
+    title: 'Stratego',
+    description: 'Deploy your army and capture the enemy flag in this classic strategy battle!',
+    image: '/images/stratego.png',
     minPlayers: 2,
     maxPlayers: 2,
-    route: '/go'
+    route: '/stratego'
   },
   {
     id: 4,
-    title: 'Poker',
-    description: 'Texas Hold\'em with crypto stakes. Play with friends or join public tables.',
-    image: '/images/poker.jpg',
+    title: 'Shoots & Ladders',
+    description: 'Classic board game with crypto stakes. Climb to victory!',
+    image: '/images/shootsAndLadders.png',
     minPlayers: 2,
     maxPlayers: 6,
-    route: '/poker'
+    route: '/shoots-ladders'
   }
 ];
 

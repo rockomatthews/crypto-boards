@@ -2,7 +2,10 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert } from '@mui/material';
+import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert, CircularProgress } from '@mui/material';
+import GameEndModal from './GameEndModal';
+import { PublicKey } from '@solana/web3.js';
+import { magicBlockManager } from '../lib/magicblock';
 
 // Game types
 type PieceColor = 'red' | 'blue' | null;
@@ -134,7 +137,7 @@ function resolveCombat(attacker: StrategoPiece, defender: StrategoPiece): 'attac
 }
 
 export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
-  const { publicKey } = useWallet();
+  const { publicKey, signTransaction } = useWallet();
   const [gameState, setGameState] = useState<GameState>(() => ({
     board: Array(10).fill(null).map(() => Array(10).fill(null)),
     currentPlayer: 'red',
@@ -151,15 +154,49 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   const [validMoves, setValidMoves] = useState<[number, number][]>([]);
   const [playerColor, setPlayerColor] = useState<Player | null>(null);
   const [gameEndDialog, setGameEndDialog] = useState(false);
+  const [gameEndWinner, setGameEndWinner] = useState<Player | null>(null); // Store winner at detection time
   const [combatDialog, setCombatDialog] = useState<CombatResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [gameCompletionResult, setGameCompletionResult] = useState<{
+    escrowReleased: boolean;
+    escrowTransactionSignature?: string;
+    winnerAmount?: number;
+    platformFee?: number;
+    message?: string;
+  } | null>(null);
   
   // Setup state
   const [availablePieces, setAvailablePieces] = useState<Record<PieceRank, number>>(PIECE_COUNTS);
   const [selectedPieceType, setSelectedPieceType] = useState<PieceRank>('Scout');
   const [setupStartTime, setSetupStartTime] = useState<Date | null>(null);
   const [turnStartTime, setTurnStartTime] = useState<Date | null>(null);
+
+  // Forfeit dialog state
+  const [showForfeitDialog, setShowForfeitDialog] = useState(false);
+  const [forfeitLoading, setForfeitLoading] = useState(false);
+  
+  // Game state management
+  const [gameStartTime, setGameStartTime] = useState<Date | null>(null);
+  const [escrowStatus, setEscrowStatus] = useState<{
+    escrows: {
+      id: string;
+      wallet_address: string;
+      amount: string;
+      status: string;
+      username: string;
+    }[];
+    totalEscrowed: number;
+    platformFeePercentage: number;
+    estimatedPlatformFee: number;
+    estimatedWinnerAmount: number;
+  } | null>(null);
+  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
+
+  // MagicBlock state
+  const [ephemeralSession, setEphemeralSession] = useState<string | null>(null);
+  const [moveLatency, setMoveLatency] = useState<number>(0);
+  const [realTimeMoves, setRealTimeMoves] = useState<number>(0);
   
   // For demo purposes - log the game ID and wallet
   console.log('Game ID:', gameId, 'Wallet:', publicKey?.toString());
@@ -288,6 +325,11 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   // Make a move with combat resolution
   const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
     setLoading(true);
+    
+    // Track MagicBlock performance
+    const moveStart = Date.now();
+    setMoveLatency(Date.now() - moveStart);
+    setRealTimeMoves(prev => prev + 1);
     
     const newBoard = gameState.board.map(row => [...row]);
     const attackingPiece = newBoard[fromRow][fromCol];
@@ -570,6 +612,266 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     );
   };
 
+  // Save game state to API
+  const saveGameState = useCallback(async (state: GameState) => {
+    if (!publicKey || !currentPlayerId) return;
+    
+    try {
+      const response = await fetch(`/api/games/${gameId}/state`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newState: state,
+          playerId: currentPlayerId
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save game state:', response.status);
+        setError(`Failed to save game state: ${response.status}`);
+      } else {
+        if (error) setError(null);
+      }
+    } catch (error) {
+      console.error('Error saving game state:', error);
+      setError('Failed to save game state: Network error');
+    }
+  }, [gameId, publicKey, currentPlayerId, error]);
+
+  // Complete game and handle payouts
+  const completeGame = useCallback(async (winner: Player) => {
+    try {
+      console.log(`🏁 Completing game: ${winner} wins!`, { 
+        winner,
+        winnerWallet: winner === 'red' ? gameState.redPlayer : gameState.bluePlayer,
+        loserWallet: winner === 'red' ? gameState.bluePlayer : gameState.redPlayer,
+        redPlayer: gameState.redPlayer,
+        bluePlayer: gameState.bluePlayer
+      });
+
+      const gameResponse = await fetch(`/api/games/${gameId}`);
+      if (gameResponse.ok) {
+        const gameData = await gameResponse.json();
+        
+        if (gameData.players && gameData.players.length >= 2) {
+          const winnerWallet = winner === 'red' ? gameState.redPlayer : gameState.bluePlayer;
+          const loserWallet = winner === 'red' ? gameState.bluePlayer : gameState.redPlayer;
+          
+          if (winnerWallet && loserWallet) {
+            const response = await fetch(`/api/games/${gameId}/complete`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                winnerWallet,
+                loserWallet,
+              }),
+            });
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error('❌ Failed to complete game:', response.status, errorText);
+              setError(`Failed to complete game: ${response.status}`);
+            } else {
+              const result = await response.json();
+              console.log('✅ Game completed successfully:', result);
+              
+              // Store completion result for GameEndModal
+              setGameCompletionResult({
+                escrowReleased: result.escrowReleased || false,
+                escrowTransactionSignature: result.escrowTransactionSignature,
+                winnerAmount: result.winnerAmount,
+                platformFee: result.platformFee,
+                message: result.message
+              });
+              
+              // Show brief success message
+              setError(result.message || '✅ Game completed successfully!');
+              setTimeout(() => setError(null), 3000);
+            }
+          } else {
+            console.error('❌ Invalid player data:', gameData.players);
+            setError('Unable to complete game - invalid player data');
+          }
+        }
+      } else {
+        console.error('❌ Failed to fetch game data:', gameResponse.status);
+        setError('Unable to complete game - failed to fetch game data');
+      }
+    } catch (error) {
+      console.error('❌ Error completing game:', error);
+      setError('Unable to complete game - network error');
+    }
+  }, [gameId, publicKey, gameState.redPlayer, gameState.bluePlayer]);
+
+  // Handle forfeit
+  const handleForfeit = useCallback(async () => {
+    if (!playerColor || !publicKey) return;
+    
+    setForfeitLoading(true);
+    try {
+      const opponent: Player = playerColor === 'red' ? 'blue' : 'red';
+      
+      console.log(`🏳️ ${playerColor} forfeiting - ${opponent} wins!`);
+      
+      await completeGame(opponent);
+      
+      setGameEndWinner(opponent);
+      setGameEndDialog(true);
+      
+    } catch (error) {
+      console.error('❌ Error forfeiting game:', error);
+      setError('Failed to forfeit game');
+    } finally {
+      setForfeitLoading(false);
+      setShowForfeitDialog(false);
+    }
+  }, [playerColor, publicKey, completeGame]);
+
+  // Fetch escrow status
+  const fetchEscrowStatus = useCallback(async () => {
+    if (!publicKey) return;
+    
+    try {
+      const response = await fetch(`/api/games/${gameId}/escrow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'get_escrow_status',
+          playerWallet: publicKey.toString()
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setEscrowStatus(data);
+      }
+    } catch (error) {
+      console.error('Error fetching escrow status:', error);
+    }
+  }, [gameId, publicKey]);
+
+  // Initialize MagicBlock session
+  const initializeMagicBlockSession = useCallback(async () => {
+    if (!publicKey || !signTransaction || gameState.gameStatus !== 'active') return;
+
+    try {
+      const gameStateAccount = new PublicKey('11111111111111111111111111111111');
+      
+      const result = await magicBlockManager.initializeGameSession(
+        gameId,
+        gameStateAccount,
+        publicKey,
+        signTransaction
+      );
+
+      if (result.success) {
+        setEphemeralSession(result.ephemeralSession || null);
+      }
+    } catch (error) {
+      console.error('MagicBlock initialization failed:', error);
+    }
+  }, [publicKey, signTransaction, gameState.gameStatus, gameId]);
+
+  // Initialize game state
+  const initializeGameState = useCallback(async () => {
+    if (!publicKey) return;
+    
+    try {
+      const gameResponse = await fetch(`/api/games/${gameId}`);
+      if (gameResponse.ok) {
+        const gameData = await gameResponse.json();
+        const walletAddress = publicKey.toString();
+        
+        if (gameData.players && gameData.players.length >= 1) {
+          const currentPlayer = gameData.players.find((p: { id: string; wallet_address: string }) => p.wallet_address === walletAddress);
+          if (currentPlayer) {
+            setCurrentPlayerId(currentPlayer.id);
+            
+            if (gameData.players[0]?.wallet_address === walletAddress) {
+              setPlayerColor('red');
+            } else if (gameData.players[1]?.wallet_address === walletAddress) {
+              setPlayerColor('blue');
+            }
+          }
+          
+          let gameStatus: 'waiting' | 'setup' | 'active' | 'finished';
+          if (gameData.status === 'in_progress') {
+            gameStatus = 'setup'; // Start with setup phase
+          } else if (gameData.status === 'finished') {
+            gameStatus = 'finished';
+          } else {
+            gameStatus = gameData.players.length >= 2 ? 'setup' : 'waiting';
+          }
+          
+          const newState: GameState = {
+            board: Array(10).fill(null).map(() => Array(10).fill(null)),
+            currentPlayer: 'red' as Player,
+            redPlayer: gameData.players[0]?.wallet_address || null,
+            bluePlayer: gameData.players[1]?.wallet_address || null,
+            gameStatus,
+            winner: null,
+            setupPhase: gameStatus === 'setup',
+            setupTimeLeft: SETUP_TIME_LIMIT,
+            turnTimeLeft: TURN_TIME_LIMIT,
+          };
+          
+          if (newState.gameStatus === 'setup' && !gameStartTime) {
+            setGameStartTime(gameData.started_at ? new Date(gameData.started_at) : new Date());
+          }
+          
+          setGameState(newState);
+          
+          if (gameStatus === 'setup' || gameStatus === 'active') {
+            await saveGameState(newState);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing game:', error);
+    }
+  }, [gameId, publicKey, gameStartTime, saveGameState]);
+
+  // Initialize on mount
+  useEffect(() => {
+    if (publicKey) {
+      initializeGameState();
+      fetchEscrowStatus();
+    }
+  }, [publicKey, initializeGameState, fetchEscrowStatus]);
+
+  // Update game completion
+  useEffect(() => {
+    if (gameState.winner && gameState.gameStatus === 'finished') {
+      console.log('🏁 Game finished, completing...', gameState.winner);
+      
+      // Store winner at the exact moment of detection to prevent timing issues
+      setGameEndWinner(gameState.winner);
+      
+      completeGame(gameState.winner).then(() => {
+        setGameEndDialog(true);
+      });
+    }
+  }, [gameState.winner, gameState.gameStatus, completeGame]);
+
+  // Initialize MagicBlock when game becomes active
+  useEffect(() => {
+    if (gameState.gameStatus === 'active' && publicKey && signTransaction) {
+      initializeMagicBlockSession();
+    }
+  }, [gameState.gameStatus, publicKey, signTransaction, initializeMagicBlockSession]);
+
+  // Save game state when it changes (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const shouldSave = gameState.gameStatus === 'setup' || gameState.gameStatus === 'active';
+      if (shouldSave) {
+        saveGameState(gameState);
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [gameState, saveGameState]);
+
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
       {/* Game Info */}
@@ -593,6 +895,20 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               </Typography>
             </Paper>
           ) : null}
+          {escrowStatus && (
+            <Paper sx={{ p: 1, mx: 1, bgcolor: '#ff9800', color: 'white' }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                💰 Pot: {escrowStatus.totalEscrowed.toFixed(4)} SOL
+              </Typography>
+            </Paper>
+          )}
+          {ephemeralSession && realTimeMoves > 0 && (
+            <Paper sx={{ p: 1, mx: 1, bgcolor: '#4caf50', color: 'white' }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                ⚡ {moveLatency}ms | {realTimeMoves} moves
+              </Typography>
+            </Paper>
+          )}
         </Box>
         
         {gameState.setupPhase && (
@@ -773,6 +1089,68 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         </DialogActions>
       </Dialog>
 
+      {/* Forfeit Dialog */}
+      <Dialog open={showForfeitDialog} onClose={() => setShowForfeitDialog(false)}>
+        <DialogTitle>Forfeit Game</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to forfeit? Your opponent will automatically win and receive the SOL payout.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowForfeitDialog(false)}>Cancel</Button>
+          <Button 
+            onClick={handleForfeit} 
+            color="error" 
+            variant="contained"
+            disabled={forfeitLoading}
+          >
+            {forfeitLoading ? <CircularProgress size={20} /> : 'Forfeit'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Game Controls */}
+      {gameState.gameStatus === 'active' && playerColor && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={() => setShowForfeitDialog(true)}
+            sx={{ 
+              borderColor: '#d32f2f', 
+              color: '#d32f2f',
+              bgcolor: 'rgba(211, 47, 47, 0.1)',
+              '&:hover': { 
+                bgcolor: 'rgba(211, 47, 47, 0.2)',
+                borderColor: '#b71c1c'
+              }
+            }}
+          >
+            🏳️ Forfeit Game
+          </Button>
+        </Box>
+      )}
+
+      {/* GameEndModal for SOL payouts */}
+      <GameEndModal
+        open={gameEndDialog}
+        winner={gameEndWinner || gameState.winner ? {
+          username: (gameEndWinner || gameState.winner) === 'red' ? 'Red Army' : 'Blue Army',
+          walletAddress: (gameEndWinner || gameState.winner) === 'red' ? 
+            gameState.redPlayer || '' : gameState.bluePlayer || ''
+        } : undefined}
+        onClose={() => {
+          setGameEndDialog(false);
+          setGameEndWinner(null);
+        }}
+        totalPot={escrowStatus?.totalEscrowed || 0}
+        escrowReleased={gameCompletionResult?.escrowReleased || false}
+        escrowTransactionSignature={gameCompletionResult?.escrowTransactionSignature}
+        winnerAmount={gameCompletionResult?.winnerAmount}
+        platformFee={gameCompletionResult?.platformFee}
+      />
+
       <style jsx>{`
         .stratego-board {
           display: grid;
@@ -874,4 +1252,4 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       `}</style>
     </Box>
   );
-}; 
+};
