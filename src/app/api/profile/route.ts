@@ -2,150 +2,186 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const walletAddress = searchParams.get('walletAddress');
-
-  if (!walletAddress) {
-    return NextResponse.json({ error: 'Wallet address is required' }, { status: 400 });
-  }
-
+  // FAILSAFE: Always return valid JSON, never crash
   try {
-    console.log(`📊 Fetching profile for wallet: ${walletAddress}`);
+    console.log(`🔍 Profile API called at ${new Date().toISOString()}`);
 
-    // Get the basic profile first
-    const playerResult = await db`
-      SELECT 
-        id,
-        username,
-        avatar_url,
-        phone_number,
-        sms_notifications_enabled,
-        sms_opted_in_at
-      FROM players 
-      WHERE wallet_address = ${walletAddress}
-    `;
+    const { searchParams } = new URL(request.url);
+    const walletAddress = searchParams.get('walletAddress');
 
-    if (playerResult.length === 0) {
-      console.log(`👤 Creating new profile for ${walletAddress}`);
-      
-      // Create new profile if it doesn't exist
-      const newProfile = await db`
-        INSERT INTO players (wallet_address, username, avatar_url, phone_number)
-        VALUES (${walletAddress}, ${`Player${walletAddress.slice(0, 4)}`}, '', NULL)
-        RETURNING id, username, avatar_url, phone_number
+    if (!walletAddress) {
+      console.log('❌ No wallet address provided');
+      return NextResponse.json({ error: 'Wallet address is required' }, { status: 400 });
+    }
+
+    console.log(`👤 Fetching profile for wallet: ${walletAddress.slice(0, 8)}...`);
+
+    // STEP 1: Get basic player info (with maximum safety)
+    let player = null;
+    try {
+      console.log('🔍 Querying players table...');
+      const playerResult = await db`
+        SELECT 
+          id,
+          username,
+          avatar_url,
+          phone_number,
+          sms_notifications_enabled,
+          sms_opted_in_at
+        FROM players 
+        WHERE wallet_address = ${walletAddress}
+        LIMIT 1
       `;
+      
+      console.log(`✅ Player query returned ${playerResult.length} results`);
+      
+      if (playerResult.length > 0) {
+        player = playerResult[0];
+        console.log(`👤 Found player: ${player.username} (ID: ${player.id})`);
+      }
+    } catch (playerError) {
+      console.error('❌ Error querying players table:', playerError);
+      // Continue with player creation attempt
+    }
 
-      if (newProfile.length > 0) {
-        // Create initial player stats record
-        try {
-          await db`
-            INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
-            VALUES (${newProfile[0].id}, 0, 0, 0)
-          `;
-          console.log(`✅ Created initial player stats for new user`);
-        } catch (statsError) {
-          console.warn('Failed to create initial player stats:', statsError);
+    // STEP 2: Create player if not found (with maximum safety)
+    if (!player) {
+      console.log(`🆕 Creating new player for ${walletAddress.slice(0, 8)}...`);
+      try {
+        const newUsername = `Player${walletAddress.slice(0, 4)}`;
+        const newPlayerResult = await db`
+          INSERT INTO players (wallet_address, username, avatar_url, phone_number)
+          VALUES (${walletAddress}, ${newUsername}, '', NULL)
+          RETURNING id, username, avatar_url, phone_number
+        `;
+
+        if (newPlayerResult.length > 0) {
+          player = {
+            id: newPlayerResult[0].id,
+            username: newPlayerResult[0].username,
+            avatar_url: newPlayerResult[0].avatar_url,
+            phone_number: newPlayerResult[0].phone_number,
+            sms_notifications_enabled: false,
+            sms_opted_in_at: null
+          };
+          console.log(`✅ Created new player: ${player.username}`);
         }
-
+      } catch (createError) {
+        console.error('❌ Error creating player:', createError);
+        // Return fallback response instead of crashing
         return NextResponse.json({
-          username: newProfile[0].username,
-          avatar_url: newProfile[0].avatar_url,
-          phone_number: newProfile[0].phone_number,
+          username: `Player${walletAddress.slice(0, 4)}`,
+          avatar_url: '',
+          phone_number: null,
           sms_notifications_enabled: false,
           games_played: 0,
           games_won: 0,
           total_winnings: 0,
+          error: 'Could not create or retrieve player'
         });
-      } else {
-        console.error('❌ Failed to create new profile');
-        return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 });
       }
     }
 
-    const player = playerResult[0];
-    console.log(`👤 Found existing player: ${player.username} (ID: ${player.id})`);
-
-    // Get player stats separately with better error handling
-    let statsResult;
-    try {
-      statsResult = await db`
-        SELECT 
-          games_played,
-          games_won,
-          total_winnings
-        FROM player_stats 
-        WHERE player_id = ${player.id}
-      `;
-    } catch (statsQueryError) {
-      console.error('❌ Error querying player stats:', statsQueryError);
-      // Return profile data with zero stats if stats query fails
+    // FAILSAFE: If still no player, return fallback
+    if (!player) {
+      console.error('❌ No player data available, returning fallback');
       return NextResponse.json({
-        username: player.username,
-        avatar_url: player.avatar_url,
-        phone_number: player.phone_number,
-        sms_notifications_enabled: player.sms_notifications_enabled || false,
-        sms_opted_in_at: player.sms_opted_in_at,
+        username: `Player${walletAddress.slice(0, 4)}`,
+        avatar_url: '',
+        phone_number: null,
+        sms_notifications_enabled: false,
         games_played: 0,
         games_won: 0,
         total_winnings: 0,
+        error: 'Player data unavailable'
       });
     }
 
-    // If no stats exist, create them
-    let gamesPlayed = 0;
-    let gamesWon = 0; 
-    let totalWinnings = 0;
-    
-    if (statsResult.length === 0) {
-      console.log(`📊 No stats found - creating initial stats for player ${player.id}`);
-      try {
-        await db`
-          INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
-          VALUES (${player.id}, 0, 0, 0)
-        `;
-        console.log(`✅ Created initial player stats for ${walletAddress}`);
-      } catch (statsError) {
-        console.warn('Failed to create player stats:', statsError);
-      }
-    } else {
-      const stats = statsResult[0];
-      gamesPlayed = parseInt(stats.games_played?.toString() || '0') || 0;
-      gamesWon = parseInt(stats.games_won?.toString() || '0') || 0;
-      totalWinnings = parseFloat(stats.total_winnings?.toString() || '0') || 0;
-      
-      console.log(`📊 Player stats: ${gamesPlayed} games, ${gamesWon} wins, ${totalWinnings} SOL`);
-    }
-
-    const profileData = {
-      username: player.username,
-      avatar_url: player.avatar_url,
-      phone_number: player.phone_number,
-      sms_notifications_enabled: player.sms_notifications_enabled || false,
-      sms_opted_in_at: player.sms_opted_in_at,
-      games_played: gamesPlayed,
-      games_won: gamesWon,
-      total_winnings: totalWinnings,
+    // STEP 3: Get stats (with maximum safety)
+    let stats = {
+      games_played: 0,
+      games_won: 0,
+      total_winnings: 0
     };
 
-    console.log(`✅ Returning profile data for ${walletAddress}:`, profileData);
-    return NextResponse.json(profileData);
+    try {
+      console.log(`📊 Querying stats for player ${player.id}...`);
+      const statsResult = await db`
+        SELECT 
+          COALESCE(games_played, 0) as games_played,
+          COALESCE(games_won, 0) as games_won,
+          COALESCE(total_winnings, 0) as total_winnings
+        FROM player_stats 
+        WHERE player_id = ${player.id}
+        LIMIT 1
+      `;
 
-  } catch (error) {
-    console.error('❌ Error fetching profile:', error);
-    console.error('Error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : 'No stack trace',
-      walletAddress
+      if (statsResult.length > 0) {
+        const rawStats = statsResult[0];
+        stats = {
+          games_played: parseInt(rawStats.games_played?.toString() || '0') || 0,
+          games_won: parseInt(rawStats.games_won?.toString() || '0') || 0,
+          total_winnings: parseFloat(rawStats.total_winnings?.toString() || '0') || 0
+        };
+        console.log(`📊 Found stats: ${stats.games_played} games, ${stats.games_won} wins, ${stats.total_winnings} SOL`);
+      } else {
+        console.log('📊 No stats found, attempting to create...');
+        // Try to create stats record
+        try {
+          await db`
+            INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+            VALUES (${player.id}, 0, 0, 0)
+            ON CONFLICT (player_id) DO NOTHING
+          `;
+          console.log('✅ Created initial stats record');
+        } catch (createStatsError) {
+          console.warn('⚠️ Could not create stats record:', createStatsError);
+          // Use default stats (already set above)
+        }
+      }
+    } catch (statsError) {
+      console.error('❌ Error querying stats:', statsError);
+      // Use default stats (already set above)
+    }
+
+    // STEP 4: Build response (with maximum safety)
+    const response = {
+      username: player.username || `Player${walletAddress.slice(0, 4)}`,
+      avatar_url: player.avatar_url || '',
+      phone_number: player.phone_number || null,
+      sms_notifications_enabled: player.sms_notifications_enabled || false,
+      sms_opted_in_at: player.sms_opted_in_at || null,
+      games_played: stats.games_played,
+      games_won: stats.games_won,
+      total_winnings: stats.total_winnings
+    };
+
+    console.log(`✅ Returning profile for ${walletAddress.slice(0, 8)}:`, {
+      username: response.username,
+      games_played: response.games_played,
+      games_won: response.games_won,
+      total_winnings: response.total_winnings
     });
+
+    return NextResponse.json(response);
+
+  } catch (fatalError) {
+    // ABSOLUTE FAILSAFE: Even if everything else fails, return valid JSON
+    console.error('💥 FATAL ERROR in profile API:', fatalError);
+    console.error('Error stack:', fatalError instanceof Error ? fatalError.stack : 'No stack trace');
     
-    // Return a more detailed error in development
-    return NextResponse.json({ 
-      error: 'Internal server error',
-      details: process.env.NODE_ENV === 'development' ? {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        walletAddress
-      } : undefined
-    }, { status: 500 });
+    const walletFromUrl = request.url.split('walletAddress=')[1]?.split('&')[0] || 'unknown';
+    
+    return NextResponse.json({
+      username: `Player${walletFromUrl.slice(0, 4)}`,
+      avatar_url: '',
+      phone_number: null,
+      sms_notifications_enabled: false,
+      games_played: 0,
+      games_won: 0,
+      total_winnings: 0,
+      error: 'Profile service temporarily unavailable'
+    }, { status: 200 }); // Return 200 even on error to avoid crashes
   }
 }
 
