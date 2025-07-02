@@ -187,49 +187,61 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    console.log('🔄 Profile PUT API called');
     const { walletAddress, username, phoneNumber } = await request.json();
 
     if (!walletAddress) {
       return NextResponse.json({ error: 'Wallet address is required' }, { status: 400 });
     }
 
-    // Build dynamic update query based on provided fields
-    const updates = [];
-    const values = [];
-    
-    if (username) {
-      updates.push('username = $' + (values.length + 2)); // +2 because walletAddress is $1
-      values.push(username);
-    }
-    
-    if (phoneNumber !== undefined) { // Allow setting to null/empty
-      updates.push('phone_number = $' + (values.length + 2));
-      values.push(phoneNumber || null);
-    }
+    console.log(`📝 Updating profile for ${walletAddress.slice(0, 8)}...`, { username, phoneNumber });
 
-    if (updates.length === 0) {
+    // Update player with provided fields
+    let updateQuery;
+    
+    if (username && phoneNumber !== undefined) {
+      // Update both username and phone
+      updateQuery = await db`
+        UPDATE players
+        SET username = ${username}, phone_number = ${phoneNumber || null}
+        WHERE wallet_address = ${walletAddress}
+        RETURNING username, phone_number
+      `;
+    } else if (username) {
+      // Update only username
+      updateQuery = await db`
+        UPDATE players
+        SET username = ${username}
+        WHERE wallet_address = ${walletAddress}
+        RETURNING username, phone_number
+      `;
+    } else if (phoneNumber !== undefined) {
+      // Update only phone number
+      updateQuery = await db`
+        UPDATE players
+        SET phone_number = ${phoneNumber || null}
+        WHERE wallet_address = ${walletAddress}
+        RETURNING username, phone_number
+      `;
+    } else {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
 
-    const query = `
-      UPDATE players
-      SET ${updates.join(', ')}
-      WHERE wallet_address = $1
-      RETURNING username, phone_number
-    `;
+    console.log(`✅ Update query returned ${updateQuery.length} rows`);
 
-    const result = await db.query(query, [walletAddress, ...values]);
-
-    if (result.length > 0) {
-      return NextResponse.json({ 
-        username: result[0].username,
-        phone_number: result[0].phone_number 
-      });
+    if (updateQuery.length > 0) {
+      const result = {
+        username: updateQuery[0].username,
+        phone_number: updateQuery[0].phone_number
+      };
+      console.log(`✅ Profile updated successfully:`, result);
+      return NextResponse.json(result);
     } else {
+      console.error(`❌ Profile not found for wallet ${walletAddress}`);
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
   } catch (error) {
-    console.error('Error updating profile:', error);
+    console.error('❌ Error updating profile:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 
