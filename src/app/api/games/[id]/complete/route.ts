@@ -29,6 +29,8 @@ async function sendSOLDirectly(
     // Parse private key
     let privateKeyBytes: Uint8Array;
     console.log(`🔑 Parsing private key (length: ${fromPrivateKey.length})`);
+    console.log(`🔑 First 20 chars: ${fromPrivateKey.slice(0, 20)}...`);
+    console.log(`🔑 Last 20 chars: ...${fromPrivateKey.slice(-20)}`);
     
     try {
       // Try JSON array format first (most common)
@@ -36,6 +38,8 @@ async function sendSOLDirectly(
         console.log(`🔑 Parsing as JSON array`);
         const keyArray = JSON.parse(fromPrivateKey);
         privateKeyBytes = new Uint8Array(keyArray);
+        console.log(`🔑 JSON array has ${keyArray.length} elements`);
+        console.log(`🔑 First 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
       } 
       // Try base64 format
       else if (fromPrivateKey.length === 88 || fromPrivateKey.length === 44) {
@@ -62,8 +66,19 @@ async function sendSOLDirectly(
         console.log(`✅ Standard 64-byte ed25519 key`);
       } else if (privateKeyBytes.length === 66) {
         // Sometimes keys have 2 extra bytes at the start - remove them
-        console.log(`🔧 66-byte key detected - extracting 64 bytes`);
-        privateKeyBytes = privateKeyBytes.slice(2, 66); // Remove first 2 bytes
+        console.log(`🔧 66-byte key detected - trying different slicing approaches`);
+        console.log(`🔑 Original first 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
+        
+        // Try removing first 2 bytes
+        const option1 = privateKeyBytes.slice(2, 66);
+        console.log(`🔧 Option 1 (slice 2-66) first 10 bytes: ${Array.from(option1.slice(0, 10))}`);
+        
+        // Try removing last 2 bytes  
+        const option2 = privateKeyBytes.slice(0, 64);
+        console.log(`🔧 Option 2 (slice 0-64) first 10 bytes: ${Array.from(option2.slice(0, 10))}`);
+        
+        // Use option 1 first
+        privateKeyBytes = option1;
       } else if (privateKeyBytes.length === 96) {
         // Sometimes includes public key at end - extract first 64 bytes
         console.log(`🔧 96-byte key detected - extracting first 64 bytes`);
@@ -77,6 +92,7 @@ async function sendSOLDirectly(
       }
       
       console.log(`✅ Final key length: ${privateKeyBytes.length} bytes`);
+      console.log(`🔑 Final first 10 bytes: ${Array.from(privateKeyBytes.slice(0, 10))}`);
       
     } catch (keyError) {
       console.error(`❌ Private key parsing failed:`, keyError);
