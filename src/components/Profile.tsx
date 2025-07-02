@@ -93,13 +93,9 @@ export const Profile: FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        if (profile) {
-          setProfile({
-            ...profile,
-            username: data.username,
-            phone_number: data.phone_number,
-          });
-        }
+        console.log('✅ Profile updated successfully:', data);
+        
+        await fetchProfile();
         setIsEditing(false);
       } else {
         console.error('Error updating profile:', response.statusText);
@@ -126,13 +122,9 @@ export const Profile: FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        if (profile) {
-          setProfile({
-            ...profile,
-            sms_notifications_enabled: data.sms_notifications_enabled,
-            sms_opted_in_at: data.sms_opted_in_at,
-          });
-        }
+        console.log('✅ SMS preferences updated:', data);
+        
+        await fetchProfile();
         setSmsNotificationsEnabled(enabled);
         if (enabled) {
           setShowSmsDialog(false);
@@ -175,12 +167,9 @@ export const Profile: FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        if (profile) {
-          setProfile({
-            ...profile,
-            avatar_url: data.avatar_url,
-          });
-        }
+        console.log('✅ Avatar updated successfully:', data);
+        
+        await fetchProfile();
       } else {
         console.error('Error uploading avatar:', response.statusText);
       }
