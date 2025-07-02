@@ -542,17 +542,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       return `/images/stratego/pieces/${color}-hidden.png`;
     }
     
-    // Get piece counts to determine if we need numbered variants
-    const pieceCount = PIECE_COUNTS[rank];
     const rankName = rank.toLowerCase();
     
     // For pieces with only 1 copy, use simple naming
-    if (pieceCount === 1) {
+    if (PIECE_COUNTS[rank] === 1) {
       return `/images/stratego/pieces/${color}-${rankName}.png`;
     }
     
-    // For pieces with multiple copies, randomly select a variant
-    const variantNumber = Math.floor(Math.random() * pieceCount) + 1;
+    // For pieces with multiple copies, randomly select a variant (1-indexed)
+    const variantNumber = Math.floor(Math.random() * PIECE_COUNTS[rank]) + 1;
     return `/images/stratego/pieces/${color}-${rankName}-${variantNumber}.png`;
   };
 
@@ -1006,35 +1004,94 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             maxHeight: '400px', 
             overflowY: 'auto' 
           }}>
-            {Object.entries(availablePieces).map(([rank, count]) => (
-              <Box key={rank} sx={{ textAlign: 'center' }}>
-                <Button
-                  variant={count > 0 ? 'contained' : 'outlined'}
-                  disabled={count === 0}
-                  onClick={() => placePiece(rank as PieceRank)}
-                  sx={{
-                    width: 80,
-                    height: 80,
-                    flexDirection: 'column',
-                    p: 1,
-                    bgcolor: count > 0 ? '#2E4057' : 'grey.300',
-                    '&:hover': { 
-                      bgcolor: count > 0 ? '#1e2a3a' : 'grey.400' 
-                    }
-                  }}
-                >
-                  <Typography variant="h4" sx={{ mb: 0.5 }}>
-                    {getPieceSymbol(rank as PieceRank)}
+            {Object.entries(availablePieces).map(([rank, count]) => {
+              const pieceImage = getPieceImage(rank as PieceRank, playerColor, true);
+              return (
+                <Box key={rank} sx={{ textAlign: 'center' }}>
+                  <Button
+                    variant={count > 0 ? 'contained' : 'outlined'}
+                    disabled={count === 0}
+                    onClick={() => placePiece(rank as PieceRank)}
+                    sx={{
+                      width: 120,
+                      height: 120,
+                      flexDirection: 'column',
+                      p: 1,
+                      bgcolor: count > 0 ? '#2E4057' : 'grey.300',
+                      '&:hover': { 
+                        bgcolor: count > 0 ? '#1e2a3a' : 'grey.400' 
+                      },
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {/* Piece Image */}
+                    <Box sx={{ 
+                      width: 60, 
+                      height: 60, 
+                      borderRadius: '50%', 
+                      overflow: 'hidden',
+                      mb: 1,
+                      border: '2px solid white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: 'rgba(255,255,255,0.1)'
+                    }}>
+                      <img 
+                        src={pieceImage}
+                        alt={rank}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          borderRadius: '50%'
+                        }}
+                        onError={(e) => {
+                          // Fallback to emoji if image fails
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallback = target.nextElementSibling as HTMLElement;
+                          if (fallback) {
+                            fallback.style.display = 'flex';
+                          }
+                        }}
+                      />
+                      <Typography 
+                        variant="h4" 
+                        sx={{ 
+                          display: 'none',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '100%',
+                          height: '100%'
+                        }}
+                      >
+                        {getPieceSymbol(rank as PieceRank)}
+                      </Typography>
+                    </Box>
+                    
+                    {/* Piece Name */}
+                    <Typography variant="caption" sx={{ 
+                      fontSize: '0.7rem',
+                      fontWeight: 'bold',
+                      color: 'white',
+                      textAlign: 'center',
+                      lineHeight: 1
+                    }}>
+                      {rank}
+                    </Typography>
+                  </Button>
+                  <Typography variant="caption" display="block" sx={{ 
+                    mt: 0.5, 
+                    fontWeight: 'bold',
+                    color: count > 0 ? 'text.primary' : 'text.disabled'
+                  }}>
+                    {count} left
                   </Typography>
-                  <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
-                    {rank}
-                  </Typography>
-                </Button>
-                <Typography variant="caption" display="block" sx={{ mt: 0.5, fontWeight: 'bold' }}>
-                  {count} left
-                </Typography>
-              </Box>
-            ))}
+                </Box>
+              );
+            })}
           </Box>
           
           <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(46, 64, 87, 0.1)', borderRadius: 1 }}>
@@ -1216,14 +1273,16 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           display: grid;
           grid-template-columns: repeat(10, 1fr);
           grid-template-rows: repeat(10, 1fr);
-          gap: 1px;
-          border: 3px solid #2E4057;
+          gap: 2px;
+          border: 4px solid #2E4057;
           border-radius: 8px;
           background-color: #2E4057;
           width: 100%;
           max-width: 500px;
           aspect-ratio: 1;
           margin: 0 auto;
+          padding: 4px;
+          box-sizing: border-box;
         }
         
         .stratego-square {
@@ -1234,7 +1293,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           background-color: #F5DEB3;
           position: relative;
           transition: all 0.2s ease;
-          min-height: 30px;
+          border-radius: 2px;
+          overflow: hidden;
         }
         
         .stratego-square.lake {
@@ -1244,15 +1304,17 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         
         .stratego-square.setup-area {
           background-color: #90EE90;
+          box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
         }
         
         .stratego-square.selected {
           background-color: #FFD700 !important;
-          box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+          box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
         }
         
         .stratego-square.valid-move {
           background-color: #FFA500 !important;
+          box-shadow: 0 0 10px rgba(255,165,0,0.6);
         }
         
         .stratego-square.last-move {
@@ -1261,22 +1323,24 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         
         .stratego-square:hover:not(.lake) {
           opacity: 0.8;
+          transform: scale(1.02);
         }
         
         .stratego-piece {
-          width: 85%;
-          height: 85%;
+          width: 90%;
+          height: 90%;
           border-radius: 50%;
           border: 1px solid #333;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: clamp(8px, 2vw, 16px);
+          font-size: clamp(8px, 1.5vw, 14px);
           font-weight: bold;
           cursor: pointer;
           transition: transform 0.2s ease;
           overflow: hidden;
           position: relative;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
         
         .piece-image {
@@ -1291,7 +1355,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
-          font-size: clamp(8px, 2vw, 16px);
+          font-size: clamp(6px, 1.2vw, 12px);
         }
         
         .stratego-piece.red {
@@ -1310,7 +1374,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
         
         .lake-water {
-          font-size: clamp(12px, 3vw, 20px);
+          font-size: clamp(10px, 2.5vw, 18px);
         }
 
         /* Mobile Responsive */
@@ -1318,10 +1382,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           .stratego-board {
             max-width: 350px;
             gap: 1px;
-          }
-          
-          .stratego-square {
-            min-height: 25px;
+            padding: 3px;
+            border-width: 3px;
           }
           
           .stratego-piece {
@@ -1333,10 +1395,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         @media (min-width: 1200px) {
           .stratego-board {
             max-width: 600px;
-          }
-          
-          .stratego-square {
-            min-height: 35px;
+            gap: 3px;
+            padding: 6px;
           }
         }
       `}</style>
