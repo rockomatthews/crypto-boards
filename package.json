@@ -10,7 +10,8 @@
     "init-db": "ts-node scripts/init-db.ts",
     "init-db-js": "node scripts/init-db.js",
     "setup-env": "node scripts/setup-env.js",
-    "add-missing-table": "node scripts/add-missing-table.mjs"
+    "add-missing-table": "node scripts/add-missing-table.mjs",
+    "migrate-stats": "node scripts/migrate-game-stats.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
