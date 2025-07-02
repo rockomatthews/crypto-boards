@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 
+interface StatsRecord {
+  games_played?: number;
+  games_won?: number;
+  total_winnings?: number;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -12,58 +18,75 @@ export async function GET(request: NextRequest) {
 
     console.log(`🔍 GET profile for wallet: ${walletAddress.slice(0, 8)}...`);
 
-    // Get player info - SIMPLE AND DIRECT
-    const playerResult = await db`
-      SELECT 
-        id,
-        username,
-        avatar_url,
-        phone_number,
-        sms_notifications_enabled,
-        sms_opted_in_at
-      FROM players 
-      WHERE wallet_address = ${walletAddress}
-      LIMIT 1
-    `;
-    
-    console.log(`📊 Player query found ${playerResult.length} results`);
+    // Get player info - with error handling
+    let playerResult;
+    try {
+      playerResult = await db`
+        SELECT 
+          id,
+          username,
+          avatar_url,
+          phone_number,
+          sms_notifications_enabled,
+          sms_opted_in_at
+        FROM players 
+        WHERE wallet_address = ${walletAddress}
+        LIMIT 1
+      `;
+      console.log(`📊 Player query found ${playerResult.length} results`);
+    } catch (playerQueryError) {
+      console.error(`❌ Player query error:`, playerQueryError);
+      return NextResponse.json({ error: 'Database query failed' }, { status: 500 });
+    }
 
     if (playerResult.length === 0) {
       // Create new player if not found
       console.log(`🆕 Creating new player...`);
-      const newUsername = `Player${walletAddress.slice(0, 4)}`;
-      const newPlayerResult = await db`
-        INSERT INTO players (wallet_address, username, avatar_url, phone_number)
-        VALUES (${walletAddress}, ${newUsername}, '', NULL)
-        RETURNING id, username, avatar_url, phone_number, sms_notifications_enabled, sms_opted_in_at
-      `;
-      
-      if (newPlayerResult.length > 0) {
-        const newPlayer = newPlayerResult[0];
-        console.log(`✅ Created player: ${newPlayer.username}`);
-        return NextResponse.json({
-          username: newPlayer.username,
-          avatar_url: newPlayer.avatar_url || '',
-          phone_number: newPlayer.phone_number,
-          sms_notifications_enabled: newPlayer.sms_notifications_enabled || false,
-          sms_opted_in_at: newPlayer.sms_opted_in_at,
-          games_played: 0,
-          games_won: 0,
-          total_winnings: 0
-        });
+      try {
+        const newUsername = `Player${walletAddress.slice(0, 4)}`;
+        const newPlayerResult = await db`
+          INSERT INTO players (wallet_address, username, avatar_url, phone_number)
+          VALUES (${walletAddress}, ${newUsername}, '', NULL)
+          RETURNING id, username, avatar_url, phone_number, sms_notifications_enabled, sms_opted_in_at
+        `;
+        
+        if (newPlayerResult.length > 0) {
+          const newPlayer = newPlayerResult[0];
+          console.log(`✅ Created player: ${newPlayer.username}`);
+          return NextResponse.json({
+            username: newPlayer.username,
+            avatar_url: newPlayer.avatar_url || '',
+            phone_number: newPlayer.phone_number,
+            sms_notifications_enabled: newPlayer.sms_notifications_enabled || false,
+            sms_opted_in_at: newPlayer.sms_opted_in_at,
+            games_played: 0,
+            games_won: 0,
+            total_winnings: 0
+          });
+        }
+      } catch (createError) {
+        console.error(`❌ Player creation error:`, createError);
+        return NextResponse.json({ error: 'Failed to create player' }, { status: 500 });
       }
     }
 
     const player = playerResult[0];
     console.log(`👤 Found existing player: ${player.username} (ID: ${player.id})`);
 
-    // Get stats
-    const statsResult = await db`
-      SELECT games_played, games_won, total_winnings
-      FROM player_stats 
-      WHERE player_id = ${player.id}
-      LIMIT 1
-    `;
+    // Get stats with error handling
+    let statsResult: StatsRecord[] = [];
+    try {
+      statsResult = await db`
+        SELECT games_played, games_won, total_winnings
+        FROM player_stats 
+        WHERE player_id = ${player.id}
+        LIMIT 1
+      `;
+    } catch (statsError) {
+      console.error(`❌ Stats query error:`, statsError);
+      // Continue with default stats
+      statsResult = [];
+    }
 
     const stats = statsResult.length > 0 ? statsResult[0] : {
       games_played: 0,
@@ -87,7 +110,10 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ Profile GET error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal server error', 
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
 
@@ -150,4 +176,4 @@ export async function PUT(request: NextRequest) {
     console.error('❌ Error updating profile:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-} 
+}
