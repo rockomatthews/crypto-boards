@@ -2,6 +2,105 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/schema';
 import smsService from '@/lib/sms';
+import { 
+  Connection, 
+  PublicKey, 
+  LAMPORTS_PER_SOL,
+  Keypair,
+  Transaction,
+  SystemProgram
+} from '@solana/web3.js';
+
+// Direct SOL transfer function
+async function sendSOLDirectly(
+  fromPrivateKey: string,
+  toWallet: string,
+  amount: number,
+  gameId: string
+): Promise<{ success: boolean; signature?: string; error?: string }> {
+  try {
+    console.log(`💰 DIRECT SOL TRANSFER: ${amount} SOL to ${toWallet} for game ${gameId}`);
+
+    // Get connection
+    const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(RPC_URL, 'confirmed');
+
+    // Parse private key
+    let privateKeyBytes: Uint8Array;
+    
+    if (fromPrivateKey.includes('[') && fromPrivateKey.includes(']')) {
+      const keyArray = JSON.parse(fromPrivateKey);
+      privateKeyBytes = new Uint8Array(keyArray);
+    } else if (fromPrivateKey.length === 128) {
+      privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'hex'));
+    } else {
+      try {
+        privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'base64'));
+      } catch {
+        const bs58 = await import('bs58');
+        privateKeyBytes = bs58.default.decode(fromPrivateKey);
+      }
+    }
+    
+    const platformKeypair = Keypair.fromSecretKey(privateKeyBytes);
+    const winnerWallet = new PublicKey(toWallet);
+    
+    console.log(`💳 Platform wallet: ${platformKeypair.publicKey.toString()}`);
+    console.log(`🏆 Winner wallet: ${winnerWallet.toString()}`);
+
+    // Check balance
+    const balance = await connection.getBalance(platformKeypair.publicKey);
+    const requiredLamports = Math.floor(amount * LAMPORTS_PER_SOL);
+    
+    console.log(`💰 Platform balance: ${balance / LAMPORTS_PER_SOL} SOL`);
+    console.log(`💰 Sending: ${amount} SOL (${requiredLamports} lamports)`);
+    
+    if (balance < requiredLamports) {
+      throw new Error(`Insufficient balance: ${balance / LAMPORTS_PER_SOL} SOL < ${amount} SOL required`);
+    }
+
+    // Create transaction
+    const transaction = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: platformKeypair.publicKey,
+        toPubkey: winnerWallet,
+        lamports: requiredLamports,
+      })
+    );
+
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = platformKeypair.publicKey;
+
+    // Send transaction
+    const signature = await connection.sendTransaction(transaction, [platformKeypair], {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+      maxRetries: 3
+    });
+
+    console.log(`⏳ Transaction sent: ${signature}`);
+
+    // Confirm transaction
+    const confirmation = await connection.confirmTransaction(signature, 'confirmed');
+    
+    if (confirmation.value?.err) {
+      throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+    }
+    
+    console.log(`✅ REAL SOL TRANSFER CONFIRMED: ${amount} SOL to ${toWallet}`);
+    console.log(`🔗 Signature: ${signature}`);
+    
+    return { success: true, signature };
+
+  } catch (error) {
+    console.error('❌ Direct SOL transfer failed:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -45,75 +144,41 @@ export async function POST(
     }
 
     const game = gameResult[0];
+    
+    // Calculate winnings (96% goes to winner, 4% platform fee)
+    const totalPot = parseFloat(game.entry_fee) * 2;
+    const platformFee = totalPot * 0.04;
+    const winnerAmount = totalPot - platformFee;
 
     if (game.status === 'completed') {
-      console.log(`⚠️ Game ${gameId} already completed - checking if escrow was released...`);
+      console.log(`⚠️ Game ${gameId} already completed - attempting direct payout...`);
       
-      // Game is already completed, but check if escrow was properly released
-      try {
-        const escrowResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/games/${gameId}/escrow`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'get_escrow_status'
-          })
-        });
-
-        if (escrowResponse.ok) {
-          const escrowData = await escrowResponse.json();
-          const hasActiveEscrow = escrowData.escrows.some((e: { status: string }) => e.status === 'active');
+      // Game already completed - try direct SOL transfer
+      const privateKey = process.env.PLATFORM_WALLET_PRIVATE_KEY;
+      if (privateKey) {
+        const directTransfer = await sendSOLDirectly(privateKey, winnerWallet, winnerAmount, gameId);
+        
+        if (directTransfer.success) {
+          console.log(`✅ Direct SOL transfer successful for completed game!`);
           
-          if (hasActiveEscrow && winnerWallet && loserWallet) {
-            console.log(`💰 Found active escrow for completed game - attempting to release...`);
-            
-            // Get player information
-            const playersResult = await db`
-              SELECT 
-                p.wallet_address,
-                gp.player_id
-              FROM game_players gp
-              JOIN players p ON gp.player_id = p.id
-              WHERE gp.game_id = ${gameId}
-            `;
-            
-            const winnerPlayer = playersResult.find(p => p.wallet_address === winnerWallet);
-            
-            if (winnerPlayer) {
-              const escrowReleaseResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/games/${gameId}/escrow`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: 'release_escrow',
-                  winnerId: winnerPlayer.player_id,
-                  playerWallet: winnerWallet
-                })
-              });
-
-              if (escrowReleaseResponse.ok) {
-                const escrowResult = await escrowReleaseResponse.json();
-                console.log(`✅ Escrow released for completed game:`, escrowResult);
-                
-                return NextResponse.json({ 
-                  success: true,
-                  alreadyCompleted: true,
-                  winner: winnerWallet,
-                  loser: loserWallet,
-                  winnerAmount: escrowResult.winnerAmount,
-                  platformFee: escrowResult.platformFee,
-                  gameId: gameId,
-                  escrowReleased: true,
-                  escrowTransactionSignature: escrowResult.transactionSignature,
-                  message: `Game was already completed - escrow payout of ${escrowResult.winnerAmount} SOL processed now.`
-                });
-              }
-            }
-          }
+          return NextResponse.json({ 
+            success: true,
+            alreadyCompleted: true,
+            winner: winnerWallet,
+            loser: loserWallet,
+            winnerAmount: winnerAmount,
+            platformFee: platformFee,
+            gameId: gameId,
+            escrowReleased: true,
+            escrowTransactionSignature: directTransfer.signature,
+            message: `Game was already completed - payout of ${winnerAmount} SOL sent directly!`
+          });
+        } else {
+          console.error(`❌ Direct SOL transfer failed:`, directTransfer.error);
         }
-      } catch (escrowError) {
-        console.warn('⚠️ Error checking escrow for completed game:', escrowError);
       }
       
-      // Game already completed and no active escrow to process
+      // Fall back to "already completed" response
       return NextResponse.json({ 
         success: true,
         alreadyCompleted: true,
@@ -158,11 +223,6 @@ export async function POST(
         END
       WHERE game_id = ${gameId}
     `;
-
-    // Calculate winnings (96% goes to winner, 4% platform fee)
-    const totalPot = parseFloat(game.entry_fee) * 2;
-    const platformFee = totalPot * 0.04;
-    const winnerAmount = totalPot - platformFee;
 
     console.log(`💰 Game completion: Total pot: ${totalPot} SOL, Winner gets: ${winnerAmount} SOL, Platform fee: ${platformFee} SOL`);
 
@@ -228,51 +288,36 @@ export async function POST(
       }
     }
 
-    // 🚀 AUTOMATICALLY RELEASE ESCROW FUNDS TO WINNER
-    let escrowReleaseResult = null;
-    try {
-      console.log(`💰 Automatically releasing escrow for winner: ${winnerWallet.slice(0, 8)}...`);
+    // 🚀 DIRECT SOL TRANSFER TO WINNER (BYPASS COMPLEX ESCROW APIS)
+    let payoutResult = null;
+    const privateKey = process.env.PLATFORM_WALLET_PRIVATE_KEY;
+    
+    if (privateKey) {
+      console.log(`💰 Sending ${winnerAmount} SOL directly to winner...`);
+      payoutResult = await sendSOLDirectly(privateKey, winnerWallet, winnerAmount, gameId);
       
-      const escrowResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/games/${gameId}/escrow`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'release_escrow',
-          winnerId: winnerPlayer?.player_id,
-          playerWallet: winnerWallet
-        })
-      });
-
-      if (escrowResponse.ok) {
-        escrowReleaseResult = await escrowResponse.json();
-        console.log(`✅ Escrow released successfully:`, {
-          winnerAmount: escrowReleaseResult.winnerAmount,
-          platformFee: escrowReleaseResult.platformFee,
-          totalAmount: escrowReleaseResult.totalAmount,
-          transactionSignature: escrowReleaseResult.transactionSignature
-        });
+      if (payoutResult.success) {
+        console.log(`✅ DIRECT SOL PAYOUT SUCCESSFUL!`);
+        console.log(`🔗 Transaction: ${payoutResult.signature}`);
       } else {
-        const escrowError = await escrowResponse.text();
-        console.warn(`⚠️ Escrow release failed (${escrowResponse.status}):`, escrowError);
-        // Don't fail the game completion if escrow release fails
+        console.error(`❌ Direct SOL payout failed:`, payoutResult.error);
       }
-    } catch (escrowError) {
-      console.warn('⚠️ Failed to release escrow automatically:', escrowError);
-      // Don't fail the game completion if escrow release fails
+    } else {
+      console.warn(`⚠️ No PLATFORM_WALLET_PRIVATE_KEY - cannot send real SOL`);
     }
 
     return NextResponse.json({ 
       success: true,
       winner: winnerWallet,
       loser: loserWallet,
-      winnerAmount: escrowReleaseResult?.winnerAmount || winnerAmount,
-      platformFee: escrowReleaseResult?.platformFee || platformFee,
+      winnerAmount: winnerAmount,
+      platformFee: platformFee,
       gameId: gameId,
-      escrowReleased: !!escrowReleaseResult,
-      escrowTransactionSignature: escrowReleaseResult?.transactionSignature,
-      message: escrowReleaseResult 
-        ? `Game completed! Winner payout of ${escrowReleaseResult.winnerAmount} SOL processed successfully.`
-        : `Game completed! Winner recorded, but escrow payout may need manual processing.`
+      escrowReleased: !!payoutResult?.success,
+      escrowTransactionSignature: payoutResult?.signature,
+      message: payoutResult?.success 
+        ? `Game completed! Winner received ${winnerAmount} SOL directly!`
+        : `Game completed! Winner recorded but payout failed: ${payoutResult?.error || 'No private key configured'}`
     });
 
   } catch (error) {

@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    console.log(`📊 Fetching profile for wallet: ${walletAddress}`);
+
     // Get the basic profile first
     const playerResult = await db`
       SELECT 
@@ -24,6 +26,8 @@ export async function GET(request: NextRequest) {
     `;
 
     if (playerResult.length === 0) {
+      console.log(`👤 Creating new profile for ${walletAddress}`);
+      
       // Create new profile if it doesn't exist
       const newProfile = await db`
         INSERT INTO players (wallet_address, username, avatar_url, phone_number)
@@ -38,6 +42,7 @@ export async function GET(request: NextRequest) {
             INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
             VALUES (${newProfile[0].id}, 0, 0, 0)
           `;
+          console.log(`✅ Created initial player stats for new user`);
         } catch (statsError) {
           console.warn('Failed to create initial player stats:', statsError);
         }
@@ -51,20 +56,40 @@ export async function GET(request: NextRequest) {
           games_won: 0,
           total_winnings: 0,
         });
+      } else {
+        console.error('❌ Failed to create new profile');
+        return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 });
       }
     }
 
     const player = playerResult[0];
+    console.log(`👤 Found existing player: ${player.username} (ID: ${player.id})`);
 
-    // Get player stats separately
-    const statsResult = await db`
-      SELECT 
-        games_played,
-        games_won,
-        total_winnings
-      FROM player_stats 
-      WHERE player_id = ${player.id}
-    `;
+    // Get player stats separately with better error handling
+    let statsResult;
+    try {
+      statsResult = await db`
+        SELECT 
+          games_played,
+          games_won,
+          total_winnings
+        FROM player_stats 
+        WHERE player_id = ${player.id}
+      `;
+    } catch (statsQueryError) {
+      console.error('❌ Error querying player stats:', statsQueryError);
+      // Return profile data with zero stats if stats query fails
+      return NextResponse.json({
+        username: player.username,
+        avatar_url: player.avatar_url,
+        phone_number: player.phone_number,
+        sms_notifications_enabled: player.sms_notifications_enabled || false,
+        sms_opted_in_at: player.sms_opted_in_at,
+        games_played: 0,
+        games_won: 0,
+        total_winnings: 0,
+      });
+    }
 
     // If no stats exist, create them
     let gamesPlayed = 0;
@@ -72,6 +97,7 @@ export async function GET(request: NextRequest) {
     let totalWinnings = 0;
     
     if (statsResult.length === 0) {
+      console.log(`📊 No stats found - creating initial stats for player ${player.id}`);
       try {
         await db`
           INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
@@ -86,9 +112,11 @@ export async function GET(request: NextRequest) {
       gamesPlayed = parseInt(stats.games_played?.toString() || '0') || 0;
       gamesWon = parseInt(stats.games_won?.toString() || '0') || 0;
       totalWinnings = parseFloat(stats.total_winnings?.toString() || '0') || 0;
+      
+      console.log(`📊 Player stats: ${gamesPlayed} games, ${gamesWon} wins, ${totalWinnings} SOL`);
     }
 
-    return NextResponse.json({
+    const profileData = {
       username: player.username,
       avatar_url: player.avatar_url,
       phone_number: player.phone_number,
@@ -97,12 +125,27 @@ export async function GET(request: NextRequest) {
       games_played: gamesPlayed,
       games_won: gamesWon,
       total_winnings: totalWinnings,
-    });
+    };
 
-    return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 });
+    console.log(`✅ Returning profile data for ${walletAddress}:`, profileData);
+    return NextResponse.json(profileData);
+
   } catch (error) {
-    console.error('Error fetching profile:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('❌ Error fetching profile:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      walletAddress
+    });
+    
+    // Return a more detailed error in development
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        walletAddress
+      } : undefined
+    }, { status: 500 });
   }
 }
 
