@@ -207,12 +207,12 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
 
   if (success) {
     return (
-      <Paper sx={{ p: 3, bgcolor: '#e8f5e8', border: '2px solid #4caf50' }}>
+      <Paper sx={{ p: 3, bgcolor: '#1a2e1a', border: '2px solid #4caf50' }}>
         <Box sx={{ textAlign: 'center' }}>
-          <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 'bold', mb: 1 }}>
+          <Typography variant="h6" sx={{ color: '#4caf50', fontWeight: 'bold', mb: 1 }}>
             ✅ Payment Successful!
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{ color: '#a5d6a7' }}>
             Your {formatSOL(entryFeeNumber)} has been sent to escrow.
           </Typography>
         </Box>
@@ -221,25 +221,25 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
   }
 
   return (
-    <Paper sx={{ p: 3, bgcolor: '#fff3e0', border: '2px solid #ff9800' }}>
-      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#8B4513' }}>
+    <Paper sx={{ p: 3, bgcolor: '#2d2d2d', border: '2px solid #ff9800' }}>
+      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#ff9800' }}>
         💰 MAINNET SOL Payment Required
       </Typography>
       
       <Box sx={{ mb: 2 }}>
-        <Typography variant="body1" sx={{ mb: 1 }}>
+        <Typography variant="body1" sx={{ mb: 1, color: 'white' }}>
           <strong>Entry Fee:</strong> {formatSOL(entryFeeNumber)}
         </Typography>
         
         {/* User Balance Display */}
-        <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1, mb: 2 }}>
-          <Typography variant="body2" sx={{ mb: 1 }}>
+        <Box sx={{ p: 2, bgcolor: '#1a1a1a', borderRadius: 1, mb: 2 }}>
+          <Typography variant="body2" sx={{ mb: 1, color: 'white' }}>
             <strong>Your Wallet Balance:</strong>{' '}
             {balanceLoading ? (
               <CircularProgress size={12} sx={{ ml: 1 }} />
             ) : userBalance !== null ? (
               <span style={{ 
-                color: userBalance >= (entryFeeNumber + 0.00001) ? '#2e7d32' : '#d32f2f',
+                color: userBalance >= (entryFeeNumber + 0.00001) ? '#4caf50' : '#f44336',
                 fontWeight: 'bold'
               }}>
                 {userBalance.toFixed(6)} SOL
@@ -248,7 +248,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
               'Unable to load'
             )}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{ color: '#ccc' }}>
             Required: {(entryFeeNumber + 0.00001).toFixed(6)} SOL (entry fee + gas)
           </Typography>
           {userBalance !== null && userBalance < (entryFeeNumber + 0.00001) && (
@@ -264,7 +264,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
         <Typography variant="body2" color="error" sx={{ mb: 1, fontWeight: 'bold' }}>
           💳 You will be asked to approve this transaction in Phantom
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        <Typography variant="body2" sx={{ mb: 1, color: '#ccc' }}>
           Funds go to: {PLATFORM_WALLET.toString().slice(0, 20)}...
         </Typography>
         
@@ -308,7 +308,7 @@ export const EscrowPayment: React.FC<EscrowPaymentProps> = ({
         </Button>
       </Box>
 
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block', textAlign: 'center' }}>
+      <Typography variant="caption" sx={{ mt: 2, display: 'block', textAlign: 'center', color: '#ccc' }}>
         🔐 Real blockchain transaction required
       </Typography>
     </Paper>

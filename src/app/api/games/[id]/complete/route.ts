@@ -31,23 +31,36 @@ async function sendSOLDirectly(
     console.log(`🔑 Parsing private key (length: ${fromPrivateKey.length})`);
     
     try {
-      if (fromPrivateKey.includes('[') && fromPrivateKey.includes(']')) {
+      // Try JSON array format first (most common)
+      if (fromPrivateKey.startsWith('[') && fromPrivateKey.endsWith(']')) {
         console.log(`🔑 Parsing as JSON array`);
         const keyArray = JSON.parse(fromPrivateKey);
         privateKeyBytes = new Uint8Array(keyArray);
-      } else if (fromPrivateKey.length === 128) {
-        console.log(`🔑 Parsing as hex string`);
-        privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'hex'));
-      } else {
-        try {
-          console.log(`🔑 Parsing as base64`);
-          privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'base64'));
-        } catch {
-          console.log(`🔑 Parsing as bs58`);
-          const bs58 = await import('bs58');
-          privateKeyBytes = bs58.default.decode(fromPrivateKey);
-        }
+      } 
+      // Try base64 format
+      else if (fromPrivateKey.length === 88 || fromPrivateKey.length === 44) {
+        console.log(`🔑 Parsing as base64 (length ${fromPrivateKey.length})`);
+        privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'base64'));
       }
+      // Try hex format  
+      else if (fromPrivateKey.length === 128) {
+        console.log(`🔑 Parsing as hex string (length ${fromPrivateKey.length})`);
+        privateKeyBytes = new Uint8Array(Buffer.from(fromPrivateKey, 'hex'));
+      }
+      // Try bs58 format
+      else {
+        console.log(`🔑 Parsing as bs58 (length ${fromPrivateKey.length})`);
+        const bs58 = await import('bs58');
+        privateKeyBytes = bs58.default.decode(fromPrivateKey);
+      }
+      
+      console.log(`🔑 Parsed key bytes length: ${privateKeyBytes.length}`);
+      
+      // Validate key length (should be 64 bytes for ed25519)
+      if (privateKeyBytes.length !== 64) {
+        throw new Error(`Invalid key length: ${privateKeyBytes.length} bytes (expected 64)`);
+      }
+      
     } catch (keyError) {
       console.error(`❌ Private key parsing failed:`, keyError);
       throw new Error(`Invalid private key format: ${keyError}`);
