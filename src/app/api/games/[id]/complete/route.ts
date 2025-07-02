@@ -56,10 +56,27 @@ async function sendSOLDirectly(
       
       console.log(`🔑 Parsed key bytes length: ${privateKeyBytes.length}`);
       
-      // Validate key length (should be 64 bytes for ed25519)
-      if (privateKeyBytes.length !== 64) {
-        throw new Error(`Invalid key length: ${privateKeyBytes.length} bytes (expected 64)`);
+      // Handle different key lengths
+      if (privateKeyBytes.length === 64) {
+        // Perfect - standard ed25519 private key
+        console.log(`✅ Standard 64-byte ed25519 key`);
+      } else if (privateKeyBytes.length === 66) {
+        // Sometimes keys have 2 extra bytes at the start - remove them
+        console.log(`🔧 66-byte key detected - extracting 64 bytes`);
+        privateKeyBytes = privateKeyBytes.slice(2, 66); // Remove first 2 bytes
+      } else if (privateKeyBytes.length === 96) {
+        // Sometimes includes public key at end - extract first 64 bytes
+        console.log(`🔧 96-byte key detected - extracting first 64 bytes`);
+        privateKeyBytes = privateKeyBytes.slice(0, 64);
+      } else if (privateKeyBytes.length === 32) {
+        // This might be just the seed - try to expand it
+        console.log(`🔧 32-byte seed detected - this might not work`);
+        throw new Error(`32-byte seed provided - need full 64-byte private key`);
+      } else {
+        throw new Error(`Invalid key length: ${privateKeyBytes.length} bytes (expected 64, got extra bytes)`);
       }
+      
+      console.log(`✅ Final key length: ${privateKeyBytes.length} bytes`);
       
     } catch (keyError) {
       console.error(`❌ Private key parsing failed:`, keyError);
