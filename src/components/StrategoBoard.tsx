@@ -168,9 +168,10 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   
   // Setup state
   const [availablePieces, setAvailablePieces] = useState<Record<PieceRank, number>>(PIECE_COUNTS);
-  const [selectedPieceType, setSelectedPieceType] = useState<PieceRank>('Scout');
   const [setupStartTime, setSetupStartTime] = useState<Date | null>(null);
   const [turnStartTime, setTurnStartTime] = useState<Date | null>(null);
+  const [showPieceSelector, setShowPieceSelector] = useState(false);
+  const [selectedSetupSquare, setSelectedSetupSquare] = useState<[number, number] | null>(null);
 
   // Forfeit dialog state
   const [showForfeitDialog, setShowForfeitDialog] = useState(false);
@@ -438,8 +439,18 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   const handleSetupClick = useCallback((row: number, col: number) => {
     if (!playerColor || !isSetupArea(row, playerColor)) return;
     if (isLakePosition(row, col)) return;
-    if (availablePieces[selectedPieceType] <= 0) return;
     
+    // Show piece selector for this square
+    setSelectedSetupSquare([row, col]);
+    setShowPieceSelector(true);
+  }, [playerColor]);
+
+  // Place selected piece on board
+  const placePiece = useCallback((pieceRank: PieceRank) => {
+    if (!selectedSetupSquare || !playerColor) return;
+    if (availablePieces[pieceRank] <= 0) return;
+
+    const [row, col] = selectedSetupSquare;
     const newBoard = [...gameState.board];
     
     // Remove existing piece if any
@@ -454,18 +465,20 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     // Place new piece
     newBoard[row][col] = {
       color: playerColor,
-      rank: selectedPieceType,
+      rank: pieceRank,
       isRevealed: false,
-      canMove: selectedPieceType !== 'Bomb' && selectedPieceType !== 'Flag'
+      canMove: pieceRank !== 'Bomb' && pieceRank !== 'Flag'
     };
     
     setAvailablePieces(prev => ({
       ...prev,
-      [selectedPieceType]: prev[selectedPieceType] - 1
+      [pieceRank]: prev[pieceRank] - 1
     }));
     
     setGameState(prev => ({ ...prev, board: newBoard }));
-  }, [gameState.board, playerColor, selectedPieceType, availablePieces]);
+    setShowPieceSelector(false);
+    setSelectedSetupSquare(null);
+  }, [selectedSetupSquare, playerColor, availablePieces, gameState.board]);
 
   // Handle square click during active play
   const handleActiveClick = useCallback((row: number, col: number) => {
@@ -955,43 +968,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       )}
 
       <Box sx={{ display: 'flex', gap: 3, flexDirection: { xs: 'column', md: 'row' } }}>
-        {/* Setup Panel */}
-        {gameState.setupPhase && (
-          <Box sx={{ width: { xs: '100%', md: '300px' } }}>
-            <Paper sx={{ p: 2, bgcolor: 'rgba(46, 64, 87, 0.1)' }}>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
-                🎯 Deploy Pieces
-              </Typography>
-              
-              <Box sx={{ mb: 2 }}>
-                {Object.entries(availablePieces).map(([rank, count]) => (
-                  <Button
-                    key={rank}
-                    variant={selectedPieceType === rank ? 'contained' : 'outlined'}
-                    size="small"
-                    sx={{ m: 0.5, minWidth: 'auto' }}
-                    onClick={() => setSelectedPieceType(rank as PieceRank)}
-                    disabled={count === 0}
-                  >
-                    {getPieceSymbol(rank as PieceRank)} {count}
-                  </Button>
-                ))}
-              </Box>
-              
-              <Button
-                variant="contained"
-                fullWidth
-                onClick={completeSetup}
-                disabled={Object.values(availablePieces).some(count => count > 0)}
-                sx={{ bgcolor: '#2E4057', '&:hover': { bgcolor: '#1e2a3a' } }}
-              >
-                ⚔️ Start Battle!
-              </Button>
-            </Paper>
-          </Box>
-        )}
-        
-        {/* Game Board */}
+        {/* Game Board - Centered */}
         <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
           <div className="stratego-board">
             {gameState.board.map((row, rowIndex) =>
@@ -1000,6 +977,89 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           </div>
         </Box>
       </Box>
+
+      {/* Piece Selector Modal */}
+      <Dialog 
+        open={showPieceSelector} 
+        onClose={() => setShowPieceSelector(false)} 
+        maxWidth="md" 
+        fullWidth
+      >
+        <DialogTitle sx={{ textAlign: 'center', fontSize: '1.5rem', fontWeight: 'bold' }}>
+          🎯 Choose Your Piece
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" align="center" gutterBottom>
+            {selectedSetupSquare && `Placing piece at position ${selectedSetupSquare[0]}, ${selectedSetupSquare[1]}`}
+          </Typography>
+          
+          {/* Piece Carousel */}
+          <Box sx={{ 
+            display: 'grid', 
+            gridTemplateColumns: { 
+              xs: 'repeat(4, 1fr)', 
+              sm: 'repeat(6, 1fr)', 
+              md: 'repeat(8, 1fr)' 
+            },
+            gap: 2, 
+            mt: 2, 
+            maxHeight: '400px', 
+            overflowY: 'auto' 
+          }}>
+            {Object.entries(availablePieces).map(([rank, count]) => (
+              <Box key={rank} sx={{ textAlign: 'center' }}>
+                <Button
+                  variant={count > 0 ? 'contained' : 'outlined'}
+                  disabled={count === 0}
+                  onClick={() => placePiece(rank as PieceRank)}
+                  sx={{
+                    width: 80,
+                    height: 80,
+                    flexDirection: 'column',
+                    p: 1,
+                    bgcolor: count > 0 ? '#2E4057' : 'grey.300',
+                    '&:hover': { 
+                      bgcolor: count > 0 ? '#1e2a3a' : 'grey.400' 
+                    }
+                  }}
+                >
+                  <Typography variant="h4" sx={{ mb: 0.5 }}>
+                    {getPieceSymbol(rank as PieceRank)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontSize: '0.7rem' }}>
+                    {rank}
+                  </Typography>
+                </Button>
+                <Typography variant="caption" display="block" sx={{ mt: 0.5, fontWeight: 'bold' }}>
+                  {count} left
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          
+          <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(46, 64, 87, 0.1)', borderRadius: 1 }}>
+            <Typography variant="h6" gutterBottom>
+              🎖️ Remaining Pieces Summary
+            </Typography>
+            <Typography variant="body2">
+              Total remaining: {Object.values(availablePieces).reduce((sum, count) => sum + count, 0)} / 40
+            </Typography>
+            {Object.values(availablePieces).reduce((sum, count) => sum + count, 0) === 0 && (
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={completeSetup}
+                sx={{ mt: 2, bgcolor: '#2E4057', '&:hover': { bgcolor: '#1e2a3a' } }}
+              >
+                ⚔️ Start Battle!
+              </Button>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowPieceSelector(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Combat Dialog */}
       <Dialog open={!!combatDialog} maxWidth="sm" fullWidth>
@@ -1110,7 +1170,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         </DialogActions>
       </Dialog>
 
-      {/* Game Controls */}
+      {/* GameControls */}
       {gameState.gameStatus === 'active' && playerColor && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
           <Button
@@ -1154,17 +1214,19 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       <style jsx>{`
         .stratego-board {
           display: grid;
-          grid-template-columns: repeat(10, 50px);
-          grid-template-rows: repeat(10, 50px);
+          grid-template-columns: repeat(10, 1fr);
+          grid-template-rows: repeat(10, 1fr);
           gap: 1px;
           border: 3px solid #2E4057;
           border-radius: 8px;
           background-color: #2E4057;
+          width: 100%;
+          max-width: 500px;
+          aspect-ratio: 1;
+          margin: 0 auto;
         }
         
         .stratego-square {
-          width: 50px;
-          height: 50px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1172,6 +1234,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           background-color: #F5DEB3;
           position: relative;
           transition: all 0.2s ease;
+          min-height: 30px;
         }
         
         .stratego-square.lake {
@@ -1201,14 +1264,14 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
         
         .stratego-piece {
-          width: 40px;
-          height: 40px;
+          width: 85%;
+          height: 85%;
           border-radius: 50%;
-          border: 2px solid #333;
+          border: 1px solid #333;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 16px;
+          font-size: clamp(8px, 2vw, 16px);
           font-weight: bold;
           cursor: pointer;
           transition: transform 0.2s ease;
@@ -1228,7 +1291,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
-          font-size: 16px;
+          font-size: clamp(8px, 2vw, 16px);
         }
         
         .stratego-piece.red {
@@ -1247,7 +1310,34 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
         
         .lake-water {
-          font-size: 20px;
+          font-size: clamp(12px, 3vw, 20px);
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 600px) {
+          .stratego-board {
+            max-width: 350px;
+            gap: 1px;
+          }
+          
+          .stratego-square {
+            min-height: 25px;
+          }
+          
+          .stratego-piece {
+            border-width: 1px;
+          }
+        }
+
+        /* Large screen optimization */
+        @media (min-width: 1200px) {
+          .stratego-board {
+            max-width: 600px;
+          }
+          
+          .stratego-square {
+            min-height: 35px;
+          }
         }
       `}</style>
     </Box>
