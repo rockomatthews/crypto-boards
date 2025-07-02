@@ -53,11 +53,19 @@ export const Profile: FC = () => {
   const fetchProfile = useCallback(async () => {
     if (!publicKey) return;
 
+    console.log('🔄 fetchProfile called for wallet:', publicKey.toString().slice(0, 8));
+    
     try {
       const response = await fetch(`/api/profile?walletAddress=${publicKey.toString()}`);
+      console.log('📡 fetchProfile response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('📦 fetchProfile received data:', data);
+        
         setProfile(data);
+        console.log('✅ setProfile called with new data');
+        
         setSmsNotificationsEnabled(data.sms_notifications_enabled || false);
       } else {
         console.error('Error fetching profile:', response.statusText);
