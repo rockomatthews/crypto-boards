@@ -2,7 +2,8 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert, CircularProgress } from '@mui/material';
+import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert, CircularProgress, IconButton } from '@mui/material';
+import { ArrowBackIos, ArrowForwardIos } from '@mui/icons-material';
 import GameEndModal from './GameEndModal';
 import { PublicKey } from '@solana/web3.js';
 import { magicBlockManager } from '../lib/magicblock';
@@ -1031,203 +1032,193 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             {selectedSetupSquare && `Placing piece at position ${selectedSetupSquare[0]}, ${selectedSetupSquare[1]}`}
           </Typography>
           
-          {/* Piece Carousel - ALL INDIVIDUAL PIECES */}
-          <Box sx={{ 
-            display: 'grid', 
-            gridTemplateColumns: { 
-              xs: 'repeat(4, 1fr)', 
-              md: 'repeat(6, 1fr)' 
-            },
-            gap: 2, 
-            mt: 2, 
-            maxHeight: '500px', 
-            overflowY: 'auto',
-            p: 1
-          }}>
-            {/* Generate ALL individual piece variants */}
-            {Object.entries(PIECE_COUNTS).map(([rank, count]) => {
-              const results = [];
-              
-              if (count === 1) {
-                // Single pieces: Marshal, General, Spy, Flag
-                const pieceImage = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
-                const available = availablePieces[rank as PieceRank] > 0;
+          {/* Piece Carousel - HORIZONTAL SCROLLING WITH ARROWS */}
+          <Box sx={{ position: 'relative', width: '100%' }}>
+            {/* Left Arrow */}
+            <IconButton
+              onClick={() => {
+                const container = document.getElementById('piece-carousel');
+                if (container) {
+                  container.scrollBy({ left: -300, behavior: 'smooth' });
+                }
+              }}
+              sx={{
+                position: 'absolute',
+                left: -20,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 10,
+                bgcolor: 'rgba(46, 64, 87, 0.8)',
+                color: 'white',
+                '&:hover': { bgcolor: 'rgba(46, 64, 87, 1)' }
+              }}
+            >
+              <ArrowBackIos />
+            </IconButton>
+
+            {/* Right Arrow */}
+            <IconButton
+              onClick={() => {
+                const container = document.getElementById('piece-carousel');
+                if (container) {
+                  container.scrollBy({ left: 300, behavior: 'smooth' });
+                }
+              }}
+              sx={{
+                position: 'absolute',
+                right: -20,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                zIndex: 10,
+                bgcolor: 'rgba(46, 64, 87, 0.8)',
+                color: 'white',
+                '&:hover': { bgcolor: 'rgba(46, 64, 87, 1)' }
+              }}
+            >
+              <ArrowForwardIos />
+            </IconButton>
+
+            {/* Horizontal Scrolling Container */}
+            <Box
+              id="piece-carousel"
+              sx={{
+                display: 'flex',
+                overflowX: 'auto',
+                overflowY: 'hidden',
+                gap: 3,
+                py: 2,
+                px: 4,
+                scrollBehavior: 'smooth',
+                '&::-webkit-scrollbar': { display: 'none' },
+                msOverflowStyle: 'none',
+                scrollbarWidth: 'none'
+              }}
+            >
+              {/* Generate ALL individual piece variants */}
+              {Object.entries(PIECE_COUNTS).map(([rank, count]) => {
+                const results = [];
                 
-                results.push(
-                  <Box key={`${rank}-single`} sx={{ textAlign: 'center' }}>
-                    <Button
-                      variant={available ? 'contained' : 'outlined'}
-                      disabled={!available}
-                      onClick={() => placePiece(rank as PieceRank)}
-                      sx={{
-                        width: 200,
-                        height: 150,
-                        flexDirection: 'column',
-                        p: 1,
-                        bgcolor: available ? '#2E4057' : 'grey.300',
-                        '&:hover': { 
-                          bgcolor: available ? '#1e2a3a' : 'grey.400' 
-                        },
-                        position: 'relative',
-                        overflow: 'hidden',
-                        border: available ? '3px solid #4CAF50' : '3px solid #999'
-                      }}
-                    >
-                      {/* FULL 200px Image */}
-                      <Box sx={{ 
-                        width: 180, 
-                        height: 120, 
-                        overflow: 'hidden',
-                        mb: 0.5,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        bgcolor: 'rgba(255,255,255,0.1)',
-                        borderRadius: 1
-                      }}>
+                if (count === 1) {
+                  // Single pieces: Marshal, General, Spy, Flag
+                  const pieceImage = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
+                  const available = availablePieces[rank as PieceRank] > 0;
+                  
+                  results.push(
+                    <Box key={`${rank}-single`} sx={{ 
+                      textAlign: 'center',
+                      minWidth: 250,
+                      cursor: available ? 'pointer' : 'not-allowed',
+                      opacity: available ? 1 : 0.5,
+                      transition: 'all 0.3s ease',
+                      '&:hover': available ? { transform: 'scale(1.05)' } : {}
+                    }}>
+                      <Box
+                        onClick={() => available && placePiece(rank as PieceRank)}
+                        sx={{
+                          width: 250,
+                          height: 200,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          mb: 1
+                        }}
+                      >
                         <img 
                           src={pieceImage}
                           alt={rank}
                           style={{
                             width: '100%',
                             height: '100%',
-                            objectFit: 'contain'
+                            objectFit: 'contain',
+                            filter: available ? 'none' : 'grayscale(100%)'
                           }}
                           onError={(e) => {
                             console.error(`Failed to load image: ${pieceImage}`);
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
-                            const fallback = target.nextElementSibling as HTMLElement;
-                            if (fallback) {
-                              fallback.style.display = 'flex';
-                            }
                           }}
                         />
-                        <Typography 
-                          variant="h3" 
-                          sx={{ 
-                            display: 'none',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '100%',
-                            height: '100%',
-                            color: 'white'
-                          }}
-                        >
-                          {getPieceSymbol(rank as PieceRank)}
-                        </Typography>
                       </Box>
                       
-                      <Typography variant="body2" sx={{ 
+                      <Typography variant="h6" sx={{ 
                         fontWeight: 'bold',
-                        color: 'white',
-                        textAlign: 'center'
+                        color: available ? 'primary.main' : 'text.disabled',
+                        mb: 0.5
                       }}>
                         {rank}
                       </Typography>
-                    </Button>
-                    <Typography variant="caption" display="block" sx={{ 
-                      mt: 0.5, 
-                      fontWeight: 'bold',
-                      color: available ? 'success.main' : 'text.disabled'
-                    }}>
-                      {availablePieces[rank as PieceRank]} left
-                    </Typography>
-                  </Box>
-                );
-              } else {
-                // Multiple pieces: Show ALL numbered variants
-                for (let variant = 1; variant <= count; variant++) {
-                  const pieceImage = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variant}.png`;
-                  const available = availablePieces[rank as PieceRank] > 0;
-                  
-                  results.push(
-                    <Box key={`${rank}-${variant}`} sx={{ textAlign: 'center' }}>
-                      <Button
-                        variant={available ? 'contained' : 'outlined'}
-                        disabled={!available}
-                        onClick={() => placePiece(rank as PieceRank)}
-                        sx={{
-                          width: 200,
-                          height: 150,
-                          flexDirection: 'column',
-                          p: 1,
-                          bgcolor: available ? '#2E4057' : 'grey.300',
-                          '&:hover': { 
-                            bgcolor: available ? '#1e2a3a' : 'grey.400' 
-                          },
-                          position: 'relative',
-                          overflow: 'hidden',
-                          border: available ? '3px solid #4CAF50' : '3px solid #999'
-                        }}
-                      >
-                        {/* FULL 200px Image */}
-                        <Box sx={{ 
-                          width: 180, 
-                          height: 120, 
-                          overflow: 'hidden',
-                          mb: 0.5,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          bgcolor: 'rgba(255,255,255,0.1)',
-                          borderRadius: 1
-                        }}>
+                      <Typography variant="caption" sx={{ 
+                        fontWeight: 'bold',
+                        color: available ? 'success.main' : 'text.disabled'
+                      }}>
+                        {availablePieces[rank as PieceRank]} left
+                      </Typography>
+                    </Box>
+                  );
+                } else {
+                  // Multiple pieces: Show ALL numbered variants
+                  for (let variant = 1; variant <= count; variant++) {
+                    const pieceImage = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variant}.png`;
+                    const available = availablePieces[rank as PieceRank] > 0;
+                    
+                    results.push(
+                      <Box key={`${rank}-${variant}`} sx={{ 
+                        textAlign: 'center',
+                        minWidth: 250,
+                        cursor: available ? 'pointer' : 'not-allowed',
+                        opacity: available ? 1 : 0.5,
+                        transition: 'all 0.3s ease',
+                        '&:hover': available ? { transform: 'scale(1.05)' } : {}
+                      }}>
+                        <Box
+                          onClick={() => available && placePiece(rank as PieceRank)}
+                          sx={{
+                            width: 250,
+                            height: 200,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            mb: 1
+                          }}
+                        >
                           <img 
                             src={pieceImage}
                             alt={`${rank} ${variant}`}
                             style={{
                               width: '100%',
                               height: '100%',
-                              objectFit: 'contain'
+                              objectFit: 'contain',
+                              filter: available ? 'none' : 'grayscale(100%)'
                             }}
                             onError={(e) => {
                               console.error(`Failed to load image: ${pieceImage}`);
                               const target = e.target as HTMLImageElement;
                               target.style.display = 'none';
-                              const fallback = target.nextElementSibling as HTMLElement;
-                              if (fallback) {
-                                fallback.style.display = 'flex';
-                              }
                             }}
                           />
-                          <Typography 
-                            variant="h3" 
-                            sx={{ 
-                              display: 'none',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              width: '100%',
-                              height: '100%',
-                              color: 'white'
-                            }}
-                          >
-                            {getPieceSymbol(rank as PieceRank)}
-                          </Typography>
                         </Box>
                         
-                        <Typography variant="body2" sx={{ 
+                        <Typography variant="h6" sx={{ 
                           fontWeight: 'bold',
-                          color: 'white',
-                          textAlign: 'center'
+                          color: available ? 'primary.main' : 'text.disabled',
+                          mb: 0.5
                         }}>
                           {rank} #{variant}
                         </Typography>
-                      </Button>
-                      <Typography variant="caption" display="block" sx={{ 
-                        mt: 0.5, 
-                        fontWeight: 'bold',
-                        color: available ? 'success.main' : 'text.disabled'
-                      }}>
-                        Available
-                      </Typography>
-                    </Box>
-                  );
+                        <Typography variant="caption" sx={{ 
+                          fontWeight: 'bold',
+                          color: available ? 'success.main' : 'text.disabled'
+                        }}>
+                          Available
+                        </Typography>
+                      </Box>
+                    );
+                  }
                 }
-              }
-              
-              return results;
-            }).flat()}
+                
+                return results;
+              }).flat()}
+            </Box>
           </Box>
           
           <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(46, 64, 87, 0.1)', borderRadius: 1 }}>
