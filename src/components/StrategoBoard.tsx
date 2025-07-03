@@ -925,7 +925,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   }, [gameState, saveGameState]);
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
+    <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
       {/* Game Info */}
       <Paper sx={{ p: 2, mb: 3, bgcolor: '#2E4057', color: 'white', borderRadius: 2 }}>
         <Typography variant="h4" align="center" gutterBottom sx={{ fontWeight: 'bold' }}>
@@ -1085,9 +1085,9 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                 display: 'flex',
                 overflowX: 'auto',
                 overflowY: 'hidden',
-                gap: 3,
-                py: 2,
-                px: 4,
+                gap: 1,
+                py: 1,
+                px: 2,
                 scrollBehavior: 'smooth',
                 '&::-webkit-scrollbar': { display: 'none' },
                 msOverflowStyle: 'none',
@@ -1106,7 +1106,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                   results.push(
                     <Box key={`${rank}-single`} sx={{ 
                       textAlign: 'center',
-                      minWidth: 250,
+                      minWidth: 180,
                       cursor: available ? 'pointer' : 'not-allowed',
                       opacity: available ? 1 : 0.5,
                       transition: 'all 0.3s ease',
@@ -1115,12 +1115,12 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                       <Box
                         onClick={() => available && placePiece(rank as PieceRank)}
                         sx={{
-                          width: 250,
-                          height: 200,
+                          width: 180,
+                          height: 150,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          mb: 1
+                          mb: 0.5
                         }}
                       >
                         <img 
@@ -1164,7 +1164,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                     results.push(
                       <Box key={`${rank}-${variant}`} sx={{ 
                         textAlign: 'center',
-                        minWidth: 250,
+                        minWidth: 180,
                         cursor: available ? 'pointer' : 'not-allowed',
                         opacity: available ? 1 : 0.5,
                         transition: 'all 0.3s ease',
@@ -1173,12 +1173,12 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                         <Box
                           onClick={() => available && placePiece(rank as PieceRank)}
                           sx={{
-                            width: 250,
-                            height: 200,
+                            width: 180,
+                            height: 150,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            mb: 1
+                            mb: 0.5
                           }}
                         >
                           <img 
@@ -1400,15 +1400,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           display: grid;
           grid-template-columns: repeat(10, 1fr);
           grid-template-rows: repeat(10, 1fr);
-          gap: 2px;
+          gap: 3px;
           border: 4px solid #2E4057;
           border-radius: 8px;
           background-color: #2E4057;
           width: 100%;
-          max-width: 500px;
+          max-width: 800px;
           aspect-ratio: 1;
           margin: 0 auto;
-          padding: 4px;
+          padding: 6px;
           box-sizing: border-box;
         }
         
@@ -1420,8 +1420,9 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           background-color: #F5DEB3;
           position: relative;
           transition: all 0.2s ease;
-          border-radius: 2px;
+          border-radius: 3px;
           overflow: hidden;
+          min-height: 60px;
         }
         
         .stratego-square.lake {
@@ -1454,14 +1455,14 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
         
         .stratego-piece {
-          width: 90%;
-          height: 90%;
+          width: 95%;
+          height: 95%;
           border-radius: 50%;
           border: 2px solid #333;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: clamp(8px, 1.5vw, 14px);
+          font-size: clamp(10px, 2vw, 18px);
           font-weight: bold;
           cursor: pointer;
           transition: transform 0.2s ease;
@@ -1517,10 +1518,14 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         /* Mobile Responsive */
         @media (max-width: 600px) {
           .stratego-board {
-            max-width: 350px;
-            gap: 1px;
-            padding: 3px;
+            max-width: 450px;
+            gap: 2px;
+            padding: 4px;
             border-width: 3px;
+          }
+          
+          .stratego-square {
+            min-height: 35px;
           }
           
           .stratego-piece {
@@ -1531,9 +1536,13 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         /* Large screen optimization */
         @media (min-width: 1200px) {
           .stratego-board {
-            max-width: 600px;
-            gap: 3px;
-            padding: 6px;
+            max-width: 900px;
+            gap: 4px;
+            padding: 8px;
+          }
+          
+          .stratego-square {
+            min-height: 70px;
           }
         }
       `}</style>
