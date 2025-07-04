@@ -32,6 +32,7 @@ interface StrategoPiece {
   rank: PieceRank;
   isRevealed: boolean; // Whether the piece has been revealed to opponent
   canMove: boolean;    // Bombs and Flags can't move
+  imagePath?: string;  // Store specific variant image path
 }
 
 interface CombatResult {
@@ -485,7 +486,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   }, [playerColor, pieceImageCache]);
 
   // Place selected piece on board
-  const placePiece = useCallback((pieceRank: PieceRank) => {
+  const placePiece = useCallback((pieceRank: PieceRank, specificImagePath: string) => {
     if (!selectedSetupSquare || !playerColor) return;
     if (availablePieces[pieceRank] <= 0) return;
 
@@ -501,13 +502,16 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       }));
     }
     
-    // Place new piece
+    // Place new piece with specific image
     newBoard[row][col] = {
       color: playerColor,
       rank: pieceRank,
       isRevealed: false,
-      canMove: pieceRank !== 'Bomb' && pieceRank !== 'Flag'
+      canMove: pieceRank !== 'Bomb' && pieceRank !== 'Flag',
+      imagePath: specificImagePath
     };
+    
+    console.log(`Placed ${pieceRank} with specific image: ${specificImagePath} at [${row}, ${col}]`);
     
     setAvailablePieces(prev => ({
       ...prev,
@@ -619,11 +623,11 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         {piece && (
           <div className={`stratego-piece ${piece.color} ${piece.isRevealed || piece.color === playerColor ? 'revealed' : 'hidden'}`}>
             <img 
-              src={getPieceImage(piece.rank, piece.color, piece.isRevealed)} 
+              src={piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)} 
               alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
               className="piece-image"
               onError={(e) => {
-                console.error(`Failed to load board piece image: ${getPieceImage(piece.rank, piece.color, piece.isRevealed)}`);
+                console.error(`Failed to load board piece image: ${piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)}`);
                 // Fallback to emoji if image fails to load
                 const target = e.target as HTMLImageElement;
                 target.style.display = 'none';
@@ -646,7 +650,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                 top: '50%',
                 left: '50%',
                 transform: 'translate(-50%, -50%)',
-                fontSize: 'clamp(6px, 1.2vw, 12px)',
+                fontSize: 'clamp(10px, 2vw, 20px)',
                 fontWeight: 'bold',
                 color: 'white',
                 textAlign: 'center',
@@ -1113,7 +1117,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                       '&:hover': available ? { transform: 'scale(1.05)' } : {}
                     }}>
                       <Box
-                        onClick={() => available && placePiece(rank as PieceRank)}
+                        onClick={() => available && placePiece(rank as PieceRank, pieceImage)}
                         sx={{
                           width: 180,
                           height: 150,
@@ -1171,7 +1175,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                         '&:hover': available ? { transform: 'scale(1.05)' } : {}
                       }}>
                         <Box
-                          onClick={() => available && placePiece(rank as PieceRank)}
+                          onClick={() => available && placePiece(rank as PieceRank, pieceImage)}
                           sx={{
                             width: 180,
                             height: 150,
@@ -1398,21 +1402,21 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       <style jsx>{`
         .stratego-board {
           display: grid;
-          grid-template-columns: repeat(10, 1fr);
-          grid-template-rows: repeat(10, 1fr);
-          gap: 3px;
+          grid-template-columns: repeat(10, 80px);
+          grid-template-rows: repeat(10, 80px);
+          gap: 4px;
           border: 4px solid #2E4057;
           border-radius: 8px;
           background-color: #2E4057;
-          width: 100%;
-          max-width: 800px;
-          aspect-ratio: 1;
+          width: fit-content;
           margin: 0 auto;
-          padding: 6px;
+          padding: 8px;
           box-sizing: border-box;
         }
         
         .stratego-square {
+          width: 80px;
+          height: 80px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1420,9 +1424,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           background-color: #F5DEB3;
           position: relative;
           transition: all 0.2s ease;
-          border-radius: 3px;
+          border-radius: 4px;
           overflow: hidden;
-          min-height: 60px;
         }
         
         .stratego-square.lake {
@@ -1455,20 +1458,20 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
         
         .stratego-piece {
-          width: 95%;
-          height: 95%;
+          width: 98%;
+          height: 98%;
           border-radius: 50%;
           border: 2px solid #333;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: clamp(10px, 2vw, 18px);
+          font-size: clamp(12px, 3vw, 24px);
           font-weight: bold;
           cursor: pointer;
           transition: transform 0.2s ease;
           overflow: hidden;
           position: relative;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          box-shadow: 0 3px 6px rgba(0,0,0,0.4);
           background: transparent;
         }
         
@@ -1488,7 +1491,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
-          font-size: clamp(6px, 1.2vw, 12px);
+          font-size: clamp(10px, 2vw, 20px);
           z-index: 2;
           display: flex;
           align-items: center;
@@ -1512,20 +1515,22 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
         
         .lake-water {
-          font-size: clamp(10px, 2.5vw, 18px);
+          font-size: clamp(16px, 4vw, 32px);
         }
 
         /* Mobile Responsive */
         @media (max-width: 600px) {
           .stratego-board {
-            max-width: 450px;
-            gap: 2px;
-            padding: 4px;
+            grid-template-columns: repeat(10, 60px);
+            grid-template-rows: repeat(10, 60px);
+            gap: 3px;
+            padding: 6px;
             border-width: 3px;
           }
           
           .stratego-square {
-            min-height: 35px;
+            width: 60px;
+            height: 60px;
           }
           
           .stratego-piece {
@@ -1536,13 +1541,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         /* Large screen optimization */
         @media (min-width: 1200px) {
           .stratego-board {
-            max-width: 900px;
-            gap: 4px;
-            padding: 8px;
+            grid-template-columns: repeat(10, 100px);
+            grid-template-rows: repeat(10, 100px);
+            gap: 5px;
+            padding: 10px;
           }
           
           .stratego-square {
-            min-height: 70px;
+            width: 100px;
+            height: 100px;
           }
         }
       `}</style>
