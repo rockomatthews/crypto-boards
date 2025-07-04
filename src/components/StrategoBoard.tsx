@@ -636,7 +636,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'fill',
+              objectFit: 'contain',
               display: 'block',
               margin: 0,
               padding: 0,
