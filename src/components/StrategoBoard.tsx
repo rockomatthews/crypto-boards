@@ -1458,10 +1458,10 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
         
         .stratego-piece {
-          width: 98%;
-          height: 98%;
-          border-radius: 50%;
-          border: 2px solid #333;
+          width: 100%;
+          height: 100%;
+          border-radius: 0;
+          border: none;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -1471,7 +1471,6 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           transition: transform 0.2s ease;
           overflow: hidden;
           position: relative;
-          box-shadow: 0 3px 6px rgba(0,0,0,0.4);
           background: transparent;
         }
         
@@ -1479,7 +1478,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           width: 100%;
           height: 100%;
           object-fit: cover;
-          border-radius: 50%;
+          border-radius: 0;
           position: absolute;
           top: 0;
           left: 0;
