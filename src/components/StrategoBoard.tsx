@@ -618,51 +618,36 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         key={`${row}-${col}`}
         className={`stratego-square ${isLake ? 'lake' : ''} ${isSelected ? 'selected' : ''} ${isValidMove ? 'valid-move' : ''} ${isLastMoveSquare ? 'last-move' : ''} ${gameState.setupPhase && isSetupAreaForPlayer ? 'setup-area' : ''}`}
         onClick={() => handleSquareClick(row, col)}
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+          backgroundColor: isLake ? '#4169E1' : '#F5DEB3',
+          border: isSelected ? '3px solid #FFD700' : isValidMove ? '2px solid #FFA500' : '1px solid #8B4513',
+          cursor: 'pointer',
+          overflow: 'hidden'
+        }}
       >
-        {isLake && <div className="lake-water">🌊</div>}
+        {isLake && <span style={{ fontSize: '24px', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>🌊</span>}
         {piece && (
-          <div className={`stratego-piece ${piece.color} ${piece.isRevealed || piece.color === playerColor ? 'revealed' : 'hidden'}`}>
-            <img 
-              src={piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)} 
-              alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
-              className="piece-image"
-              onError={(e) => {
-                console.error(`Failed to load board piece image: ${piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)}`);
-                // Fallback to emoji if image fails to load
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const fallback = target.nextElementSibling as HTMLElement;
-                if (fallback) {
-                  fallback.style.display = 'flex';
-                }
-              }}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover'
-              }}
-            />
-            <div 
-              className="piece-fallback" 
-              style={{ 
-                display: 'none',
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                fontSize: 'clamp(10px, 2vw, 20px)',
-                fontWeight: 'bold',
-                color: 'white',
-                textAlign: 'center',
-                zIndex: 1
-              }}
-            >
-              {piece.isRevealed || piece.color === playerColor ? 
-                getPieceSymbol(piece.rank) : 
-                piece.color === 'red' ? '🔴' : '🔵'
-              }
-            </div>
-          </div>
+          <img 
+            src={piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)} 
+            alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'fill',
+              display: 'block',
+              margin: 0,
+              padding: 0,
+              border: 'none'
+            }}
+            onError={(e) => {
+              console.error(`Failed to load board piece image: ${piece.imagePath}`);
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+            }}
+          />
         )}
       </div>
     );
@@ -1402,153 +1387,74 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       <style jsx>{`
         .stratego-board {
           display: grid;
-          grid-template-columns: repeat(10, 80px);
-          grid-template-rows: repeat(10, 80px);
-          gap: 4px;
+          grid-template-columns: repeat(10, 90px);
+          grid-template-rows: repeat(10, 90px);
+          gap: 2px;
           border: 4px solid #2E4057;
           border-radius: 8px;
           background-color: #2E4057;
           width: fit-content;
           margin: 0 auto;
-          padding: 8px;
+          padding: 4px;
           box-sizing: border-box;
         }
         
         .stratego-square {
-          width: 80px;
-          height: 80px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          background-color: #F5DEB3;
+          width: 90px;
+          height: 90px;
           position: relative;
-          transition: all 0.2s ease;
-          border-radius: 4px;
           overflow: hidden;
-        }
-        
-        .stratego-square.lake {
-          background-color: #4169E1;
-          cursor: not-allowed;
-        }
-        
-        .stratego-square.setup-area {
-          background-color: #90EE90;
-          box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
         }
         
         .stratego-square.selected {
-          background-color: #FFD700 !important;
-          box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+          box-shadow: inset 0 0 0 3px #FFD700;
         }
         
         .stratego-square.valid-move {
-          background-color: #FFA500 !important;
-          box-shadow: 0 0 10px rgba(255,165,0,0.6);
+          box-shadow: inset 0 0 0 2px #FFA500;
         }
         
         .stratego-square.last-move {
-          background-color: #87CEEB !important;
+          box-shadow: inset 0 0 0 2px #87CEEB;
+        }
+        
+        .stratego-square.setup-area {
+          background-color: rgba(144, 238, 144, 0.3) !important;
         }
         
         .stratego-square:hover:not(.lake) {
-          opacity: 0.8;
           transform: scale(1.02);
-        }
-        
-        .stratego-piece {
-          width: 100%;
-          height: 100%;
-          border-radius: 0;
-          border: none;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: clamp(12px, 3vw, 24px);
-          font-weight: bold;
-          cursor: pointer;
           transition: transform 0.2s ease;
-          overflow: hidden;
-          position: relative;
-          background: transparent;
-        }
-        
-        .piece-image {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          border-radius: 0;
-          position: absolute;
-          top: 0;
-          left: 0;
-          z-index: 1;
-        }
-        
-        .piece-fallback {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          font-size: clamp(10px, 2vw, 20px);
-          z-index: 2;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        
-        .stratego-piece.red {
-          border-color: #CC0000;
-          box-shadow: 0 2px 4px rgba(204, 0, 0, 0.4);
-        }
-        
-        .stratego-piece.blue {
-          border-color: #0066CC;
-          box-shadow: 0 2px 4px rgba(0, 102, 204, 0.4);
-        }
-        
-        .stratego-piece.hidden {
-          background: #666;
-          color: white;
-          border-color: #333;
-        }
-        
-        .lake-water {
-          font-size: clamp(16px, 4vw, 32px);
         }
 
         /* Mobile Responsive */
         @media (max-width: 600px) {
           .stratego-board {
-            grid-template-columns: repeat(10, 60px);
-            grid-template-rows: repeat(10, 60px);
-            gap: 3px;
-            padding: 6px;
+            grid-template-columns: repeat(10, 70px);
+            grid-template-rows: repeat(10, 70px);
+            gap: 1px;
+            padding: 3px;
             border-width: 3px;
           }
           
           .stratego-square {
-            width: 60px;
-            height: 60px;
-          }
-          
-          .stratego-piece {
-            border-width: 1px;
+            width: 70px;
+            height: 70px;
           }
         }
 
         /* Large screen optimization */
         @media (min-width: 1200px) {
           .stratego-board {
-            grid-template-columns: repeat(10, 100px);
-            grid-template-rows: repeat(10, 100px);
-            gap: 5px;
-            padding: 10px;
+            grid-template-columns: repeat(10, 110px);
+            grid-template-rows: repeat(10, 110px);
+            gap: 3px;
+            padding: 6px;
           }
           
           .stratego-square {
-            width: 100px;
-            height: 100px;
+            width: 110px;
+            height: 110px;
           }
         }
       `}</style>
