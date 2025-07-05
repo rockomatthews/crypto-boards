@@ -1243,9 +1243,33 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
       {/* Game Info */}
       <Paper sx={{ p: 2, mb: 3, bgcolor: '#2E4057', color: 'white', borderRadius: 2 }}>
-        <Typography variant="h4" align="center" gutterBottom sx={{ fontWeight: 'bold' }}>
-          🎖️ Stratego Battle 🎖️
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h4" align="center" sx={{ fontWeight: 'bold', flex: 1 }}>
+            🎖️ Stratego Battle 🎖️
+          </Typography>
+          
+          {/* Forfeit Button - Always visible during setup and active gameplay */}
+          {(gameState.gameStatus === 'active' || gameState.setupPhase) && playerColor && (
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={() => setShowForfeitDialog(true)}
+              sx={{ 
+                borderColor: '#d32f2f', 
+                color: '#d32f2f',
+                bgcolor: 'rgba(211, 47, 47, 0.1)',
+                '&:hover': { 
+                  bgcolor: 'rgba(211, 47, 47, 0.2)',
+                  borderColor: '#b71c1c'
+                },
+                minWidth: 'auto',
+                px: 2
+              }}
+            >
+              🏳️ Forfeit
+            </Button>
+          )}
+        </Box>
         
         {/* Timer Display */}
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
@@ -1592,27 +1616,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         </DialogActions>
       </Dialog>
 
-      {/* GameControls - Available during setup and active gameplay */}
-      {(gameState.gameStatus === 'active' || gameState.setupPhase) && playerColor && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={() => setShowForfeitDialog(true)}
-            sx={{ 
-              borderColor: '#d32f2f', 
-              color: '#d32f2f',
-              bgcolor: 'rgba(211, 47, 47, 0.1)',
-              '&:hover': { 
-                bgcolor: 'rgba(211, 47, 47, 0.2)',
-                borderColor: '#b71c1c'
-              }
-            }}
-          >
-            🏳️ Forfeit Game
-          </Button>
-        </Box>
-      )}
+
 
       {/* GameEndModal for SOL payouts */}
       <GameEndModal
