@@ -1443,12 +1443,12 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               </IconButton>
               
               <Typography variant="h6" sx={{ mx: 2, alignSelf: 'center' }}>
-                Page {carouselPage + 1} of {Math.ceil(allPieceVariants.length / 15)}
+                Page {carouselPage + 1} of {Math.ceil(allPieceVariants.length / 16)}
               </Typography>
               
               <IconButton
-                onClick={() => setCarouselPage(prev => Math.min(Math.ceil(allPieceVariants.length / 15) - 1, prev + 1))}
-                disabled={carouselPage >= Math.ceil(allPieceVariants.length / 15) - 1}
+                onClick={() => setCarouselPage(prev => Math.min(Math.ceil(allPieceVariants.length / 16) - 1, prev + 1))}
+                disabled={carouselPage >= Math.ceil(allPieceVariants.length / 16) - 1}
                 sx={{
                   bgcolor: 'rgba(46, 64, 87, 0.8)',
                   color: 'white',
@@ -1460,54 +1460,53 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               </IconButton>
             </Box>
 
-            {/* 5x3 Grid Container - MAXIMIZED FOR BIGGER PIECES */}
+            {/* 4x4 Grid Container - BIGGER RECTANGULAR PIECES */}
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(5, 1fr)',
-                gridTemplateRows: 'repeat(3, 1fr)',
-                gap: 0.5, // Minimal gap between pieces
-                py: 1, // Reduced padding
-                px: 0.5, // Reduced padding
-                minHeight: 600, // Increased height for bigger pieces
+                gridTemplateColumns: 'repeat(4, 1fr)', // 4 columns instead of 5 for bigger pieces
+                gridTemplateRows: 'repeat(4, 1fr)', // 4 rows to fit 16 pieces per page
+                gap: 1, // Small gap between pieces
+                py: 1,
+                px: 1,
+                minHeight: 700, // Taller container for bigger pieces
                 width: '100%'
               }}
             >
-              {/* Render current page of pieces (15 pieces per page in 5x3 grid) */}
+              {/* Render current page of pieces (16 pieces per page in 4x4 grid) */}
               {allPieceVariants
-                .slice(carouselPage * 15, (carouselPage + 1) * 15)
+                .slice(carouselPage * 16, (carouselPage + 1) * 16) // 16 pieces per page now
                 .map((variant) => (
-                  <Box key={`${variant.rank}-${variant.imagePath}`} sx={{ 
-                    textAlign: 'center',
-                    cursor: variant.available ? 'pointer' : 'not-allowed',
-                    opacity: variant.available ? 1 : 0.5,
-                    transition: 'all 0.2s ease',
-                    '&:hover': variant.available ? { 
-                      transform: 'scale(1.15)', // Bigger hover effect
-                      zIndex: 10 // Bring to front when hovering
-                    } : {},
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    padding: 0.5, // Minimal internal padding
-                    height: '100%' // Use full grid cell height
-                  }}>
+                  <Box 
+                    key={`${variant.rank}-${variant.imagePath}`} 
+                    onClick={() => variant.available && placePiece(variant.rank, variant.imagePath)}
+                    sx={{ 
+                      cursor: variant.available ? 'pointer' : 'not-allowed',
+                      opacity: variant.available ? 1 : 0.6,
+                      transition: 'all 0.2s ease',
+                      '&:hover': variant.available ? { 
+                        transform: 'scale(1.1)',
+                        zIndex: 10,
+                        filter: 'drop-shadow(0 8px 16px rgba(255, 215, 0, 0.4))'
+                      } : {},
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      height: '100%',
+                      position: 'relative'
+                    }}
+                  >
+                    {/* RECTANGULAR PIECE CONTAINER - NO BORDERS! */}
                     <Box
-                      onClick={() => variant.available && placePiece(variant.rank, variant.imagePath)}
                       sx={{
-                        width: '100%', // Use full width of grid cell
-                        height: '75%', // Use most of the height for the image
+                        width: '100%',
+                        height: '85%', // Most of the space for the piece
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         position: 'relative',
-                        mb: 0.5,
-                        borderRadius: 1,
-                        border: variant.available ? '2px solid transparent' : '2px solid #666',
-                        '&:hover': variant.available ? {
-                          border: '2px solid #FFD700',
-                          boxShadow: '0 4px 8px rgba(255, 215, 0, 0.3)'
-                        } : {}
+                        mb: 1,
+                        // NO BORDERS, NO BACKGROUND - LET THE PIECE SHINE!
                       }}
                     >
                       <Image
@@ -1515,22 +1514,23 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                         alt={variant.displayName}
                         fill
                         style={{
-                          objectFit: 'contain',
-                          filter: variant.available ? 'none' : 'grayscale(100%)',
-                          borderRadius: '4px'
+                          objectFit: 'contain', // Maintain piece proportions
+                          filter: variant.available ? 'none' : 'grayscale(80%) brightness(0.7)',
                         }}
                         priority={true}
                         unoptimized={true}
                       />
                     </Box>
                     
+                    {/* Compact piece name */}
                     <Typography variant="caption" sx={{ 
                       fontWeight: 'bold',
-                      color: variant.available ? 'primary.main' : 'text.disabled',
-                      fontSize: '0.7rem',
+                      color: variant.available ? 'white' : '#888',
+                      fontSize: '0.75rem',
                       lineHeight: 1,
                       textAlign: 'center',
                       width: '100%',
+                      textShadow: '1px 1px 2px rgba(0,0,0,0.8)', // Better text visibility
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
