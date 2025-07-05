@@ -823,6 +823,29 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     return imagePath;
   }, [playerColor, pieceImageCache]);
 
+  // Get the correct image to display for a piece based on game state and ownership
+  const getDisplayImageForPiece = useCallback((piece: StrategoPiece): string => {
+    // During setup phase: always show actual piece (only your pieces are visible anyway)
+    if (gameState.setupPhase) {
+      return piece.imagePath || getPieceImage(piece.rank, piece.color, true);
+    }
+    
+    // During active gameplay: 
+    // - Show YOUR pieces normally (use stored imagePath or generate one)
+    // - Show OPPONENT pieces as hidden (regardless of imagePath)
+    if (piece.color === playerColor) {
+      // Your piece: show actual piece image
+      return piece.imagePath || getPieceImage(piece.rank, piece.color, true);
+    } else {
+      // Opponent piece: always show hidden unless revealed through combat
+      if (piece.isRevealed) {
+        return getPieceImage(piece.rank, piece.color, true);
+      } else {
+        return `/images/stratego/pieces/${piece.color}-hidden.png`;
+      }
+    }
+  }, [gameState.setupPhase, playerColor, getPieceImage]);
+
   // Handle square click during setup
   const handleSetupClick = useCallback((row: number, col: number) => {
     if (!playerColor || !isSetupArea(row, playerColor)) return;
@@ -1029,7 +1052,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           // During active gameplay: show YOUR pieces normally, show opponent pieces as "hidden"
           (gameState.setupPhase ? (piece.color === playerColor) : true) && (
             <Image
-              src={piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)}
+              src={getDisplayImageForPiece(piece)}
               alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
               fill
               style={{
