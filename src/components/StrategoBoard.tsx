@@ -253,6 +253,13 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     if (!currentPlayerId || !publicKey) return;
     
     try {
+      console.log('🚀 Completing game with data:', {
+        winner,
+        playerId: currentPlayerId,
+        walletAddress: publicKey.toString(),
+        gameId
+      });
+      
       const response = await fetch(`/api/games/${gameId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -263,12 +270,32 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         })
       });
       
+      console.log('📡 Completion API response status:', response.status);
+      console.log('📡 Completion API response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
-        setError(`Failed to complete game: ${response.status}`);
+        // Try to get detailed error information
+        let errorDetails;
+        try {
+          errorDetails = await response.json();
+          console.error('❌ Detailed API error:', errorDetails);
+        } catch (jsonError) {
+          console.error('❌ Failed to parse error response as JSON:', jsonError);
+          try {
+            errorDetails = await response.text();
+            console.error('❌ Error response as text:', errorDetails);
+          } catch (textError) {
+            console.error('❌ Failed to get error response as text:', textError);
+            errorDetails = `HTTP ${response.status} ${response.statusText}`;
+          }
+        }
+        
+        setError(`Game completion failed (${response.status}): ${JSON.stringify(errorDetails)}`);
         return;
       }
       
       const result = await response.json();
+      console.log('✅ Completion API success:', result);
       
       if (result.payout?.amount && result.payout?.signature) {
         setPayoutAmount(result.payout.amount);
@@ -277,10 +304,22 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         setGameEndWinner(winner);
         setGameEndDialog(true);
         console.log('💰 Payout completed:', result.payout);
+      } else if (result.escrowReleased && result.escrowTransactionSignature) {
+        // Handle direct SOL transfer result
+        setPayoutAmount(result.winnerAmount || 0);
+        setPayoutSignature(result.escrowTransactionSignature);
+
+        setGameEndWinner(winner);
+        setGameEndDialog(true);
+        console.log('💰 Direct SOL transfer completed:', result);
+      } else {
+        console.warn('⚠️ Game completed but no payout information received:', result);
+        setGameEndWinner(winner);
+        setGameEndDialog(true);
       }
     } catch (error) {
-      console.error('Error completing game:', error);
-      setError('Failed to complete game');
+      console.error('❌ Error completing game:', error);
+      setError(`Network error completing game: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, [gameId, currentPlayerId, publicKey]);
 
