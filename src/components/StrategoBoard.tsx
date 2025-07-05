@@ -205,6 +205,45 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   
   // Ref to prevent multiple auto-placement calls
   const autoPlacementRunning = useRef(false);
+  
+  // Carousel pagination state
+  const [carouselPage, setCarouselPage] = useState(0);
+  
+  // Create all piece variants array for 5x3 grid
+  const allPieceVariants = React.useMemo(() => {
+    const variants: Array<{
+      rank: PieceRank;
+      imagePath: string;
+      displayName: string;
+      available: boolean;
+    }> = [];
+    
+    Object.entries(PIECE_COUNTS).forEach(([rank, count]) => {
+      if (count === 1) {
+        // Single pieces: Marshal, General, Spy, Flag
+        const imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
+        variants.push({
+          rank: rank as PieceRank,
+          imagePath,
+          displayName: rank,
+          available: availablePieces[rank as PieceRank] > 0 && !usedPieceVariants.has(imagePath)
+        });
+      } else {
+        // Multiple pieces: Show ALL numbered variants
+        for (let variant = 1; variant <= count; variant++) {
+          const imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variant}.png`;
+          variants.push({
+            rank: rank as PieceRank,
+            imagePath,
+            displayName: `${rank} #${variant}`,
+            available: availablePieces[rank as PieceRank] > 0 && !usedPieceVariants.has(imagePath)
+          });
+        }
+      }
+    });
+    
+    return variants;
+  }, [playerColor, availablePieces, usedPieceVariants]);
 
   // For demo purposes - log the game ID and wallet
   console.log('Game ID:', gameId, 'Wallet:', publicKey?.toString());
@@ -1314,186 +1353,109 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             {selectedSetupSquare && `Placing piece at position ${selectedSetupSquare[0]}, ${selectedSetupSquare[1]}`}
           </Typography>
           
-          {/* Piece Carousel - HORIZONTAL SCROLLING WITH ARROWS */}
+          {/* Piece Carousel - 5x3 GRID WITH PAGINATION */}
           <Box sx={{ position: 'relative', width: '100%' }}>
-            {/* Left Arrow */}
-            <IconButton
-              onClick={() => {
-                const container = document.getElementById('piece-carousel');
-                if (container) {
-                  container.scrollBy({ left: -300, behavior: 'smooth' });
-                }
-              }}
-              sx={{
-                position: 'absolute',
-                left: -20,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                zIndex: 10,
-                bgcolor: 'rgba(46, 64, 87, 0.8)',
-                color: 'white',
-                '&:hover': { bgcolor: 'rgba(46, 64, 87, 1)' }
-              }}
-            >
-              <ArrowBackIos />
-            </IconButton>
+            {/* Page Navigation */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+              <IconButton
+                onClick={() => setCarouselPage(prev => Math.max(0, prev - 1))}
+                disabled={carouselPage === 0}
+                sx={{
+                  bgcolor: 'rgba(46, 64, 87, 0.8)',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'rgba(46, 64, 87, 1)' },
+                  '&:disabled': { bgcolor: 'rgba(46, 64, 87, 0.3)' }
+                }}
+              >
+                <ArrowBackIos />
+              </IconButton>
+              
+              <Typography variant="h6" sx={{ mx: 2, alignSelf: 'center' }}>
+                Page {carouselPage + 1} of {Math.ceil(allPieceVariants.length / 15)}
+              </Typography>
+              
+              <IconButton
+                onClick={() => setCarouselPage(prev => Math.min(Math.ceil(allPieceVariants.length / 15) - 1, prev + 1))}
+                disabled={carouselPage >= Math.ceil(allPieceVariants.length / 15) - 1}
+                sx={{
+                  bgcolor: 'rgba(46, 64, 87, 0.8)',
+                  color: 'white',
+                  '&:hover': { bgcolor: 'rgba(46, 64, 87, 1)' },
+                  '&:disabled': { bgcolor: 'rgba(46, 64, 87, 0.3)' }
+                }}
+              >
+                <ArrowForwardIos />
+              </IconButton>
+            </Box>
 
-            {/* Right Arrow */}
-            <IconButton
-              onClick={() => {
-                const container = document.getElementById('piece-carousel');
-                if (container) {
-                  container.scrollBy({ left: 300, behavior: 'smooth' });
-                }
-              }}
-              sx={{
-                position: 'absolute',
-                right: -20,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                zIndex: 10,
-                bgcolor: 'rgba(46, 64, 87, 0.8)',
-                color: 'white',
-                '&:hover': { bgcolor: 'rgba(46, 64, 87, 1)' }
-              }}
-            >
-              <ArrowForwardIos />
-            </IconButton>
-
-            {/* Horizontal Scrolling Container */}
+            {/* 5x3 Grid Container */}
             <Box
-              id="piece-carousel"
               sx={{
-                display: 'flex',
-                overflowX: 'auto',
-                overflowY: 'hidden',
-                gap: 1,
-                py: 1,
-                px: 2,
-                scrollBehavior: 'smooth',
-                '&::-webkit-scrollbar': { display: 'none' },
-                msOverflowStyle: 'none',
-                scrollbarWidth: 'none'
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gridTemplateRows: 'repeat(3, 1fr)',
+                gap: 2,
+                py: 2,
+                px: 1,
+                minHeight: 450
               }}
             >
-              {/* Generate ALL individual piece variants */}
-              {Object.entries(PIECE_COUNTS).map(([rank, count]) => {
-                const results = [];
-                
-                if (count === 1) {
-                  // Single pieces: Marshal, General, Spy, Flag
-                  const pieceImage = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
-                  const available = availablePieces[rank as PieceRank] > 0 && !usedPieceVariants.has(pieceImage);
-                  
-                  results.push(
-                    <Box key={`${rank}-single`} sx={{ 
-                      textAlign: 'center',
-                      minWidth: 180,
-                      cursor: available ? 'pointer' : 'not-allowed',
-                      opacity: available ? 1 : 0.5,
-                      transition: 'all 0.3s ease',
-                      '&:hover': available ? { transform: 'scale(1.05)' } : {}
-                    }}>
-                      <Box
-                        onClick={() => available && placePiece(rank as PieceRank, pieceImage)}
-                        sx={{
-                          width: 180,
-                          height: 150,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          position: 'relative',
-                          mb: 0.5
-                        }}
-                      >
-                        <Image
-                          src={pieceImage}
-                          alt={rank}
-                          fill
-                          style={{
-                            objectFit: 'contain',
-                            filter: available ? 'none' : 'grayscale(100%)'
-                          }}
-                          priority={true}
-                          unoptimized={true}
-                        />
-                      </Box>
-                      
-                      <Typography variant="h6" sx={{ 
-                        fontWeight: 'bold',
-                        color: available ? 'primary.main' : 'text.disabled',
+              {/* Render current page of pieces (15 pieces per page in 5x3 grid) */}
+              {allPieceVariants
+                .slice(carouselPage * 15, (carouselPage + 1) * 15)
+                .map((variant) => (
+                  <Box key={`${variant.rank}-${variant.imagePath}`} sx={{ 
+                    textAlign: 'center',
+                    cursor: variant.available ? 'pointer' : 'not-allowed',
+                    opacity: variant.available ? 1 : 0.5,
+                    transition: 'all 0.3s ease',
+                    '&:hover': variant.available ? { transform: 'scale(1.05)' } : {},
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
+                  }}>
+                    <Box
+                      onClick={() => variant.available && placePiece(variant.rank, variant.imagePath)}
+                      sx={{
+                        width: 120,
+                        height: 100,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        position: 'relative',
                         mb: 0.5
-                      }}>
-                        {rank}
-                      </Typography>
-                      <Typography variant="caption" sx={{ 
-                        fontWeight: 'bold',
-                        color: available ? 'success.main' : 'text.disabled'
-                      }}>
-                        {availablePieces[rank as PieceRank]} left
-                      </Typography>
+                      }}
+                    >
+                      <Image
+                        src={variant.imagePath}
+                        alt={variant.displayName}
+                        fill
+                        style={{
+                          objectFit: 'contain',
+                          filter: variant.available ? 'none' : 'grayscale(100%)'
+                        }}
+                        priority={true}
+                        unoptimized={true}
+                      />
                     </Box>
-                  );
-                } else {
-                  // Multiple pieces: Show ALL numbered variants
-                  for (let variant = 1; variant <= count; variant++) {
-                    const pieceImage = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variant}.png`;
-                    const available = availablePieces[rank as PieceRank] > 0 && !usedPieceVariants.has(pieceImage);
                     
-                    results.push(
-                      <Box key={`${rank}-${variant}`} sx={{ 
-                        textAlign: 'center',
-                        minWidth: 180,
-                        cursor: available ? 'pointer' : 'not-allowed',
-                        opacity: available ? 1 : 0.5,
-                        transition: 'all 0.3s ease',
-                        '&:hover': available ? { transform: 'scale(1.05)' } : {}
-                      }}>
-                        <Box
-                          onClick={() => available && placePiece(rank as PieceRank, pieceImage)}
-                          sx={{
-                            width: 180,
-                            height: 150,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            position: 'relative',
-                            mb: 0.5
-                          }}
-                        >
-                          <Image
-                            src={pieceImage}
-                            alt={`${rank} ${variant}`}
-                            fill
-                            style={{
-                              objectFit: 'contain',
-                              filter: available ? 'none' : 'grayscale(100%)'
-                            }}
-                            priority={true}
-                            unoptimized={true}
-                          />
-                        </Box>
-                        
-                        <Typography variant="h6" sx={{ 
-                          fontWeight: 'bold',
-                          color: available ? 'primary.main' : 'text.disabled',
-                          mb: 0.5
-                        }}>
-                          {rank} #{variant}
-                        </Typography>
-                        <Typography variant="caption" sx={{ 
-                          fontWeight: 'bold',
-                          color: available ? 'success.main' : 'text.disabled'
-                        }}>
-                          Available
-                        </Typography>
-                      </Box>
-                    );
-                  }
-                }
-                
-                return results;
-              }).flat()}
+                    <Typography variant="body2" sx={{ 
+                      fontWeight: 'bold',
+                      color: variant.available ? 'primary.main' : 'text.disabled',
+                      mb: 0.5,
+                      fontSize: '0.75rem'
+                    }}>
+                      {variant.displayName}
+                    </Typography>
+                    <Typography variant="caption" sx={{ 
+                      fontWeight: 'bold',
+                      color: variant.available ? 'success.main' : 'text.disabled',
+                      fontSize: '0.65rem'
+                    }}>
+                      {variant.available ? 'Available' : 'Used'}
+                    </Typography>
+                  </Box>
+                ))}
             </Box>
           </Box>
           
