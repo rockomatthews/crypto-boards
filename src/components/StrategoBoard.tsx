@@ -932,16 +932,25 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Get visual coordinates for display (blue player sees flipped board)
+  const getVisualCoordinates = (row: number, col: number): [number, number] => {
+    if (playerColor === 'blue') {
+      return [9 - row, col]; // Flip rows for blue player
+    }
+    return [row, col]; // Normal for red player
+  };
+
   // Render a square
-  const renderSquare = (row: number, col: number) => {
-    const piece = gameState.board[row][col];
-    const isSelected = selectedSquare && selectedSquare[0] === row && selectedSquare[1] === col;
-    const isValidMove = validMoves.some(([r, c]) => r === row && c === col);
-    const isLake = isLakePosition(row, col);
-    const isSetupAreaForPlayer = playerColor && isSetupArea(row, playerColor);
+  const renderSquare = (actualRow: number, actualCol: number) => {
+    const [visualRow, visualCol] = getVisualCoordinates(actualRow, actualCol);
+    const piece = gameState.board[actualRow][actualCol];
+    const isSelected = selectedSquare && selectedSquare[0] === actualRow && selectedSquare[1] === actualCol;
+    const isValidMove = validMoves.some(([r, c]) => r === actualRow && c === actualCol);
+    const isLake = isLakePosition(actualRow, actualCol);
+    const isSetupAreaForPlayer = playerColor && isSetupArea(actualRow, playerColor);
     const isLastMoveSquare = gameState.lastMove && 
-      ((gameState.lastMove.from[0] === row && gameState.lastMove.from[1] === col) ||
-       (gameState.lastMove.to[0] === row && gameState.lastMove.to[1] === col));
+      ((gameState.lastMove.from[0] === actualRow && gameState.lastMove.from[1] === actualCol) ||
+       (gameState.lastMove.to[0] === actualRow && gameState.lastMove.to[1] === actualCol));
     
     const bgColor = isLake ? '#4169E1' : '#F5DEB3';
     const selectedSquareStyle = isSelected ? { boxShadow: 'inset 0 0 0 3px #FFD700' } : {};
@@ -954,24 +963,24 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     
     return (
       <div
-        key={`${row}-${col}`}
+        key={`${actualRow}-${actualCol}`}
         className={`stratego-square ${isLake ? 'lake' : ''} ${isSelected ? 'selected' : ''} ${isValidMove ? 'valid-move' : ''} ${isLastMoveSquare ? 'last-move' : ''} ${gameState.setupPhase && isSetupAreaForPlayer ? 'setup-area' : ''}`}
         style={{
           width: '100%',
           height: '100%',
-          gridColumn: col + 1,
-          gridRow: row + 1,
+          gridColumn: visualCol + 1,
+          gridRow: visualRow + 1,
           backgroundColor: bgColor,
           border: '1px solid #444',
-          cursor: getCursor(row, col),
+          cursor: getCursor(actualRow, actualCol),
           position: 'relative',
           ...selectedSquareStyle
         }}
-        onClick={() => handleSquareClick(row, col)}
+        onClick={() => handleSquareClick(actualRow, actualCol)}
         onContextMenu={(e) => {
           e.preventDefault();
-          if (gameState.setupPhase && gameState.board[row][col] && gameState.board[row][col]!.color === playerColor) {
-            removePiece(row, col);
+          if (gameState.setupPhase && gameState.board[actualRow][actualCol] && gameState.board[actualRow][actualCol]!.color === playerColor) {
+            removePiece(actualRow, actualCol);
           }
         }}
       >

@@ -289,9 +289,31 @@ export async function POST(
   request: NextRequest,
   context: any
 ) {
+  // MASTER ERROR HANDLER - CATCH EVERYTHING
   try {
-    const requestBody = await request.json();
+    console.log(`🚀 POST /api/games/[id]/complete called`);
+    console.log(`📝 Context:`, context);
+    console.log(`📝 Request headers:`, Object.fromEntries(request.headers.entries()));
+    
+    let requestBody;
+    try {
+      requestBody = await request.json();
+      console.log(`📝 Request body parsed successfully:`, requestBody);
+    } catch (jsonError) {
+      console.error(`❌ Failed to parse request JSON:`, jsonError);
+      return NextResponse.json({ 
+        error: 'Invalid JSON in request body',
+        details: jsonError instanceof Error ? jsonError.message : 'Unknown JSON error'
+      }, { status: 400 });
+    }
+    
     const gameId = context?.params?.id;
+    console.log(`🎮 Extracted game ID: ${gameId}`);
+
+    if (!gameId) {
+      console.error(`❌ No game ID provided`);
+      return NextResponse.json({ error: 'Game ID is required' }, { status: 400 });
+    }
 
     console.log(`🏁 Starting game completion for ${gameId}...`);
     console.log(`📝 Request data:`, requestBody);
@@ -643,7 +665,37 @@ export async function POST(
     });
 
   } catch (error) {
-    console.error('Error completing game:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('❌ MASTER ERROR - Game completion failed:', error);
+    console.error('❌ Error type:', typeof error);
+    console.error('❌ Error constructor:', error?.constructor?.name);
+    
+    // Extract detailed error information
+    const errorDetails = {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+      type: typeof error,
+      stringified: String(error)
+    };
+    
+    console.error('❌ Detailed error info:', errorDetails);
+    
+    // Return detailed error for debugging
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      debug: {
+        message: errorDetails.message,
+        type: errorDetails.type,
+        name: errorDetails.name,
+        timestamp: new Date().toISOString(),
+        endpoint: '/api/games/[id]/complete',
+        userAgent: request.headers.get('user-agent'),
+        // Only include stack in development/testing
+        ...(process.env.NODE_ENV !== 'production' && { 
+          stack: errorDetails.stack,
+          fullError: errorDetails.stringified 
+        })
+      }
+    }, { status: 500 });
   }
 } 
