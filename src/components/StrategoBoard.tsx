@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert, CircularProgress, IconButton } from '@mui/material';
@@ -199,6 +199,12 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   
   // Track individual piece variants that have been used
   const [usedPieceVariants, setUsedPieceVariants] = useState<Set<string>>(new Set());
+  
+  // Track initialization to prevent loops
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Ref to prevent multiple auto-placement calls
+  const autoPlacementRunning = useRef(false);
 
   // For demo purposes - log the game ID and wallet
   console.log('Game ID:', gameId, 'Wallet:', publicKey?.toString());
@@ -322,128 +328,154 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   const autoPlaceRemainingPieces = useCallback(async () => {
     if (!playerColor) return;
     
-    console.log('⏰ Setup time expired - auto-placing remaining pieces...');
-    
-    // Get all valid setup positions for this player
-    const validPositions: [number, number][] = [];
-    for (let row = 0; row < 10; row++) {
-      for (let col = 0; col < 10; col++) {
-        if (isSetupArea(row, playerColor) && !isLakePosition(row, col) && !gameState.board[row][col]) {
-          validPositions.push([row, col]);
-        }
-      }
-    }
-    
-    console.log(`📍 Found ${validPositions.length} valid empty positions for auto-placement`);
-    
-    // Get remaining pieces that need to be placed
-    const remainingPieces: { rank: PieceRank; count: number }[] = [];
-    Object.entries(availablePieces).forEach(([rank, count]) => {
-      if (count > 0) {
-        remainingPieces.push({ rank: rank as PieceRank, count });
-      }
-    });
-    
-    console.log('🎲 Remaining pieces to place:', remainingPieces);
-    
-    if (remainingPieces.length === 0) {
-      console.log('✅ No remaining pieces - starting game immediately');
-      // Transition to active game phase
-      const activeState = {
-        ...gameState,
-        setupPhase: false,
-        gameStatus: 'active' as const
-      };
-      setGameState(activeState);
-      await saveGameState(activeState);
+    // GUARD: Prevent multiple simultaneous calls
+    if (autoPlacementRunning.current) {
+      console.log('❌ Auto-placement already running, skipping');
       return;
     }
     
-    // Shuffle valid positions for random placement
-    const shuffledPositions = [...validPositions].sort(() => Math.random() - 0.5);
-    
-    const newBoard = [...gameState.board];
-    const newAvailablePieces = { ...availablePieces };
-    const newUsedVariants = new Set(usedPieceVariants);
-    
-    let positionIndex = 0;
-    
-    // Place each remaining piece randomly
-    for (const { rank, count } of remainingPieces) {
-      for (let i = 0; i < count; i++) {
-        if (positionIndex >= shuffledPositions.length) {
-          console.error('❌ Ran out of valid positions for auto-placement!');
-          break;
-        }
-        
-        const [row, col] = shuffledPositions[positionIndex];
-        positionIndex++;
-        
-        // Generate random variant for pieces with multiple copies
-        let imagePath: string;
-        if (PIECE_COUNTS[rank] === 1) {
-          imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
-        } else {
-          // Find an unused variant
-          let variantNumber = 1;
-          do {
-            imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variantNumber}.png`;
-            variantNumber++;
-          } while (newUsedVariants.has(imagePath) && variantNumber <= PIECE_COUNTS[rank]);
-        }
-        
-        // Place the piece
-        newBoard[row][col] = {
-          color: playerColor,
-          rank: rank,
-          isRevealed: false,
-          canMove: rank !== 'Bomb' && rank !== 'Flag',
-          imagePath: imagePath
-        };
-        
-        newUsedVariants.add(imagePath);
-        newAvailablePieces[rank]--;
-        
-        console.log(`🎲 Auto-placed ${rank} at [${row}, ${col}] with image ${imagePath}`);
-      }
+    // GUARD: Prevent multiple calls
+    if (gameState.gameStatus !== 'setup' || !gameState.setupPhase) {
+      console.log('❌ Auto-placement blocked - game not in setup phase');
+      return;
     }
     
-    // Update state
-    const newState = {
-      ...gameState,
-      board: newBoard
-    };
+    autoPlacementRunning.current = true;
+    console.log('⏰ Setup time expired - auto-placing remaining pieces...');
     
-    setGameState(newState);
-    setAvailablePieces(newAvailablePieces);
-    setUsedPieceVariants(newUsedVariants);
-    
-    // Save state to database
-    await saveGameState(newState);
-    
-    console.log('✅ Auto-placement complete - starting game!');
-    
-    // Show notification to user
-    const totalAutoPlaced = remainingPieces.reduce((sum, { count }) => sum + count, 0);
-    setError(`⏰ Setup time expired! Auto-placed ${totalAutoPlaced} remaining pieces randomly. Game starting!`);
-    
-    // Clear the notification after 5 seconds
-    setTimeout(() => setError(null), 5000);
-    
-    // Start the game by transitioning to active phase
-    const activeState = {
-      ...newState,
-      setupPhase: false,
-      gameStatus: 'active' as const
-    };
-    
-    setGameState(activeState);
-    await saveGameState(activeState);
+    try {
+      // Get all valid setup positions for this player
+      const validPositions: [number, number][] = [];
+      for (let row = 0; row < 10; row++) {
+        for (let col = 0; col < 10; col++) {
+          if (isSetupArea(row, playerColor) && !isLakePosition(row, col) && !gameState.board[row][col]) {
+            validPositions.push([row, col]);
+          }
+        }
+      }
+      
+      console.log(`📍 Found ${validPositions.length} valid empty positions for auto-placement`);
+      
+      // Get remaining pieces that need to be placed
+      const remainingPieces: { rank: PieceRank; count: number }[] = [];
+      Object.entries(availablePieces).forEach(([rank, count]) => {
+        if (count > 0) {
+          remainingPieces.push({ rank: rank as PieceRank, count });
+        }
+      });
+      
+      console.log('🎲 Remaining pieces to place:', remainingPieces);
+      
+      if (remainingPieces.length === 0) {
+        console.log('✅ No remaining pieces - starting game immediately');
+        // Transition to active game phase
+        const activeState = {
+          ...gameState,
+          setupPhase: false,
+          gameStatus: 'active' as const
+        };
+        setGameState(activeState);
+        await saveGameState(activeState);
+        return;
+      }
+      
+      // Shuffle valid positions for random placement
+      const shuffledPositions = [...validPositions].sort(() => Math.random() - 0.5);
+      
+      const newBoard = [...gameState.board];
+      const newAvailablePieces = { ...availablePieces };
+      const newUsedVariants = new Set(usedPieceVariants);
+      
+      let positionIndex = 0;
+      
+      // Place each remaining piece randomly
+      for (const { rank, count } of remainingPieces) {
+        for (let i = 0; i < count; i++) {
+          if (positionIndex >= shuffledPositions.length) {
+            console.error('❌ Ran out of valid positions for auto-placement!');
+            break;
+          }
+          
+          const [row, col] = shuffledPositions[positionIndex];
+          positionIndex++;
+          
+          // Generate random variant for pieces with multiple copies
+          let imagePath: string;
+          if (PIECE_COUNTS[rank] === 1) {
+            imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
+          } else {
+            // Find an unused variant
+            let variantNumber = 1;
+            do {
+              imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variantNumber}.png`;
+              variantNumber++;
+            } while (newUsedVariants.has(imagePath) && variantNumber <= PIECE_COUNTS[rank]);
+          }
+          
+          // Place the piece
+          newBoard[row][col] = {
+            color: playerColor,
+            rank: rank,
+            isRevealed: false,
+            canMove: rank !== 'Bomb' && rank !== 'Flag',
+            imagePath: imagePath
+          };
+          
+          newUsedVariants.add(imagePath);
+          newAvailablePieces[rank]--;
+          
+          console.log(`🎲 Auto-placed ${rank} at [${row}, ${col}] with image ${imagePath}`);
+        }
+      }
+      
+      // Update state
+      const newState = {
+        ...gameState,
+        board: newBoard
+      };
+      
+      setGameState(newState);
+      setAvailablePieces(newAvailablePieces);
+      setUsedPieceVariants(newUsedVariants);
+      
+      // Save state to database
+      await saveGameState(newState);
+      
+      console.log('✅ Auto-placement complete - starting game!');
+      
+      // Show notification to user
+      const totalAutoPlaced = remainingPieces.reduce((sum, { count }) => sum + count, 0);
+      setError(`⏰ Setup time expired! Auto-placed ${totalAutoPlaced} remaining pieces randomly. Game starting!`);
+      
+      // Clear the notification after 5 seconds
+      setTimeout(() => setError(null), 5000);
+      
+      // Start the game by transitioning to active phase
+      const activeState = {
+        ...newState,
+        setupPhase: false,
+        gameStatus: 'active' as const
+      };
+      
+      setGameState(activeState);
+      await saveGameState(activeState);
+    } catch (error) {
+      console.error('❌ Error during auto-placement:', error);
+    } finally {
+      autoPlacementRunning.current = false;
+    }
   }, [playerColor, gameState, availablePieces, usedPieceVariants, saveGameState]);
 
   // Timer effect for setup and turn timers
   useEffect(() => {
     if (!gameState.setupPhase || !gameStartTime) return;
+    
+    console.log('⏱️ Timer effect running:', {
+      setupPhase: gameState.setupPhase,
+      gameStatus: gameState.gameStatus,
+      gameStartTime: gameStartTime.toISOString(),
+      currentTime: new Date().toISOString()
+    });
     
     const timer = setInterval(() => {
       // Calculate time remaining based on server timestamp
@@ -451,20 +483,34 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       const elapsedTime = now.getTime() - gameStartTime.getTime();
       const timeRemaining = Math.max(0, SETUP_TIME_LIMIT - elapsedTime);
       
+      // Only log occasionally to avoid spam
+      if (Math.floor(timeRemaining / 1000) % 10 === 0) {
+        console.log('⏱️ Timer update:', {
+          elapsedTime: Math.floor(elapsedTime / 1000),
+          timeRemaining: Math.floor(timeRemaining / 1000),
+          setupPhase: gameState.setupPhase,
+          gameStatus: gameState.gameStatus
+        });
+      }
+      
       setGameState(prev => ({
         ...prev,
         setupTimeLeft: timeRemaining
       }));
       
       // Auto-place remaining pieces and start game if time runs out
-      if (timeRemaining <= 0) {
+      // GUARD: Only trigger if we're still in setup phase
+      if (timeRemaining <= 0 && gameState.setupPhase && gameState.gameStatus === 'setup') {
         console.log('⏰ Setup time expired - auto-placing remaining pieces and starting game');
         autoPlaceRemainingPieces();
       }
     }, 1000);
     
-    return () => clearInterval(timer);
-  }, [gameState.setupPhase, gameStartTime, autoPlaceRemainingPieces]);
+    return () => {
+      console.log('⏱️ Cleaning up timer');
+      clearInterval(timer);
+    };
+  }, [gameState.setupPhase, gameStartTime, gameState.gameStatus, autoPlaceRemainingPieces]);
 
   // Get valid moves for a piece
   const getValidMoves = useCallback((row: number, col: number, piece: StrategoPiece): [number, number][] => {
@@ -949,7 +995,13 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
 
   // Initialize game state
   const initializeGameState = useCallback(async () => {
-    if (!publicKey) return;
+    if (!publicKey || isInitialized) {
+      console.log('🚫 Skipping initialization:', { publicKey: !!publicKey, isInitialized });
+      return;
+    }
+    
+    console.log('🔄 Initializing game state...');
+    setIsInitialized(true);
     
     try {
       const gameResponse = await fetch(`/api/games/${gameId}`);
@@ -1055,23 +1107,32 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           setAvailablePieces(restoredAvailablePieces);
           setUsedPieceVariants(restoredUsedVariants);
           
-          if (gameStatus === 'setup') {
+          // Only save state if we're in setup and have no saved state
+          if (gameStatus === 'setup' && restoredBoard.every(row => row.every(cell => cell === null))) {
+            console.log('💾 Saving initial fresh state');
             await saveGameState(newState);
           }
         }
       }
     } catch (error) {
       console.error('Error initializing game:', error);
+      setIsInitialized(false); // Reset on error
     }
-  }, [gameId, publicKey, gameStartTime, saveGameState]);
+  }, [gameId, publicKey, gameStartTime, saveGameState, isInitialized]);
 
   // Initialize on mount
   useEffect(() => {
-    if (publicKey) {
+    if (publicKey && !isInitialized) {
+      console.log('🚀 Starting initialization for wallet:', publicKey.toString());
       initializeGameState();
       fetchEscrowStatus();
     }
-  }, [publicKey, initializeGameState, fetchEscrowStatus]);
+  }, [publicKey, isInitialized, initializeGameState, fetchEscrowStatus]);
+  
+  // Reset initialization when wallet changes
+  useEffect(() => {
+    setIsInitialized(false);
+  }, [publicKey]);
 
   // Update game completion
   useEffect(() => {
@@ -1093,18 +1154,6 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       initializeMagicBlockSession();
     }
   }, [gameState.gameStatus, publicKey, signTransaction, initializeMagicBlockSession]);
-
-  // Save game state when it changes (debounced)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const shouldSave = gameState.gameStatus === 'setup' || gameState.gameStatus === 'active';
-      if (shouldSave) {
-        saveGameState(gameState);
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [gameState, saveGameState]);
 
   // Remove piece from board
   const removePiece = useCallback(async (row: number, col: number) => {
