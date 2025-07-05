@@ -1443,12 +1443,12 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               </IconButton>
               
               <Typography variant="h6" sx={{ mx: 2, alignSelf: 'center' }}>
-                Page {carouselPage + 1} of {Math.ceil(allPieceVariants.length / 16)}
+                Page {carouselPage + 1} of {Math.ceil(allPieceVariants.length / 12)}
               </Typography>
               
               <IconButton
-                onClick={() => setCarouselPage(prev => Math.min(Math.ceil(allPieceVariants.length / 16) - 1, prev + 1))}
-                disabled={carouselPage >= Math.ceil(allPieceVariants.length / 16) - 1}
+                onClick={() => setCarouselPage(prev => Math.min(Math.ceil(allPieceVariants.length / 12) - 1, prev + 1))}
+                disabled={carouselPage >= Math.ceil(allPieceVariants.length / 12) - 1}
                 sx={{
                   bgcolor: 'rgba(46, 64, 87, 0.8)',
                   color: 'white',
@@ -1460,22 +1460,22 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               </IconButton>
             </Box>
 
-            {/* 4x4 Grid Container - BIGGER RECTANGULAR PIECES */}
+            {/* 3x4 Grid Container - MAXIMUM SIZE RECTANGULAR PIECES */}
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)', // 4 columns instead of 5 for bigger pieces
-                gridTemplateRows: 'repeat(4, 1fr)', // 4 rows to fit 16 pieces per page
-                gap: 1, // Small gap between pieces
+                gridTemplateColumns: 'repeat(3, 1fr)', // 3 columns for even bigger pieces
+                gridTemplateRows: 'repeat(4, 1fr)', // 4 rows to fit 12 pieces per page
+                gap: 1.5, // Slightly bigger gap for better spacing
                 py: 1,
                 px: 1,
-                minHeight: 700, // Taller container for bigger pieces
+                minHeight: 700,
                 width: '100%'
               }}
             >
-              {/* Render current page of pieces (16 pieces per page in 4x4 grid) */}
+              {/* Render current page of pieces (12 pieces per page in 3x4 grid) */}
               {allPieceVariants
-                .slice(carouselPage * 16, (carouselPage + 1) * 16) // 16 pieces per page now
+                .slice(carouselPage * 12, (carouselPage + 1) * 12) // 12 pieces per page now
                 .map((variant) => (
                   <Box 
                     key={`${variant.rank}-${variant.imagePath}`} 
@@ -1496,47 +1496,30 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                       position: 'relative'
                     }}
                   >
-                    {/* RECTANGULAR PIECE CONTAINER - NO BORDERS! */}
-                    <Box
-                      sx={{
-                        width: '100%',
-                        height: '85%', // Most of the space for the piece
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        position: 'relative',
-                        mb: 1,
-                        // NO BORDERS, NO BACKGROUND - LET THE PIECE SHINE!
-                      }}
-                    >
-                      <Image
-                        src={variant.imagePath}
-                        alt={variant.displayName}
-                        fill
-                        style={{
-                          objectFit: 'contain', // Maintain piece proportions
-                          filter: variant.available ? 'none' : 'grayscale(80%) brightness(0.7)',
-                        }}
-                        priority={true}
-                        unoptimized={true}
-                      />
-                    </Box>
-                    
-                    {/* Compact piece name */}
-                    <Typography variant="caption" sx={{ 
-                      fontWeight: 'bold',
-                      color: variant.available ? 'white' : '#888',
-                      fontSize: '0.75rem',
-                      lineHeight: 1,
-                      textAlign: 'center',
-                      width: '100%',
-                      textShadow: '1px 1px 2px rgba(0,0,0,0.8)', // Better text visibility
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {variant.displayName}
-                    </Typography>
+                                         {/* RECTANGULAR PIECE CONTAINER - PURE ARTWORK! */}
+                     <Box
+                       sx={{
+                         width: '100%',
+                         height: '100%', // Use ALL available space for the piece
+                         display: 'flex',
+                         alignItems: 'center',
+                         justifyContent: 'center',
+                         position: 'relative',
+                         // NO BORDERS, NO BACKGROUND, NO TEXT - JUST PURE PIECE ARTWORK!
+                       }}
+                     >
+                       <Image
+                         src={variant.imagePath}
+                         alt={variant.displayName}
+                         fill
+                         style={{
+                           objectFit: 'contain', // Maintain piece proportions
+                           filter: variant.available ? 'none' : 'grayscale(80%) brightness(0.7)',
+                         }}
+                         priority={true}
+                         unoptimized={true}
+                       />
+                     </Box>
                   </Box>
                 ))}
             </Box>
