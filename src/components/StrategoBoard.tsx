@@ -835,13 +835,19 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     // - Show OPPONENT pieces as hidden (regardless of imagePath)
     if (piece.color === playerColor) {
       // Your piece: show actual piece image
-      return piece.imagePath || getPieceImage(piece.rank, piece.color, true);
+      const imagePath = piece.imagePath || getPieceImage(piece.rank, piece.color, true);
+      console.log(`🔴 YOUR piece: ${piece.rank} -> ${imagePath}`);
+      return imagePath;
     } else {
       // Opponent piece: always show hidden unless revealed through combat
       if (piece.isRevealed) {
-        return getPieceImage(piece.rank, piece.color, true);
+        const imagePath = getPieceImage(piece.rank, piece.color, true);
+        console.log(`🔵 REVEALED opponent piece: ${piece.rank} -> ${imagePath}`);
+        return imagePath;
       } else {
-        return `/images/stratego/pieces/${piece.color}-hidden.png`;
+        const hiddenPath = `/images/stratego/pieces/${piece.color}-hidden.png`;
+        console.log(`👁️ HIDDEN opponent piece: ${piece.rank} -> ${hiddenPath}`);
+        return hiddenPath;
       }
     }
   }, [gameState.setupPhase, playerColor, getPieceImage]);
@@ -1050,7 +1056,11 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         {piece && (
           // During setup phase: only show YOUR pieces, hide opponent pieces completely
           // During active gameplay: show YOUR pieces normally, show opponent pieces as "hidden"
-          (gameState.setupPhase ? (piece.color === playerColor) : true) && (
+          (() => {
+            const shouldShow = gameState.setupPhase ? (piece.color === playerColor) : true;
+            console.log(`🎯 Piece at [${actualRow},${actualCol}]: color=${piece.color}, playerColor=${playerColor}, setupPhase=${gameState.setupPhase}, shouldShow=${shouldShow}, rank=${piece.rank}`);
+            return shouldShow;
+          })() && (
             <Image
               src={getDisplayImageForPiece(piece)}
               alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
@@ -1426,6 +1436,14 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         {/* Game Board - Centered */}
         <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
           <div className="stratego-board">
+            {/* DEBUG: Log board state */}
+            {(() => {
+              const totalPieces = gameState.board.flat().filter(p => p !== null).length;
+              const yourPieces = gameState.board.flat().filter(p => p && p.color === playerColor).length;
+              const opponentPieces = gameState.board.flat().filter(p => p && p.color !== playerColor).length;
+              console.log(`🎮 BOARD STATE: Status=${gameState.gameStatus}, Setup=${gameState.setupPhase}, You=${playerColor}, Total=${totalPieces}, Yours=${yourPieces}, Opponent=${opponentPieces}`);
+              return null;
+            })()}
             {gameState.board.map((row, rowIndex) =>
               row.map((_, colIndex) => renderSquare(rowIndex, colIndex))
             )}
