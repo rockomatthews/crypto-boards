@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
+import Image from 'next/image';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Alert, CircularProgress, IconButton } from '@mui/material';
 import { ArrowBackIos, ArrowForwardIos } from '@mui/icons-material';
@@ -160,18 +161,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   const [combatDialog, setCombatDialog] = useState<CombatResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [gameCompletionResult, setGameCompletionResult] = useState<{
-    escrowReleased: boolean;
-    escrowTransactionSignature?: string;
-    winnerAmount?: number;
-    platformFee?: number;
-    message?: string;
-  } | null>(null);
-  
   // Setup state
   const [availablePieces, setAvailablePieces] = useState<Record<PieceRank, number>>(PIECE_COUNTS);
-  const [setupStartTime, setSetupStartTime] = useState<Date | null>(null);
-  const [turnStartTime, setTurnStartTime] = useState<Date | null>(null);
   const [showPieceSelector, setShowPieceSelector] = useState(false);
   const [selectedSetupSquare, setSelectedSetupSquare] = useState<[number, number] | null>(null);
 
@@ -203,49 +194,98 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   
   // Piece image cache to maintain consistent variants
   const [pieceImageCache] = useState<Map<string, string>>(new Map());
+
+  const [payoutAmount, setPayoutAmount] = useState<number>(0);
+  const [payoutSignature, setPayoutSignature] = useState<string | null>(null);
   
   // For demo purposes - log the game ID and wallet
   console.log('Game ID:', gameId, 'Wallet:', publicKey?.toString());
   
-  // Timer management
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
+  // Complete game and handle payouts (moved up for handleForfeit dependency)
+  const completeGame = useCallback(async (winner: Player) => {
+    if (!currentPlayerId || !publicKey) return;
     
-    if (gameState.setupPhase && setupStartTime) {
-      interval = setInterval(() => {
-        const elapsed = Date.now() - setupStartTime.getTime();
-        const remaining = Math.max(0, SETUP_TIME_LIMIT - elapsed);
-        setGameState(prev => ({ ...prev, setupTimeLeft: remaining }));
-        
-        if (remaining <= 0) {
-          // Auto-place remaining pieces randomly - will be implemented separately
-          console.log('Setup time expired - auto-completing setup');
-        }
-      }, 1000);
-    } else if (gameState.gameStatus === 'active' && turnStartTime) {
-      interval = setInterval(() => {
-        const elapsed = Date.now() - turnStartTime.getTime();
-        const remaining = Math.max(0, TURN_TIME_LIMIT - elapsed);
-        setGameState(prev => ({ ...prev, turnTimeLeft: remaining }));
-        
-        if (remaining <= 0) {
-          // Make random move - will be implemented separately
-          console.log('Turn time expired - making random move');
-        }
-      }, 1000);
-    }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [gameState.setupPhase, gameState.gameStatus, setupStartTime, turnStartTime]);
+    try {
+      const response = await fetch(`/api/games/${gameId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          winner,
+          playerId: currentPlayerId,
+          walletAddress: publicKey.toString()
+        })
+      });
+      
+      if (!response.ok) {
+        setError(`Failed to complete game: ${response.status}`);
+        return;
+      }
+      
+      const result = await response.json();
+      
+      if (result.payout?.amount && result.payout?.signature) {
+        setPayoutAmount(result.payout.amount);
+        setPayoutSignature(result.payout.signature);
 
-  // Start setup timer when game begins
-  useEffect(() => {
-    if (gameState.gameStatus === 'setup' && !setupStartTime) {
-      setSetupStartTime(new Date());
+        setGameEndWinner(winner);
+        setGameEndDialog(true);
+        console.log('💰 Payout completed:', result.payout);
+      }
+    } catch (error) {
+      console.error('Error completing game:', error);
+      setError('Failed to complete game');
     }
-  }, [gameState.gameStatus, setupStartTime]);
+  }, [gameId, currentPlayerId, publicKey]);
+
+  // Save game state to API (moved up for placePiece dependency)
+  const saveGameState = useCallback(async (state: GameState) => {
+    if (!publicKey || !currentPlayerId) return;
+    
+    try {
+      const response = await fetch(`/api/games/${gameId}/state`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newState: state,
+          playerId: currentPlayerId
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save game state:', response.status);
+        setError(`Failed to save game state: ${response.status}`);
+      } else {
+        if (error) setError(null);
+        console.log('✅ Game state saved successfully');
+      }
+    } catch (error) {
+      console.error('Error saving game state:', error);
+      setError('Failed to save game state: Network error');
+    }
+  }, [gameId, publicKey, currentPlayerId, error]);
+
+  // Handle forfeit (moved up for timer dependency)
+  const handleForfeit = useCallback(async () => {
+    if (!playerColor || !currentPlayerId) return;
+    
+    const opponent: Player = playerColor === 'red' ? 'blue' : 'red';
+    setForfeitLoading(true);
+    
+    try {
+      console.log(`🏳️ ${playerColor} forfeiting - ${opponent} wins!`);
+      
+      await completeGame(opponent);
+      
+      const newState = { ...gameState, winner: opponent, gameStatus: 'finished' as const };
+      setGameState(newState);
+    } catch (error) {
+      console.error('❌ Error forfeiting game:', error);
+      setError('Failed to forfeit game');
+    } finally {
+      setForfeitLoading(false);
+      setShowForfeitDialog(false);
+    }
+  }, [playerColor, currentPlayerId, gameState, completeGame]);
 
   // Timer effect for setup and turn timers
   useEffect(() => {
@@ -429,7 +469,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         if (gameWinner) {
           setGameEndDialog(true);
         } else {
-          setTurnStartTime(new Date());
+
         }
         
         setCombatDialog(null);
@@ -458,7 +498,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       if (winner) {
         setGameEndDialog(true);
       } else {
-        setTurnStartTime(new Date());
+
       }
       
       setLoading(false);
@@ -499,33 +539,6 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     console.log(`Generated piece image: ${imagePath} for ${color} ${rank}`);
     return imagePath;
   }, [playerColor, pieceImageCache]);
-
-  // Save game state to API (moved up for placePiece dependency)
-  const saveGameState = useCallback(async (state: GameState) => {
-    if (!publicKey || !currentPlayerId) return;
-    
-    try {
-      const response = await fetch(`/api/games/${gameId}/state`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          newState: state,
-          playerId: currentPlayerId
-        })
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to save game state:', response.status);
-        setError(`Failed to save game state: ${response.status}`);
-      } else {
-        if (error) setError(null);
-        console.log('✅ Game state saved successfully');
-      }
-    } catch (error) {
-      console.error('Error saving game state:', error);
-      setError('Failed to save game state: Network error');
-    }
-  }, [gameId, publicKey, currentPlayerId, error]);
 
   // Handle square click during setup
   const handleSetupClick = useCallback((row: number, col: number) => {
@@ -634,7 +647,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       gameStatus: 'active'
     }));
     
-    setTurnStartTime(new Date());
+
   }, [availablePieces]);
 
   // Get symbol for piece rank (fallback if image fails)
@@ -690,10 +703,12 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         style={{
           width: '100%',
           height: '100%',
-          position: 'relative',
+          gridColumn: col + 1,
+          gridRow: row + 1,
           backgroundColor: bgColor,
           border: '1px solid #444',
           cursor: getCursor(row, col),
+          position: 'relative',
           ...selectedSquareStyle
         }}
         onClick={() => handleSquareClick(row, col)}
@@ -706,117 +721,20 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       >
         {isLake && <span style={{ fontSize: '24px', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>🌊</span>}
         {piece && (
-          <img 
-            src={piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)} 
+          <Image
+            src={piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)}
             alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
+            fill
             style={{
-              width: '100%',
-              height: '100%',
               objectFit: 'contain',
-              display: 'block',
-              margin: 0,
-              padding: 0,
-              border: 'none'
             }}
-            onError={(e) => {
-              console.error(`Failed to load board piece image: ${piece.imagePath}`);
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-            }}
+            priority={true}
+            unoptimized={true}
           />
         )}
       </div>
     );
   };
-
-  // Complete game and handle payouts
-  const completeGame = useCallback(async (winner: Player) => {
-    try {
-      console.log(`🏁 Completing game: ${winner} wins!`, { 
-        winner,
-        winnerWallet: winner === 'red' ? gameState.redPlayer : gameState.bluePlayer,
-        loserWallet: winner === 'red' ? gameState.bluePlayer : gameState.redPlayer,
-        redPlayer: gameState.redPlayer,
-        bluePlayer: gameState.bluePlayer
-      });
-
-      const gameResponse = await fetch(`/api/games/${gameId}`);
-      if (gameResponse.ok) {
-        const gameData = await gameResponse.json();
-        
-        if (gameData.players && gameData.players.length >= 2) {
-          const winnerWallet = winner === 'red' ? gameState.redPlayer : gameState.bluePlayer;
-          const loserWallet = winner === 'red' ? gameState.bluePlayer : gameState.redPlayer;
-          
-          if (winnerWallet && loserWallet) {
-            const response = await fetch(`/api/games/${gameId}/complete`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                winnerWallet,
-                loserWallet,
-              }),
-            });
-            
-            if (!response.ok) {
-              const errorText = await response.text();
-              console.error('❌ Failed to complete game:', response.status, errorText);
-              setError(`Failed to complete game: ${response.status}`);
-            } else {
-              const result = await response.json();
-              console.log('✅ Game completed successfully:', result);
-              
-              // Store completion result for GameEndModal
-              setGameCompletionResult({
-                escrowReleased: result.escrowReleased || false,
-                escrowTransactionSignature: result.escrowTransactionSignature,
-                winnerAmount: result.winnerAmount,
-                platformFee: result.platformFee,
-                message: result.message
-              });
-              
-              // Show brief success message
-              setError(result.message || '✅ Game completed successfully!');
-              setTimeout(() => setError(null), 3000);
-            }
-          } else {
-            console.error('❌ Invalid player data:', gameData.players);
-            setError('Unable to complete game - invalid player data');
-          }
-        }
-      } else {
-        console.error('❌ Failed to fetch game data:', gameResponse.status);
-        setError('Unable to complete game - failed to fetch game data');
-      }
-    } catch (error) {
-      console.error('❌ Error completing game:', error);
-      setError('Unable to complete game - network error');
-    }
-  }, [gameId, publicKey, gameState.redPlayer, gameState.bluePlayer]);
-
-  // Handle forfeit
-  const handleForfeit = useCallback(async () => {
-    if (!playerColor || !publicKey) return;
-    
-    setForfeitLoading(true);
-    try {
-      const opponent: Player = playerColor === 'red' ? 'blue' : 'red';
-      
-      console.log(`🏳️ ${playerColor} forfeiting - ${opponent} wins!`);
-      
-      await completeGame(opponent);
-      
-      setGameEndWinner(opponent);
-      setGameEndDialog(true);
-      
-    } catch (error) {
-      console.error('❌ Error forfeiting game:', error);
-      setError('Failed to forfeit game');
-    } finally {
-      setForfeitLoading(false);
-      setShowForfeitDialog(false);
-    }
-  }, [playerColor, publicKey, completeGame]);
 
   // Fetch escrow status
   const fetchEscrowStatus = useCallback(async () => {
@@ -1239,23 +1157,20 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          position: 'relative',
                           mb: 0.5
                         }}
                       >
-                        <img 
+                        <Image
                           src={pieceImage}
                           alt={rank}
+                          fill
                           style={{
-                            width: '100%',
-                            height: '100%',
                             objectFit: 'contain',
                             filter: available ? 'none' : 'grayscale(100%)'
                           }}
-                          onError={(e) => {
-                            console.error(`Failed to load image: ${pieceImage}`);
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                          }}
+                          priority={true}
+                          unoptimized={true}
                         />
                       </Box>
                       
@@ -1297,23 +1212,20 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            position: 'relative',
                             mb: 0.5
                           }}
                         >
-                          <img 
+                          <Image
                             src={pieceImage}
                             alt={`${rank} ${variant}`}
+                            fill
                             style={{
-                              width: '100%',
-                              height: '100%',
                               objectFit: 'contain',
                               filter: available ? 'none' : 'grayscale(100%)'
                             }}
-                            onError={(e) => {
-                              console.error(`Failed to load image: ${pieceImage}`);
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                            }}
+                            priority={true}
+                            unoptimized={true}
                           />
                         </Box>
                         
@@ -1508,10 +1420,10 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           setGameEndWinner(null);
         }}
         totalPot={escrowStatus?.totalEscrowed || 0}
-        escrowReleased={gameCompletionResult?.escrowReleased || false}
-        escrowTransactionSignature={gameCompletionResult?.escrowTransactionSignature}
-        winnerAmount={gameCompletionResult?.winnerAmount}
-        platformFee={gameCompletionResult?.platformFee}
+                              escrowReleased={!!payoutSignature}
+          escrowTransactionSignature={payoutSignature || undefined}
+          winnerAmount={payoutAmount}
+          platformFee={0}
       />
 
       <style jsx>{`
