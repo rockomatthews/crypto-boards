@@ -66,7 +66,7 @@ interface StrategoBoardProps {
 }
 
 // Time limits
-const SETUP_TIME_LIMIT = 5 * 60 * 1000; // 5 minutes for setup
+const SETUP_TIME_LIMIT = 10 * 60 * 1000; // 10 minutes for setup
 const TURN_TIME_LIMIT = 60 * 1000; // 1 minute per turn
 
 // Lake positions on 10x10 board
@@ -564,6 +564,11 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
 
   // Check for winner
   const checkWinner = useCallback((board: (StrategoPiece | null)[][]): Player | null => {
+    // DON'T check for winners during setup phase!
+    if (gameState.setupPhase || gameState.gameStatus !== 'active') {
+      return null;
+    }
+    
     let redFlag = false;
     let blueFlag = false;
     let redMovablePieces = 0;
@@ -591,7 +596,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     if (blueMovablePieces === 0) return 'red';
     
     return null;
-  }, []);
+  }, [gameState.setupPhase, gameState.gameStatus]);
 
   // Make a move with combat resolution
   const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
@@ -933,16 +938,20 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       >
         {isLake && <span style={{ fontSize: '24px', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>🌊</span>}
         {piece && (
-          <Image
-            src={piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)}
-            alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
-            fill
-            style={{
-              objectFit: 'contain',
-            }}
-            priority={true}
-            unoptimized={true}
-          />
+          // During setup phase: only show YOUR pieces, hide opponent pieces completely
+          // During active gameplay: show YOUR pieces normally, show opponent pieces as "hidden"
+          (gameState.setupPhase ? (piece.color === playerColor) : true) && (
+            <Image
+              src={piece.imagePath || getPieceImage(piece.rank, piece.color, piece.isRevealed)}
+              alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
+              fill
+              style={{
+                objectFit: 'contain',
+              }}
+              priority={true}
+              unoptimized={true}
+            />
+          )
         )}
       </div>
     );
