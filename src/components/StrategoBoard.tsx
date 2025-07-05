@@ -1630,8 +1630,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         </DialogActions>
       </Dialog>
 
-      {/* GameControls */}
-      {gameState.gameStatus === 'active' && playerColor && (
+      {/* GameControls - Available during setup and active gameplay */}
+      {(gameState.gameStatus === 'active' || gameState.setupPhase) && playerColor && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
           <Button
             variant="outlined"
