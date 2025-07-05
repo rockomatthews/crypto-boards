@@ -8,13 +8,13 @@ if (!process.env.DATABASE_URL && process.env.NODE_ENV !== 'development') {
 }
 
 // Our actual game state structure from CheckersBoard
-interface GamePiece {
+interface CheckersGamePiece {
   type: 'red' | 'black' | null;
   isKing: boolean;
 }
 
-interface ActualGameState {
-  board: (GamePiece | null)[][];
+interface CheckersGameState {
+  board: (CheckersGamePiece | null)[][];
   currentPlayer: 'red' | 'black';
   redPlayer: string | null;
   blackPlayer: string | null;
@@ -26,6 +26,34 @@ interface ActualGameState {
     capturedPieces?: [number, number][];
   };
 }
+
+// Stratego game state structure
+interface StrategoGamePiece {
+  color: 'red' | 'blue' | null;
+  rank: string;
+  isRevealed: boolean;
+  canMove: boolean;
+  imagePath?: string;
+}
+
+interface StrategoGameState {
+  board: (StrategoGamePiece | null)[][];
+  currentPlayer: 'red' | 'blue';
+  redPlayer: string | null;
+  bluePlayer: string | null;
+  gameStatus: 'waiting' | 'setup' | 'active' | 'finished';
+  winner: 'red' | 'blue' | null;
+  setupPhase: boolean;
+  setupTimeLeft: number;
+  turnTimeLeft: number;
+  lastMove?: {
+    from: [number, number];
+    to: [number, number];
+    combat?: any;
+  };
+}
+
+type GameState = CheckersGameState | StrategoGameState;
 
 export async function GET(
   request: NextRequest,
@@ -80,6 +108,14 @@ export async function PUT(
     const gameId = context?.params?.id;
     const { newState, playerId } = await request.json();
 
+    console.log(`🎮 State API: Saving game state for ${gameId}`, {
+      playerId,
+      hasBoard: !!newState?.board,
+      gameStatus: newState?.gameStatus,
+      setupPhase: newState?.setupPhase,
+      boardPieceCount: newState?.board ? newState.board.flat().filter((cell: any) => cell !== null).length : 0
+    });
+
     if (!gameId) {
       return NextResponse.json({ error: 'Game ID is required' }, { status: 400 });
     }
@@ -88,16 +124,23 @@ export async function PUT(
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const gameState = newState as ActualGameState;
+    const gameState = newState as GameState;
 
     // Validate that the game exists
     const gameExists = await db`
-      SELECT id FROM games WHERE id = ${gameId}
+      SELECT id, game_type FROM games WHERE id = ${gameId}
     `;
 
     if (gameExists.length === 0) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
+
+    const gameType = gameExists[0].game_type;
+    console.log(`🎯 Game type: ${gameType}, State structure:`, {
+      hasSetupPhase: 'setupPhase' in gameState,
+      hasBluePlayer: 'bluePlayer' in gameState,
+      hasBlackPlayer: 'blackPlayer' in gameState
+    });
 
     // Validate that the player is in the game
     const playerInGameResult = await db`
@@ -115,6 +158,8 @@ export async function PUT(
       VALUES (${gameId}, ${JSON.stringify(newState)})
       RETURNING id
     `;
+
+    console.log(`✅ Game state saved successfully with ID: ${insertResult[0].id}`);
 
     // Check for game end conditions
     if (gameState.gameStatus === 'finished' && gameState.winner) {
@@ -143,7 +188,9 @@ export async function PUT(
       message: 'Game state updated successfully',
       gameEnded: gameState.gameStatus === 'finished',
       winner: gameState.winner,
-      stateId: insertResult[0].id
+      stateId: insertResult[0].id,
+      gameType: gameType,
+      boardPieceCount: gameState.board ? gameState.board.flat().filter(cell => cell !== null).length : 0
     });
   } catch (error) {
     console.error('Error updating game state:', error);

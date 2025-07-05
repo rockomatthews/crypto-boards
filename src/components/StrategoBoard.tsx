@@ -194,10 +194,12 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   
   // Piece image cache to maintain consistent variants
   const [pieceImageCache] = useState<Map<string, string>>(new Map());
-
   const [payoutAmount, setPayoutAmount] = useState<number>(0);
   const [payoutSignature, setPayoutSignature] = useState<string | null>(null);
   
+  // Track individual piece variants that have been used
+  const [usedPieceVariants, setUsedPieceVariants] = useState<Set<string>>(new Set());
+
   // For demo purposes - log the game ID and wallet
   console.log('Game ID:', gameId, 'Wallet:', publicKey?.toString());
   
@@ -239,27 +241,56 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
 
   // Save game state to API (moved up for placePiece dependency)
   const saveGameState = useCallback(async (state: GameState) => {
-    if (!publicKey || !currentPlayerId) return;
+    console.log('🔍 saveGameState called with:', {
+      publicKey: publicKey?.toString(),
+      currentPlayerId,
+      gameId,
+      boardHasPieces: state.board.some(row => row.some(cell => cell !== null)),
+      gameStatus: state.gameStatus,
+      setupPhase: state.setupPhase
+    });
+    
+    if (!publicKey || !currentPlayerId) {
+      console.error('❌ saveGameState failed: missing publicKey or currentPlayerId', {
+        publicKey: !!publicKey,
+        currentPlayerId: !!currentPlayerId
+      });
+      return;
+    }
     
     try {
+      const requestBody = {
+        newState: state,
+        playerId: currentPlayerId
+      };
+      
+      console.log('📤 Sending state to API:', {
+        gameId,
+        playerId: currentPlayerId,
+        boardPieceCount: state.board.flat().filter(cell => cell !== null).length,
+        requestBody
+      });
+      
       const response = await fetch(`/api/games/${gameId}/state`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          newState: state,
-          playerId: currentPlayerId
-        })
+        body: JSON.stringify(requestBody)
       });
       
       if (!response.ok) {
-        console.error('Failed to save game state:', response.status);
-        setError(`Failed to save game state: ${response.status}`);
+        const responseText = await response.text();
+        console.error('❌ Failed to save game state:', {
+          status: response.status,
+          responseText
+        });
+        setError(`Failed to save game state: ${response.status} - ${responseText}`);
       } else {
+        const result = await response.json();
+        console.log('✅ Game state saved successfully:', result);
         if (error) setError(null);
-        console.log('✅ Game state saved successfully');
       }
     } catch (error) {
-      console.error('Error saving game state:', error);
+      console.error('❌ Error saving game state:', error);
       setError('Failed to save game state: Network error');
     }
   }, [gameId, publicKey, currentPlayerId, error]);
@@ -287,6 +318,129 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     }
   }, [playerColor, currentPlayerId, gameState, completeGame]);
 
+  // Auto-place remaining pieces randomly when setup timer expires
+  const autoPlaceRemainingPieces = useCallback(async () => {
+    if (!playerColor) return;
+    
+    console.log('⏰ Setup time expired - auto-placing remaining pieces...');
+    
+    // Get all valid setup positions for this player
+    const validPositions: [number, number][] = [];
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) {
+        if (isSetupArea(row, playerColor) && !isLakePosition(row, col) && !gameState.board[row][col]) {
+          validPositions.push([row, col]);
+        }
+      }
+    }
+    
+    console.log(`📍 Found ${validPositions.length} valid empty positions for auto-placement`);
+    
+    // Get remaining pieces that need to be placed
+    const remainingPieces: { rank: PieceRank; count: number }[] = [];
+    Object.entries(availablePieces).forEach(([rank, count]) => {
+      if (count > 0) {
+        remainingPieces.push({ rank: rank as PieceRank, count });
+      }
+    });
+    
+    console.log('🎲 Remaining pieces to place:', remainingPieces);
+    
+    if (remainingPieces.length === 0) {
+      console.log('✅ No remaining pieces - starting game immediately');
+      // Transition to active game phase
+      const activeState = {
+        ...gameState,
+        setupPhase: false,
+        gameStatus: 'active' as const
+      };
+      setGameState(activeState);
+      await saveGameState(activeState);
+      return;
+    }
+    
+    // Shuffle valid positions for random placement
+    const shuffledPositions = [...validPositions].sort(() => Math.random() - 0.5);
+    
+    const newBoard = [...gameState.board];
+    const newAvailablePieces = { ...availablePieces };
+    const newUsedVariants = new Set(usedPieceVariants);
+    
+    let positionIndex = 0;
+    
+    // Place each remaining piece randomly
+    for (const { rank, count } of remainingPieces) {
+      for (let i = 0; i < count; i++) {
+        if (positionIndex >= shuffledPositions.length) {
+          console.error('❌ Ran out of valid positions for auto-placement!');
+          break;
+        }
+        
+        const [row, col] = shuffledPositions[positionIndex];
+        positionIndex++;
+        
+        // Generate random variant for pieces with multiple copies
+        let imagePath: string;
+        if (PIECE_COUNTS[rank] === 1) {
+          imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
+        } else {
+          // Find an unused variant
+          let variantNumber = 1;
+          do {
+            imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variantNumber}.png`;
+            variantNumber++;
+          } while (newUsedVariants.has(imagePath) && variantNumber <= PIECE_COUNTS[rank]);
+        }
+        
+        // Place the piece
+        newBoard[row][col] = {
+          color: playerColor,
+          rank: rank,
+          isRevealed: false,
+          canMove: rank !== 'Bomb' && rank !== 'Flag',
+          imagePath: imagePath
+        };
+        
+        newUsedVariants.add(imagePath);
+        newAvailablePieces[rank]--;
+        
+        console.log(`🎲 Auto-placed ${rank} at [${row}, ${col}] with image ${imagePath}`);
+      }
+    }
+    
+    // Update state
+    const newState = {
+      ...gameState,
+      board: newBoard
+    };
+    
+    setGameState(newState);
+    setAvailablePieces(newAvailablePieces);
+    setUsedPieceVariants(newUsedVariants);
+    
+    // Save state to database
+    await saveGameState(newState);
+    
+    console.log('✅ Auto-placement complete - starting game!');
+    
+    // Show notification to user
+    const totalAutoPlaced = remainingPieces.reduce((sum, { count }) => sum + count, 0);
+    setError(`⏰ Setup time expired! Auto-placed ${totalAutoPlaced} remaining pieces randomly. Game starting!`);
+    
+    // Clear the notification after 5 seconds
+    setTimeout(() => setError(null), 5000);
+    
+    // Start the game by transitioning to active phase
+    const activeState = {
+      ...newState,
+      setupPhase: false,
+      gameStatus: 'active' as const
+    };
+    
+    setGameState(activeState);
+    await saveGameState(activeState);
+  }, [playerColor, gameState, availablePieces, usedPieceVariants, saveGameState]);
+
   // Timer effect for setup and turn timers
   useEffect(() => {
     if (!gameState.setupPhase || !gameStartTime) return;
@@ -302,15 +456,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         setupTimeLeft: timeRemaining
       }));
       
-      // Auto-forfeit if time runs out
+      // Auto-place remaining pieces and start game if time runs out
       if (timeRemaining <= 0) {
-        console.log('⏰ Setup time expired - auto-forfeiting');
-        handleForfeit();
+        console.log('⏰ Setup time expired - auto-placing remaining pieces and starting game');
+        autoPlaceRemainingPieces();
       }
     }, 1000);
     
     return () => clearInterval(timer);
-  }, [gameState.setupPhase, gameStartTime, handleForfeit]);
+  }, [gameState.setupPhase, gameStartTime, autoPlaceRemainingPieces]);
 
   // Get valid moves for a piece
   const getValidMoves = useCallback((row: number, col: number, piece: StrategoPiece): [number, number][] => {
@@ -565,6 +719,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         ...prev,
         [existingPiece.rank]: prev[existingPiece.rank] + 1
       }));
+      
+      // Remove from used variants if replacing
+      if (existingPiece.imagePath) {
+        setUsedPieceVariants(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(existingPiece.imagePath!);
+          return newSet;
+        });
+      }
     }
     
     // Place new piece with specific image
@@ -577,6 +740,9 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     };
     
     console.log(`Placed ${pieceRank} with specific image: ${specificImagePath} at [${row}, ${col}]`);
+    
+    // Mark this specific variant as used
+    setUsedPieceVariants(prev => new Set(prev).add(specificImagePath));
     
     setAvailablePieces(prev => ({
       ...prev,
@@ -595,7 +761,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     
     setShowPieceSelector(false);
     setSelectedSetupSquare(null);
-  }, [selectedSetupSquare, playerColor, availablePieces, gameState, saveGameState]);
+  }, [selectedSetupSquare, playerColor, availablePieces, gameState, saveGameState, setUsedPieceVariants]);
 
   // Handle square click during active play
   const handleActiveClick = useCallback((row: number, col: number) => {
@@ -815,6 +981,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           // Try to load saved game state like checkers
           let restoredBoard = Array(10).fill(null).map(() => Array(10).fill(null));
           const restoredAvailablePieces = { ...PIECE_COUNTS };
+          const restoredUsedVariants = new Set<string>();
           
           try {
             const stateResponse = await fetch(`/api/games/${gameId}/state`);
@@ -841,12 +1008,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                   'Flag': 0
                 };
                 
-                // Count placed pieces
+                // Count placed pieces and track used variants
                 for (let row = 0; row < 10; row++) {
                   for (let col = 0; col < 10; col++) {
                     const piece = restoredBoard[row][col];
                     if (piece && piece.color === (gameData.players[0]?.wallet_address === walletAddress ? 'red' : 'blue')) {
                       placedPieces[piece.rank as PieceRank]++;
+                      if (piece.imagePath) {
+                        restoredUsedVariants.add(piece.imagePath);
+                      }
                     }
                   }
                 }
@@ -858,6 +1028,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                 });
                 
                 console.log('✅ Restored available pieces:', restoredAvailablePieces);
+                console.log('✅ Restored used variants:', restoredUsedVariants);
               }
             }
           } catch {
@@ -882,6 +1053,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           
           setGameState(newState);
           setAvailablePieces(restoredAvailablePieces);
+          setUsedPieceVariants(restoredUsedVariants);
           
           if (gameStatus === 'setup') {
             await saveGameState(newState);
@@ -948,6 +1120,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       [piece.rank]: prev[piece.rank] + 1
     }));
     
+    // Remove from used variants
+    if (piece.imagePath) {
+      setUsedPieceVariants(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(piece.imagePath!);
+        return newSet;
+      });
+    }
+    
     const newState = {
       ...gameState,
       board: newBoard
@@ -959,7 +1140,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     await saveGameState(newState);
     
     console.log(`Removed ${piece.rank} from [${row}, ${col}]`);
-  }, [gameState, saveGameState]);
+  }, [gameState, saveGameState, setUsedPieceVariants]);
 
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
@@ -975,6 +1156,12 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             <Paper sx={{ p: 1, bgcolor: gameState.setupTimeLeft < 60000 ? '#d32f2f' : '#2e7d32', color: 'white' }}>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                 🏗️ Setup: {formatTime(gameState.setupTimeLeft)}
+                {gameState.setupTimeLeft < 30000 && gameState.setupTimeLeft > 0 && 
+                 Object.values(availablePieces).some(count => count > 0) && (
+                  <Typography variant="caption" sx={{ display: 'block', fontSize: '0.7rem' }}>
+                    ⚠️ Remaining pieces will be auto-placed when timer expires!
+                  </Typography>
+                )}
               </Typography>
             </Paper>
           ) : gameState.gameStatus === 'active' ? (
@@ -1138,7 +1325,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                 if (count === 1) {
                   // Single pieces: Marshal, General, Spy, Flag
                   const pieceImage = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
-                  const available = availablePieces[rank as PieceRank] > 0;
+                  const available = availablePieces[rank as PieceRank] > 0 && !usedPieceVariants.has(pieceImage);
                   
                   results.push(
                     <Box key={`${rank}-single`} sx={{ 
@@ -1193,7 +1380,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                   // Multiple pieces: Show ALL numbered variants
                   for (let variant = 1; variant <= count; variant++) {
                     const pieceImage = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variant}.png`;
-                    const available = availablePieces[rank as PieceRank] > 0;
+                    const available = availablePieces[rank as PieceRank] > 0 && !usedPieceVariants.has(pieceImage);
                     
                     results.push(
                       <Box key={`${rank}-${variant}`} sx={{ 

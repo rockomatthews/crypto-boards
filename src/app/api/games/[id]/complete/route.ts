@@ -290,21 +290,62 @@ export async function POST(
   context: any
 ) {
   try {
-    const { winnerWallet, loserWallet } = await request.json();
+    const requestBody = await request.json();
     const gameId = context?.params?.id;
 
     console.log(`🏁 Starting game completion for ${gameId}...`);
-    console.log(`📝 Request data:`, { winnerWallet: winnerWallet?.slice(0, 8), loserWallet: loserWallet?.slice(0, 8) });
+    console.log(`📝 Request data:`, requestBody);
 
     if (!gameId) {
       return NextResponse.json({ error: 'Game ID is required' }, { status: 400 });
     }
 
-    if (!winnerWallet || !loserWallet) {
-      console.error('❌ Missing winner or loser wallet addresses');
+    // Handle both old format (winnerWallet, loserWallet) and new format (winner, playerId, walletAddress)
+    let winnerWallet: string;
+    let loserWallet: string;
+    
+    if (requestBody.winner && requestBody.playerId && requestBody.walletAddress) {
+      // New Stratego format
+      console.log(`🎯 New format: winner=${requestBody.winner}, playerId=${requestBody.playerId}`);
+      
+      // Get game players to determine winner and loser wallets
+      const playersResult = await db`
+        SELECT 
+          p.wallet_address,
+          p.username,
+          gp.player_id
+        FROM game_players gp
+        JOIN players p ON gp.player_id = p.id
+        WHERE gp.game_id = ${gameId}
+        ORDER BY gp.joined_at ASC
+      `;
+      
+      if (playersResult.length < 2) {
+        return NextResponse.json({ error: 'Not enough players in game' }, { status: 400 });
+      }
+      
+      // In Stratego: red = player 1, blue = player 2
+      if (requestBody.winner === 'red') {
+        winnerWallet = playersResult[0].wallet_address;
+        loserWallet = playersResult[1].wallet_address;
+      } else if (requestBody.winner === 'blue') {
+        winnerWallet = playersResult[1].wallet_address;
+        loserWallet = playersResult[0].wallet_address;
+      } else {
+        return NextResponse.json({ error: 'Invalid winner color' }, { status: 400 });
+      }
+      
+      console.log(`🏆 Determined: Winner=${winnerWallet.slice(0,8)}..., Loser=${loserWallet.slice(0,8)}...`);
+    } else if (requestBody.winnerWallet && requestBody.loserWallet) {
+      // Old checkers format
+      winnerWallet = requestBody.winnerWallet;
+      loserWallet = requestBody.loserWallet;
+      console.log(`🎯 Old format: Winner=${winnerWallet.slice(0,8)}..., Loser=${loserWallet.slice(0,8)}...`);
+    } else {
+      console.error('❌ Missing required completion data');
       return NextResponse.json({ 
-        error: 'Winner and loser wallet addresses are required',
-        details: { winnerWallet: !!winnerWallet, loserWallet: !!loserWallet }
+        error: 'Either (winner, playerId, walletAddress) or (winnerWallet, loserWallet) are required',
+        received: Object.keys(requestBody)
       }, { status: 400 });
     }
 
@@ -528,6 +569,10 @@ export async function POST(
       gameId: gameId,
       escrowReleased: !!payoutResult?.success,
       escrowTransactionSignature: payoutResult?.signature,
+      payout: payoutResult?.success ? {
+        amount: winnerAmount,
+        signature: payoutResult.signature
+      } : null,
       message: payoutResult?.success 
         ? `Game completed! Winner received ${winnerAmount} SOL directly!`
         : `Game completed! Winner recorded but payout failed: ${payoutResult?.error || 'No private key configured'}`
