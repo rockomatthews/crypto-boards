@@ -1460,42 +1460,40 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               </IconButton>
             </Box>
 
-            {/* 3x4 Grid Container - MAXIMUM SIZE RECTANGULAR PIECES */}
+            {/* 4x3 Grid Container - ZERO PADDING MAXIMUM SIZE PIECES */}
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)', // 3 columns for even bigger pieces
-                gridTemplateRows: 'repeat(4, 1fr)', // 4 rows to fit 12 pieces per page
-                gap: 1.5, // Slightly bigger gap for better spacing
-                py: 1,
-                px: 1,
-                minHeight: 700,
+                gridTemplateColumns: 'repeat(4, 1fr)', // 4 columns for maximum width usage
+                gridTemplateRows: 'repeat(3, 1fr)', // 3 rows for bigger height per piece
+                gap: 0, // ZERO gap for maximum piece size
+                py: 0, // ZERO padding
+                px: 0, // ZERO padding
+                minHeight: 600, // Shorter container with 3 rows
                 width: '100%'
               }}
             >
-              {/* Render current page of pieces (12 pieces per page in 3x4 grid) */}
+              {/* Render current page of pieces (12 pieces per page in 4x3 grid) */}
               {allPieceVariants
                 .slice(carouselPage * 12, (carouselPage + 1) * 12) // 12 pieces per page now
                 .map((variant) => (
-                  <Box 
-                    key={`${variant.rank}-${variant.imagePath}`} 
-                    onClick={() => variant.available && placePiece(variant.rank, variant.imagePath)}
-                    sx={{ 
-                      cursor: variant.available ? 'pointer' : 'not-allowed',
-                      opacity: variant.available ? 1 : 0.6,
-                      transition: 'all 0.2s ease',
-                      '&:hover': variant.available ? { 
-                        transform: 'scale(1.1)',
-                        zIndex: 10,
-                        filter: 'drop-shadow(0 8px 16px rgba(255, 215, 0, 0.4))'
-                      } : {},
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      height: '100%',
-                      position: 'relative'
-                    }}
-                  >
+                                     <Box 
+                     key={`${variant.rank}-${variant.imagePath}`} 
+                     onClick={() => variant.available && placePiece(variant.rank, variant.imagePath)}
+                     sx={{ 
+                       cursor: variant.available ? 'pointer' : 'not-allowed',
+                       opacity: variant.available ? 1 : 0.6,
+                       transition: 'all 0.2s ease',
+                       '&:hover': variant.available ? { 
+                         transform: 'scale(1.05)', // Smaller scale to avoid overlap with zero gaps
+                         zIndex: 10,
+                         filter: 'drop-shadow(0 8px 16px rgba(255, 215, 0, 0.4))'
+                       } : {},
+                       height: '100%',
+                       width: '100%',
+                       position: 'relative'
+                     }}
+                   >
                                          {/* RECTANGULAR PIECE CONTAINER - PURE ARTWORK! */}
                      <Box
                        sx={{
