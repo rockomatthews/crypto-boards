@@ -65,7 +65,7 @@ interface StrategoBoardProps {
 }
 
 // Time limits
-const SETUP_TIME_LIMIT = 3 * 60 * 1000; // 3 minutes for setup
+const SETUP_TIME_LIMIT = 5 * 60 * 1000; // 5 minutes for setup
 const TURN_TIME_LIMIT = 60 * 1000; // 1 minute per turn
 
 // Lake positions on 10x10 board
@@ -246,6 +246,31 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       setSetupStartTime(new Date());
     }
   }, [gameState.gameStatus, setupStartTime]);
+
+  // Timer effect for setup and turn timers
+  useEffect(() => {
+    if (!gameState.setupPhase || !gameStartTime) return;
+    
+    const timer = setInterval(() => {
+      // Calculate time remaining based on server timestamp
+      const now = new Date();
+      const elapsedTime = now.getTime() - gameStartTime.getTime();
+      const timeRemaining = Math.max(0, SETUP_TIME_LIMIT - elapsedTime);
+      
+      setGameState(prev => ({
+        ...prev,
+        setupTimeLeft: timeRemaining
+      }));
+      
+      // Auto-forfeit if time runs out
+      if (timeRemaining <= 0) {
+        console.log('⏰ Setup time expired - auto-forfeiting');
+        handleForfeit();
+      }
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [gameState.setupPhase, gameStartTime, handleForfeit]);
 
   // Get valid moves for a piece
   const getValidMoves = useCallback((row: number, col: number, piece: StrategoPiece): [number, number][] => {
@@ -440,16 +465,6 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     }
   }, [gameState, checkWinner]);
 
-  // Handle square click during setup
-  const handleSetupClick = useCallback((row: number, col: number) => {
-    if (!playerColor || !isSetupArea(row, playerColor)) return;
-    if (isLakePosition(row, col)) return;
-    
-    // Show piece selector for this square
-    setSelectedSetupSquare([row, col]);
-    setShowPieceSelector(true);
-  }, [playerColor]);
-
   // Get image for piece rank with cached numbered variants
   const getPieceImage = useCallback((rank: PieceRank, color: PieceColor, isRevealed: boolean): string => {
     if (!color) return '';
@@ -485,8 +500,45 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     return imagePath;
   }, [playerColor, pieceImageCache]);
 
+  // Save game state to API (moved up for placePiece dependency)
+  const saveGameState = useCallback(async (state: GameState) => {
+    if (!publicKey || !currentPlayerId) return;
+    
+    try {
+      const response = await fetch(`/api/games/${gameId}/state`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          newState: state,
+          playerId: currentPlayerId
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save game state:', response.status);
+        setError(`Failed to save game state: ${response.status}`);
+      } else {
+        if (error) setError(null);
+        console.log('✅ Game state saved successfully');
+      }
+    } catch (error) {
+      console.error('Error saving game state:', error);
+      setError('Failed to save game state: Network error');
+    }
+  }, [gameId, publicKey, currentPlayerId, error]);
+
+  // Handle square click during setup
+  const handleSetupClick = useCallback((row: number, col: number) => {
+    if (!playerColor || !isSetupArea(row, playerColor)) return;
+    if (isLakePosition(row, col)) return;
+    
+    // Show piece selector for this square
+    setSelectedSetupSquare([row, col]);
+    setShowPieceSelector(true);
+  }, [playerColor]);
+
   // Place selected piece on board
-  const placePiece = useCallback((pieceRank: PieceRank, specificImagePath: string) => {
+  const placePiece = useCallback(async (pieceRank: PieceRank, specificImagePath: string) => {
     if (!selectedSetupSquare || !playerColor) return;
     if (availablePieces[pieceRank] <= 0) return;
 
@@ -518,10 +570,19 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       [pieceRank]: prev[pieceRank] - 1
     }));
     
-    setGameState(prev => ({ ...prev, board: newBoard }));
+    const newState = {
+      ...gameState,
+      board: newBoard
+    };
+    
+    setGameState(newState);
+    
+    // IMMEDIATELY save to database like checkers
+    await saveGameState(newState);
+    
     setShowPieceSelector(false);
     setSelectedSetupSquare(null);
-  }, [selectedSetupSquare, playerColor, availablePieces, gameState.board]);
+  }, [selectedSetupSquare, playerColor, availablePieces, gameState, saveGameState]);
 
   // Handle square click during active play
   const handleActiveClick = useCallback((row: number, col: number) => {
@@ -581,7 +642,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     const symbols: Record<PieceRank, string> = {
       'Marshal': '⭐',
       'General': '🎖️',
-      'Colonel': '🏅',
+      'Colonel': '��',
       'Major': '🎗️',
       'Captain': '👑',
       'Lieutenant': '🔰',
@@ -613,19 +674,34 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       ((gameState.lastMove.from[0] === row && gameState.lastMove.from[1] === col) ||
        (gameState.lastMove.to[0] === row && gameState.lastMove.to[1] === col));
     
+    const bgColor = isLake ? '#4169E1' : '#F5DEB3';
+    const selectedSquareStyle = isSelected ? { boxShadow: 'inset 0 0 0 3px #FFD700' } : {};
+    const getCursor = (row: number, col: number): string => {
+      if (gameState.setupPhase && gameState.board[row][col] && gameState.board[row][col]!.color === playerColor) {
+        return 'pointer';
+      }
+      return 'default';
+    };
+    
     return (
       <div
         key={`${row}-${col}`}
         className={`stratego-square ${isLake ? 'lake' : ''} ${isSelected ? 'selected' : ''} ${isValidMove ? 'valid-move' : ''} ${isLastMoveSquare ? 'last-move' : ''} ${gameState.setupPhase && isSetupAreaForPlayer ? 'setup-area' : ''}`}
-        onClick={() => handleSquareClick(row, col)}
         style={{
           width: '100%',
           height: '100%',
           position: 'relative',
-          backgroundColor: isLake ? '#4169E1' : '#F5DEB3',
-          border: isSelected ? '3px solid #FFD700' : isValidMove ? '2px solid #FFA500' : '1px solid #8B4513',
-          cursor: 'pointer',
-          overflow: 'hidden'
+          backgroundColor: bgColor,
+          border: '1px solid #444',
+          cursor: getCursor(row, col),
+          ...selectedSquareStyle
+        }}
+        onClick={() => handleSquareClick(row, col)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (gameState.setupPhase && gameState.board[row][col] && gameState.board[row][col]!.color === playerColor) {
+            removePiece(row, col);
+          }
         }}
       >
         {isLake && <span style={{ fontSize: '24px', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>🌊</span>}
@@ -652,32 +728,6 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       </div>
     );
   };
-
-  // Save game state to API
-  const saveGameState = useCallback(async (state: GameState) => {
-    if (!publicKey || !currentPlayerId) return;
-    
-    try {
-      const response = await fetch(`/api/games/${gameId}/state`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          newState: state,
-          playerId: currentPlayerId
-        })
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to save game state:', response.status);
-        setError(`Failed to save game state: ${response.status}`);
-      } else {
-        if (error) setError(null);
-      }
-    } catch (error) {
-      console.error('Error saving game state:', error);
-      setError('Failed to save game state: Network error');
-    }
-  }, [gameId, publicKey, currentPlayerId, error]);
 
   // Complete game and handle payouts
   const completeGame = useCallback(async (winner: Player) => {
@@ -844,8 +894,60 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             gameStatus = gameData.players.length >= 2 ? 'setup' : 'waiting';
           }
           
+          // Try to load saved game state like checkers
+          let restoredBoard = Array(10).fill(null).map(() => Array(10).fill(null));
+          const restoredAvailablePieces = { ...PIECE_COUNTS };
+          
+          try {
+            const stateResponse = await fetch(`/api/games/${gameId}/state`);
+            if (stateResponse.ok) {
+              const savedState = await stateResponse.json();
+              console.log('🔄 Restoring saved game state:', savedState);
+              
+              if (savedState.board) {
+                restoredBoard = savedState.board;
+                
+                // Recalculate available pieces based on placed pieces
+                const placedPieces: Record<PieceRank, number> = {
+                  'Marshal': 0,
+                  'General': 0,
+                  'Colonel': 0,
+                  'Major': 0,
+                  'Captain': 0,
+                  'Lieutenant': 0,
+                  'Sergeant': 0,
+                  'Miner': 0,
+                  'Scout': 0,
+                  'Spy': 0,
+                  'Bomb': 0,
+                  'Flag': 0
+                };
+                
+                // Count placed pieces
+                for (let row = 0; row < 10; row++) {
+                  for (let col = 0; col < 10; col++) {
+                    const piece = restoredBoard[row][col];
+                    if (piece && piece.color === (gameData.players[0]?.wallet_address === walletAddress ? 'red' : 'blue')) {
+                      placedPieces[piece.rank as PieceRank]++;
+                    }
+                  }
+                }
+                
+                // Update available pieces
+                Object.keys(PIECE_COUNTS).forEach(rank => {
+                  const rankKey = rank as PieceRank;
+                  restoredAvailablePieces[rankKey] = PIECE_COUNTS[rankKey] - placedPieces[rankKey];
+                });
+                
+                console.log('✅ Restored available pieces:', restoredAvailablePieces);
+              }
+            }
+          } catch {
+            console.log('No saved state found, starting fresh');
+          }
+          
           const newState: GameState = {
-            board: Array(10).fill(null).map(() => Array(10).fill(null)),
+            board: restoredBoard,
             currentPlayer: 'red' as Player,
             redPlayer: gameData.players[0]?.wallet_address || null,
             bluePlayer: gameData.players[1]?.wallet_address || null,
@@ -861,6 +963,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           }
           
           setGameState(newState);
+          setAvailablePieces(restoredAvailablePieces);
           
           if (gameStatus === 'setup') {
             await saveGameState(newState);
@@ -911,6 +1014,33 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     }, 1000);
 
     return () => clearTimeout(timer);
+  }, [gameState, saveGameState]);
+
+  // Remove piece from board
+  const removePiece = useCallback(async (row: number, col: number) => {
+    if (!gameState.board[row][col]) return;
+    
+    const piece = gameState.board[row][col]!;
+    const newBoard = [...gameState.board];
+    newBoard[row][col] = null;
+    
+    // Return piece to available pool
+    setAvailablePieces(prev => ({
+      ...prev,
+      [piece.rank]: prev[piece.rank] + 1
+    }));
+    
+    const newState = {
+      ...gameState,
+      board: newBoard
+    };
+    
+    setGameState(newState);
+    
+    // IMMEDIATELY save to database like checkers
+    await saveGameState(newState);
+    
+    console.log(`Removed ${piece.rank} from [${row}, ${col}]`);
   }, [gameState, saveGameState]);
 
   return (
