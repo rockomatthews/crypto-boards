@@ -1421,16 +1421,17 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               </IconButton>
             </Box>
 
-            {/* 5x3 Grid Container */}
+            {/* 5x3 Grid Container - MAXIMIZED FOR BIGGER PIECES */}
             <Box
               sx={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(5, 1fr)',
                 gridTemplateRows: 'repeat(3, 1fr)',
-                gap: 2,
-                py: 2,
-                px: 1,
-                minHeight: 450
+                gap: 0.5, // Minimal gap between pieces
+                py: 1, // Reduced padding
+                px: 0.5, // Reduced padding
+                minHeight: 600, // Increased height for bigger pieces
+                width: '100%'
               }}
             >
               {/* Render current page of pieces (15 pieces per page in 5x3 grid) */}
@@ -1441,22 +1442,33 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                     textAlign: 'center',
                     cursor: variant.available ? 'pointer' : 'not-allowed',
                     opacity: variant.available ? 1 : 0.5,
-                    transition: 'all 0.3s ease',
-                    '&:hover': variant.available ? { transform: 'scale(1.05)' } : {},
+                    transition: 'all 0.2s ease',
+                    '&:hover': variant.available ? { 
+                      transform: 'scale(1.15)', // Bigger hover effect
+                      zIndex: 10 // Bring to front when hovering
+                    } : {},
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    padding: 0.5, // Minimal internal padding
+                    height: '100%' // Use full grid cell height
                   }}>
                     <Box
                       onClick={() => variant.available && placePiece(variant.rank, variant.imagePath)}
                       sx={{
-                        width: 120,
-                        height: 100,
+                        width: '100%', // Use full width of grid cell
+                        height: '75%', // Use most of the height for the image
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         position: 'relative',
-                        mb: 0.5
+                        mb: 0.5,
+                        borderRadius: 1,
+                        border: variant.available ? '2px solid transparent' : '2px solid #666',
+                        '&:hover': variant.available ? {
+                          border: '2px solid #FFD700',
+                          boxShadow: '0 4px 8px rgba(255, 215, 0, 0.3)'
+                        } : {}
                       }}
                     >
                       <Image
@@ -1465,27 +1477,26 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                         fill
                         style={{
                           objectFit: 'contain',
-                          filter: variant.available ? 'none' : 'grayscale(100%)'
+                          filter: variant.available ? 'none' : 'grayscale(100%)',
+                          borderRadius: '4px'
                         }}
                         priority={true}
                         unoptimized={true}
                       />
                     </Box>
                     
-                    <Typography variant="body2" sx={{ 
-                      fontWeight: 'bold',
-                      color: variant.available ? 'primary.main' : 'text.disabled',
-                      mb: 0.5,
-                      fontSize: '0.75rem'
-                    }}>
-                      {variant.displayName}
-                    </Typography>
                     <Typography variant="caption" sx={{ 
                       fontWeight: 'bold',
-                      color: variant.available ? 'success.main' : 'text.disabled',
-                      fontSize: '0.65rem'
+                      color: variant.available ? 'primary.main' : 'text.disabled',
+                      fontSize: '0.7rem',
+                      lineHeight: 1,
+                      textAlign: 'center',
+                      width: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
                     }}>
-                      {variant.available ? 'Available' : 'Used'}
+                      {variant.displayName}
                     </Typography>
                   </Box>
                 ))}
@@ -1649,23 +1660,23 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       <style jsx>{`
         .stratego-board {
           display: grid;
-          grid-template-columns: repeat(10, 90px);
-          grid-template-rows: repeat(10, 90px);
-          gap: 2px;
+          grid-template-columns: repeat(10, 100px);
+          grid-template-rows: repeat(10, 100px);
+          gap: 1px;
           border: 4px solid #2E4057;
           border-radius: 8px;
           background-color: #2E4057;
           width: fit-content;
           margin: 0 auto;
-          padding: 4px;
+          padding: 2px;
           box-sizing: border-box;
         }
         
         .stratego-square {
-          width: 90px;
-          height: 90px;
+          width: 100px;
+          height: 100px;
           position: relative;
-          overflow: hidden;
+          overflow: visible; /* Allow hover effects to extend beyond square */
         }
         
         .stratego-square.selected {
@@ -1685,38 +1696,44 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
         
         .stratego-square:hover:not(.lake) {
-          transform: scale(1.02);
+          transform: scale(1.08);
+          transition: transform 0.2s ease;
+          z-index: 5;
+        }
+        
+        .stratego-square:hover:not(.lake) img {
+          transform: scale(1.1);
           transition: transform 0.2s ease;
         }
 
         /* Mobile Responsive */
         @media (max-width: 600px) {
           .stratego-board {
-            grid-template-columns: repeat(10, 70px);
-            grid-template-rows: repeat(10, 70px);
+            grid-template-columns: repeat(10, 80px);
+            grid-template-rows: repeat(10, 80px);
             gap: 1px;
-            padding: 3px;
+            padding: 2px;
             border-width: 3px;
           }
           
           .stratego-square {
-            width: 70px;
-            height: 70px;
+            width: 80px;
+            height: 80px;
           }
         }
 
         /* Large screen optimization */
         @media (min-width: 1200px) {
           .stratego-board {
-            grid-template-columns: repeat(10, 110px);
-            grid-template-rows: repeat(10, 110px);
-            gap: 3px;
-            padding: 6px;
+            grid-template-columns: repeat(10, 120px);
+            grid-template-rows: repeat(10, 120px);
+            gap: 2px;
+            padding: 4px;
           }
           
           .stratego-square {
-            width: 110px;
-            height: 110px;
+            width: 120px;
+            height: 120px;
           }
         }
       `}</style>
