@@ -308,34 +308,51 @@ export async function POST(
       // New Stratego format
       console.log(`🎯 New format: winner=${requestBody.winner}, playerId=${requestBody.playerId}`);
       
-      // Get game players to determine winner and loser wallets
-      const playersResult = await db`
-        SELECT 
-          p.wallet_address,
-          p.username,
-          gp.player_id
-        FROM game_players gp
-        JOIN players p ON gp.player_id = p.id
-        WHERE gp.game_id = ${gameId}
-        ORDER BY gp.joined_at ASC
-      `;
-      
-      if (playersResult.length < 2) {
-        return NextResponse.json({ error: 'Not enough players in game' }, { status: 400 });
+      try {
+        // Get game players to determine winner and loser wallets
+        console.log(`🔍 Querying players for game ${gameId}...`);
+        const playersResult = await db`
+          SELECT 
+            p.wallet_address,
+            p.username,
+            gp.player_id
+          FROM game_players gp
+          JOIN players p ON gp.player_id = p.id
+          WHERE gp.game_id = ${gameId}
+          ORDER BY gp.joined_at ASC
+        `;
+        
+        console.log(`🔍 Found ${playersResult.length} players:`, playersResult.map(p => ({ 
+          wallet: p.wallet_address.slice(0, 8) + '...', 
+          username: p.username,
+          playerId: p.player_id
+        })));
+        
+        if (playersResult.length < 2) {
+          console.error(`❌ Not enough players: ${playersResult.length}`);
+          return NextResponse.json({ error: 'Not enough players in game' }, { status: 400 });
+        }
+        
+        // In Stratego: red = player 1, blue = player 2
+        if (requestBody.winner === 'red') {
+          winnerWallet = playersResult[0].wallet_address;
+          loserWallet = playersResult[1].wallet_address;
+        } else if (requestBody.winner === 'blue') {
+          winnerWallet = playersResult[1].wallet_address;
+          loserWallet = playersResult[0].wallet_address;
+        } else {
+          console.error(`❌ Invalid winner color: ${requestBody.winner}`);
+          return NextResponse.json({ error: 'Invalid winner color' }, { status: 400 });
+        }
+        
+        console.log(`🏆 Determined: Winner=${winnerWallet.slice(0,8)}..., Loser=${loserWallet.slice(0,8)}...`);
+      } catch (playersError) {
+        console.error('❌ Error querying players:', playersError);
+        return NextResponse.json({ 
+          error: 'Failed to query game players',
+          details: playersError instanceof Error ? playersError.message : 'Unknown error'
+        }, { status: 500 });
       }
-      
-      // In Stratego: red = player 1, blue = player 2
-      if (requestBody.winner === 'red') {
-        winnerWallet = playersResult[0].wallet_address;
-        loserWallet = playersResult[1].wallet_address;
-      } else if (requestBody.winner === 'blue') {
-        winnerWallet = playersResult[1].wallet_address;
-        loserWallet = playersResult[0].wallet_address;
-      } else {
-        return NextResponse.json({ error: 'Invalid winner color' }, { status: 400 });
-      }
-      
-      console.log(`🏆 Determined: Winner=${winnerWallet.slice(0,8)}..., Loser=${loserWallet.slice(0,8)}...`);
     } else if (requestBody.winnerWallet && requestBody.loserWallet) {
       // Old checkers format
       winnerWallet = requestBody.winnerWallet;
@@ -352,22 +369,38 @@ export async function POST(
     console.log(`🏁 Completing game ${gameId} - Winner: ${winnerWallet.slice(0, 8)}..., Loser: ${loserWallet.slice(0, 8)}...`);
 
     // Get game details
-    const gameResult = await db`
-      SELECT 
-        g.id,
-        g.game_type,
-        g.entry_fee,
-        g.status
-      FROM games g
-      WHERE g.id = ${gameId}
-    `;
+    let game;
+    try {
+      console.log(`🔍 Querying game details for ${gameId}...`);
+      const gameResult = await db`
+        SELECT 
+          g.id,
+          g.game_type,
+          g.entry_fee,
+          g.status
+        FROM games g
+        WHERE g.id = ${gameId}
+      `;
 
-    if (gameResult.length === 0) {
-      console.error(`❌ Game ${gameId} not found`);
-      return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+      if (gameResult.length === 0) {
+        console.error(`❌ Game ${gameId} not found`);
+        return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+      }
+
+      game = gameResult[0];
+      console.log(`🔍 Game details:`, {
+        id: game.id,
+        type: game.game_type,
+        entryFee: game.entry_fee,
+        status: game.status
+      });
+    } catch (gameError) {
+      console.error('❌ Error querying game details:', gameError);
+      return NextResponse.json({ 
+        error: 'Failed to query game details',
+        details: gameError instanceof Error ? gameError.message : 'Unknown error'
+      }, { status: 500 });
     }
-
-    const game = gameResult[0];
     
     // Calculate winnings (96% goes to winner, 4% platform fee)
     const totalPot = parseFloat(game.entry_fee) * 2;
@@ -439,44 +472,75 @@ export async function POST(
     }
 
     // Get player information for SMS notifications
-    const playersResult = await db`
-      SELECT 
-        p.wallet_address,
-        p.username,
-        p.phone_number,
-        p.sms_notifications_enabled,
-        gp.player_id
-      FROM game_players gp
-      JOIN players p ON gp.player_id = p.id
-      WHERE gp.game_id = ${gameId}
-    `;
+    let playersResult;
+    try {
+      console.log(`🔍 Querying players for SMS notifications...`);
+      playersResult = await db`
+        SELECT 
+          p.wallet_address,
+          p.username,
+          p.phone_number,
+          p.sms_notifications_enabled,
+          gp.player_id
+        FROM game_players gp
+        JOIN players p ON gp.player_id = p.id
+        WHERE gp.game_id = ${gameId}
+      `;
+      console.log(`🔍 Found ${playersResult.length} players for SMS`);
+    } catch (playersError) {
+      console.error('❌ Error querying players for SMS:', playersError);
+      return NextResponse.json({ 
+        error: 'Failed to query players for SMS',
+        details: playersError instanceof Error ? playersError.message : 'Unknown error'
+      }, { status: 500 });
+    }
 
     // Update game status
-    await db`
-      UPDATE games 
-      SET status = 'completed', ended_at = CURRENT_TIMESTAMP
-      WHERE id = ${gameId}
-    `;
+    try {
+      console.log(`🔄 Updating game status to completed...`);
+      await db`
+        UPDATE games 
+        SET status = 'completed', ended_at = CURRENT_TIMESTAMP
+        WHERE id = ${gameId}
+      `;
+      console.log(`✅ Game status updated`);
+    } catch (updateError) {
+      console.error('❌ Error updating game status:', updateError);
+      return NextResponse.json({ 
+        error: 'Failed to update game status',
+        details: updateError instanceof Error ? updateError.message : 'Unknown error'
+      }, { status: 500 });
+    }
 
     // Update game players - FIX THE BROKEN SQL
-    // First, set all players in this game as losers
-    await db`
-      UPDATE game_players 
-      SET 
-        game_status = 'completed',
-        is_winner = false
-      WHERE game_id = ${gameId}
-    `;
-
-    // Then, mark the winner as true
-    await db`
-      UPDATE game_players 
-      SET is_winner = true
-      WHERE game_id = ${gameId} 
-        AND player_id = (
-          SELECT id FROM players WHERE wallet_address = ${winnerWallet}
-        )
-    `;
+    try {
+      console.log(`🔄 Updating game players...`);
+      // First, set all players in this game as losers
+      await db`
+        UPDATE game_players 
+        SET 
+          game_status = 'completed',
+          is_winner = false
+        WHERE game_id = ${gameId}
+      `;
+      
+      // Then, mark the winner as true
+      await db`
+        UPDATE game_players 
+        SET is_winner = true
+        WHERE game_id = ${gameId} 
+          AND player_id = (
+            SELECT id FROM players WHERE wallet_address = ${winnerWallet}
+          )
+      `;
+      console.log(`✅ Game players updated`);
+    } catch (playersUpdateError) {
+      console.error('❌ Error updating game players:', playersUpdateError);
+      return NextResponse.json({ 
+        error: 'Failed to update game players',
+        details: playersUpdateError instanceof Error ? playersUpdateError.message : 'Unknown error'
+      }, { status: 500 });
+    }
 
     console.log(`💰 Game completion: Total pot: ${totalPot} SOL, Winner gets: ${winnerAmount} SOL, Platform fee: ${platformFee} SOL`);
 
