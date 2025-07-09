@@ -54,6 +54,8 @@ interface GameState {
   setupPhase: boolean;
   setupTimeLeft: number; // 3 minutes for setup
   turnTimeLeft: number;  // 1 minute per turn
+  redPlayerReady: boolean;
+  bluePlayerReady: boolean;
   lastMove?: {
     from: [number, number];
     to: [number, number];
@@ -151,6 +153,9 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     setupPhase: false,
     setupTimeLeft: SETUP_TIME_LIMIT,
     turnTimeLeft: TURN_TIME_LIMIT,
+    // INITIALIZE READY STATES
+    redPlayerReady: false,
+    bluePlayerReady: false,
   }));
   
   const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null);
@@ -640,10 +645,17 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     return moves;
   }, [gameState.board]);
 
-  // Check for winner
+  // Check for winner - IMPROVED LOGIC TO PREVENT IMMEDIATE GAME OVER
   const checkWinner = useCallback((board: (StrategoPiece | null)[][]): Player | null => {
-    // DON'T check for winners during setup phase!
+    // CRITICAL: Don't check for winners during setup phase!
     if (gameState.setupPhase || gameState.gameStatus !== 'active') {
+      console.log('❌ Winner check blocked - not in active gameplay phase');
+      return null;
+    }
+    
+    // ADDITIONAL GUARD: Don't check winner if both players aren't ready
+    if (!gameState.redPlayerReady || !gameState.bluePlayerReady) {
+      console.log('❌ Winner check blocked - players not ready');
       return null;
     }
     
@@ -668,13 +680,26 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       }
     }
     
-    if (!redFlag) return 'blue';
-    if (!blueFlag) return 'red';
-    if (redMovablePieces === 0) return 'blue';
-    if (blueMovablePieces === 0) return 'red';
+    // Only declare winner if flag is actually captured or no movable pieces
+    if (!redFlag) {
+      console.log('🏁 Blue wins - Red flag captured!');
+      return 'blue';
+    }
+    if (!blueFlag) {
+      console.log('🏁 Red wins - Blue flag captured!');
+      return 'red';
+    }
+    if (redMovablePieces === 0) {
+      console.log('🏁 Blue wins - Red has no movable pieces!');
+      return 'blue';
+    }
+    if (blueMovablePieces === 0) {
+      console.log('🏁 Red wins - Blue has no movable pieces!');
+      return 'red';
+    }
     
     return null;
-  }, [gameState.setupPhase, gameState.gameStatus]);
+  }, [gameState.setupPhase, gameState.gameStatus, gameState.redPlayerReady, gameState.bluePlayerReady]);
 
   // Make a move with combat resolution
   const makeMove = useCallback(async (fromRow: number, fromCol: number, toRow: number, toCol: number) => {
@@ -832,21 +857,18 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     
     // During active gameplay: 
     // - Show YOUR pieces normally (use stored imagePath or generate one)
-    // - Show OPPONENT pieces as hidden (regardless of imagePath)
+    // - Show OPPONENT pieces as hidden (unless revealed through combat)
     if (piece.color === playerColor) {
       // Your piece: show actual piece image
       const imagePath = piece.imagePath || getPieceImage(piece.rank, piece.color, true);
-      console.log(`🔴 YOUR piece: ${piece.rank} -> ${imagePath}`);
       return imagePath;
     } else {
-      // Opponent piece: always show hidden unless revealed through combat
+      // Opponent piece: show hidden unless revealed through combat
       if (piece.isRevealed) {
         const imagePath = getPieceImage(piece.rank, piece.color, true);
-        console.log(`🔵 REVEALED opponent piece: ${piece.rank} -> ${imagePath}`);
         return imagePath;
       } else {
         const hiddenPath = `/images/stratego/pieces/${piece.color}-hidden.png`;
-        console.log(`👁️ HIDDEN opponent piece: ${piece.rank} -> ${hiddenPath}`);
         return hiddenPath;
       }
     }
@@ -955,24 +977,47 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     }
   }, [gameState.setupPhase, handleSetupClick, handleActiveClick]);
 
-  // Complete setup
-  const completeSetup = useCallback(() => {
+
+
+  // Mark player as ready
+  const markPlayerReady = useCallback(async () => {
+    if (!playerColor) return;
+    
+    // Check if all pieces are placed
     const totalPlaced = Object.values(availablePieces).reduce((sum, count) => sum + count, 0);
     const totalPieces = Object.values(PIECE_COUNTS).reduce((sum, count) => sum + count, 0);
     
     if (totalPlaced < totalPieces) {
-      setError('Please place all pieces before starting the battle!');
+      setError('Please place all pieces before marking ready!');
       return;
     }
     
-    setGameState(prev => ({
-      ...prev,
-      setupPhase: false,
-      gameStatus: 'active'
-    }));
+    const newState = {
+      ...gameState,
+      [playerColor === 'red' ? 'redPlayerReady' : 'bluePlayerReady']: true
+    };
     
-
-  }, [availablePieces]);
+    // Check if both players are ready
+    const bothReady = (playerColor === 'red' ? newState.bluePlayerReady : newState.redPlayerReady) && true;
+    
+    if (bothReady) {
+      // Start the game!
+      newState.setupPhase = false;
+      newState.gameStatus = 'active';
+      console.log('🚀 Both players ready - starting game!');
+    }
+    
+    setGameState(newState);
+    await saveGameState(newState);
+    
+    if (bothReady) {
+      setError('🎉 Both players ready - Battle begins!');
+      setTimeout(() => setError(null), 3000);
+    } else {
+      setError(`✅ You are ready! Waiting for opponent...`);
+      setTimeout(() => setError(null), 3000);
+    }
+  }, [playerColor, availablePieces, gameState, saveGameState]);
 
   // Get symbol for piece rank (fallback if image fails)
   const getPieceSymbol = (rank: PieceRank): string => {
@@ -1054,24 +1099,40 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       >
         {isLake && <span style={{ fontSize: '24px', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>🌊</span>}
         {piece && (
-          // During setup phase: only show YOUR pieces, hide opponent pieces completely
-          // During active gameplay: show YOUR pieces normally, show opponent pieces as "hidden"
           (() => {
-            const shouldShow = gameState.setupPhase ? (piece.color === playerColor) : true;
-            console.log(`🎯 Piece at [${actualRow},${actualCol}]: color=${piece.color}, playerColor=${playerColor}, setupPhase=${gameState.setupPhase}, shouldShow=${shouldShow}, rank=${piece.rank}`);
-            return shouldShow;
-          })() && (
-            <Image
-              src={getDisplayImageForPiece(piece)}
-              alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
-              fill
-              style={{
-                objectFit: 'contain',
-              }}
-              priority={true}
-              unoptimized={true}
-            />
-          )
+            // DURING SETUP: Only show your own pieces 
+            // DURING ACTIVE: Show all pieces (yours normal, opponent's hidden/revealed)
+            const shouldShowPiece = gameState.setupPhase ? (piece.color === playerColor) : true;
+            
+            if (!shouldShowPiece) {
+              // During setup, if it's opponent piece, show hidden back
+              return (
+                <Image
+                  src={`/images/stratego/pieces/${piece.color}-hidden.png`}
+                  alt="Hidden piece"
+                  fill
+                  style={{
+                    objectFit: 'contain',
+                  }}
+                  priority={true}
+                  unoptimized={true}
+                />
+              );
+            }
+            
+            return (
+              <Image
+                src={getDisplayImageForPiece(piece)}
+                alt={piece.isRevealed || piece.color === playerColor ? piece.rank : 'Hidden piece'}
+                fill
+                style={{
+                  objectFit: 'contain',
+                }}
+                priority={true}
+                unoptimized={true}
+              />
+            );
+          })()
         )}
       </div>
     );
@@ -1233,6 +1294,9 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             setupPhase: gameStatus === 'setup',
             setupTimeLeft: SETUP_TIME_LIMIT,
             turnTimeLeft: TURN_TIME_LIMIT,
+            // INITIALIZE READY STATES FROM SAVED DATA OR DEFAULT TO FALSE
+            redPlayerReady: false,
+            bluePlayerReady: false,
           };
           
           if (newState.gameStatus === 'setup' && !gameStartTime) {
@@ -1450,6 +1514,47 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             }}>
               🏗️ Deploy Your Army! Place all pieces in your territory.
             </Typography>
+            
+            {/* READY STATUS DISPLAY */}
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2">
+                🔴 Red Player: {gameState.redPlayerReady ? '✅ Ready' : '⏳ Setting up...'}
+              </Typography>
+              <Typography variant="body2">
+                🔵 Blue Player: {gameState.bluePlayerReady ? '✅ Ready' : '⏳ Setting up...'}
+              </Typography>
+            </Box>
+            
+            {/* READY BUTTON */}
+            {playerColor && !gameState[playerColor === 'red' ? 'redPlayerReady' : 'bluePlayerReady'] && (
+              <Button
+                variant="contained"
+                onClick={markPlayerReady}
+                sx={{ 
+                  bgcolor: '#4caf50', 
+                  '&:hover': { bgcolor: '#388e3c' },
+                  mb: 2,
+                  fontWeight: 'bold'
+                }}
+                size="large"
+              >
+                ✅ Ready to Battle!
+              </Button>
+            )}
+            
+            {playerColor && gameState[playerColor === 'red' ? 'redPlayerReady' : 'bluePlayerReady'] && (
+              <Typography variant="h6" sx={{ 
+                bgcolor: '#4caf50',
+                color: 'white',
+                p: 1,
+                borderRadius: 1,
+                fontWeight: 'bold',
+                mb: 2
+              }}>
+                ✅ You are ready! Waiting for opponent...
+              </Typography>
+            )}
+            
             <Button
               variant="outlined"
               size="small"
@@ -1624,10 +1729,10 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               <Button
                 variant="contained"
                 fullWidth
-                onClick={completeSetup}
-                sx={{ mt: 2, bgcolor: '#2E4057', '&:hover': { bgcolor: '#1e2a3a' } }}
+                onClick={markPlayerReady}
+                sx={{ mt: 2, bgcolor: '#4caf50', '&:hover': { bgcolor: '#388e3c' } }}
               >
-                ⚔️ Start Battle!
+                ✅ Ready to Battle!
               </Button>
             )}
           </Box>
