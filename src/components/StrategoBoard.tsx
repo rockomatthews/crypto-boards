@@ -1137,12 +1137,14 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   const markPlayerReady = useCallback(async () => {
     if (!playerColor) return;
     
-    // Check if all pieces are placed
-    const totalPlaced = Object.values(availablePieces).reduce((sum, count) => sum + count, 0);
-    const totalPieces = Object.values(PIECE_COUNTS).reduce((sum, count) => sum + count, 0);
+    // Check if all pieces are placed by counting pieces ON THE BOARD for your color
+    const yourPiecesOnBoard = gameState.board.flat().filter(piece => piece && piece.color === playerColor).length;
+    const totalPiecesRequired = 40;
     
-    if (totalPlaced < totalPieces) {
-      setError('Please place all pieces before marking ready!');
+    console.log(`🔍 Ready check: ${yourPiecesOnBoard} pieces on board vs ${totalPiecesRequired} required`);
+    
+    if (yourPiecesOnBoard < totalPiecesRequired) {
+      setError(`Please place all pieces before marking ready! (${yourPiecesOnBoard}/${totalPiecesRequired})`);
       return;
     }
     
@@ -1171,7 +1173,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       setError(`✅ You are ready! Waiting for opponent...`);
       setTimeout(() => setError(null), 3000);
     }
-  }, [playerColor, availablePieces, gameState, saveGameState]);
+  }, [playerColor, gameState, saveGameState]);
 
   // Get symbol for piece rank (fallback if image fails)
   const getPieceSymbol = (rank: PieceRank): string => {
@@ -1378,15 +1380,16 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           let restoredBoard = Array(10).fill(null).map(() => Array(10).fill(null));
           const restoredAvailablePieces = { ...PIECE_COUNTS };
           const restoredUsedVariants = new Set<string>();
+          let savedStateData: Partial<GameState> | null = null; // Declare here for later use
           
           try {
             const stateResponse = await fetch(`/api/games/${gameId}/state`);
             if (stateResponse.ok) {
-              const savedState = await stateResponse.json();
-              console.log('🔄 Restoring saved game state:', savedState);
+              savedStateData = await stateResponse.json();
+              console.log('🔄 Restoring saved game state:', savedStateData);
               
-              if (savedState.board) {
-                restoredBoard = savedState.board;
+              if (savedStateData && savedStateData.board) {
+                restoredBoard = savedStateData.board;
                 
                 // Count ALL pieces on the board for debugging
                 const redPieces = restoredBoard.flat().filter(p => p && p.color === 'red').length;
@@ -1440,17 +1443,17 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           
           const newState: GameState = {
             board: restoredBoard,
-            currentPlayer: 'red' as Player,
+            currentPlayer: savedStateData?.currentPlayer || 'red',
             redPlayer: gameData.players[0]?.wallet_address || null,
             bluePlayer: gameData.players[1]?.wallet_address || null,
             gameStatus,
-            winner: null,
-            setupPhase: gameStatus === 'setup',
+            winner: savedStateData?.winner || null,
+            setupPhase: savedStateData?.setupPhase !== undefined ? savedStateData.setupPhase : (gameStatus === 'setup'),
             setupTimeLeft: SETUP_TIME_LIMIT,
             turnTimeLeft: TURN_TIME_LIMIT,
-            // INITIALIZE READY STATES FROM SAVED DATA OR DEFAULT TO FALSE
-            redPlayerReady: false,
-            bluePlayerReady: false,
+            // LOAD READY STATES FROM SAVED DATA
+            redPlayerReady: savedStateData?.redPlayerReady || false,
+            bluePlayerReady: savedStateData?.bluePlayerReady || false,
           };
           
           if (newState.gameStatus === 'setup' && !gameStartTime) {
@@ -1521,16 +1524,40 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           if (stateResponse.ok) {
             const savedState = await stateResponse.json();
             if (savedState.board) {
-                             // Count pieces before update
-               const currentTotal = gameState.board.flat().filter((p: StrategoPiece | null) => p !== null).length;
-               const newTotal = savedState.board.flat().filter((p: StrategoPiece | null) => p !== null).length;
+              // Count pieces before update
+              const currentTotal = gameState.board.flat().filter((p: StrategoPiece | null) => p !== null).length;
+              const newTotal = savedState.board.flat().filter((p: StrategoPiece | null) => p !== null).length;
               
-              if (newTotal !== currentTotal) {
-                console.log(`🔄 Board changed! Pieces: ${currentTotal} → ${newTotal}`);
+              // COMPREHENSIVE STATE UPDATE - sync ALL game state
+              const stateChanged = (
+                newTotal !== currentTotal ||
+                savedState.currentPlayer !== gameState.currentPlayer ||
+                savedState.redPlayerReady !== gameState.redPlayerReady ||
+                savedState.bluePlayerReady !== gameState.bluePlayerReady ||
+                savedState.setupPhase !== gameState.setupPhase ||
+                savedState.gameStatus !== gameState.gameStatus
+              );
+              
+              if (stateChanged) {
+                console.log(`🔄 Game state changed! Syncing all state...`, {
+                  pieces: `${currentTotal} → ${newTotal}`,
+                  currentPlayer: `${gameState.currentPlayer} → ${savedState.currentPlayer}`,
+                  redReady: `${gameState.redPlayerReady} → ${savedState.redPlayerReady}`,
+                  blueReady: `${gameState.bluePlayerReady} → ${savedState.bluePlayerReady}`,
+                  setupPhase: `${gameState.setupPhase} → ${savedState.setupPhase}`,
+                  gameStatus: `${gameState.gameStatus} → ${savedState.gameStatus}`
+                });
                 
                 setGameState(prev => ({
                   ...prev,
-                  board: savedState.board
+                  board: savedState.board,
+                  currentPlayer: savedState.currentPlayer || prev.currentPlayer,
+                  redPlayerReady: savedState.redPlayerReady !== undefined ? savedState.redPlayerReady : prev.redPlayerReady,
+                  bluePlayerReady: savedState.bluePlayerReady !== undefined ? savedState.bluePlayerReady : prev.bluePlayerReady,
+                  setupPhase: savedState.setupPhase !== undefined ? savedState.setupPhase : prev.setupPhase,
+                  gameStatus: savedState.gameStatus || prev.gameStatus,
+                  turnTimeLeft: savedState.turnTimeLeft || prev.turnTimeLeft,
+                  winner: savedState.winner || prev.winner
                 }));
               }
             }
@@ -1549,7 +1576,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         clearInterval(interval);
       };
     }
-  }, [gameState.gameStatus, gameState.setupPhase, gameId, gameState.board]);
+  }, [gameState.gameStatus, gameState.setupPhase, gameId, gameState.board, gameState.currentPlayer, gameState.redPlayerReady, gameState.bluePlayerReady]);
 
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
