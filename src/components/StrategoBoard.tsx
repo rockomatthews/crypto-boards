@@ -874,15 +874,59 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     }
   }, [gameState.setupPhase, playerColor, getPieceImage]);
 
+  // Remove piece from board
+  const removePiece = useCallback(async (row: number, col: number) => {
+    if (!gameState.board[row][col]) return;
+    
+    const piece = gameState.board[row][col]!;
+    const newBoard = [...gameState.board];
+    newBoard[row][col] = null;
+    
+    // Return piece to available pool
+    setAvailablePieces(prev => ({
+      ...prev,
+      [piece.rank]: prev[piece.rank] + 1
+    }));
+    
+    // Remove from used variants
+    if (piece.imagePath) {
+      setUsedPieceVariants(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(piece.imagePath!);
+        return newSet;
+      });
+    }
+    
+    const newState = {
+      ...gameState,
+      board: newBoard
+    };
+    
+    setGameState(newState);
+    
+    // IMMEDIATELY save to database like checkers
+    await saveGameState(newState);
+    
+    console.log(`Removed ${piece.rank} from [${row}, ${col}]`);
+  }, [gameState, saveGameState, setUsedPieceVariants]);
+
   // Handle square click during setup
   const handleSetupClick = useCallback((row: number, col: number) => {
     if (!playerColor || !isSetupArea(row, playerColor)) return;
     if (isLakePosition(row, col)) return;
     
-    // Show piece selector for this square
+    const piece = gameState.board[row][col];
+    
+    // If there's already a piece here and it's yours, remove it
+    if (piece && piece.color === playerColor) {
+      removePiece(row, col);
+      return;
+    }
+    
+    // Otherwise, show piece selector for this empty square
     setSelectedSetupSquare([row, col]);
     setShowPieceSelector(true);
-  }, [playerColor]);
+  }, [playerColor, gameState.board, removePiece]);
 
   // Place selected piece on board
   const placePiece = useCallback(async (pieceRank: PieceRank, specificImagePath: string) => {
@@ -978,6 +1022,116 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   }, [gameState.setupPhase, handleSetupClick, handleActiveClick]);
 
 
+
+  // Random setup - place all remaining pieces randomly
+  const randomSetup = useCallback(async () => {
+    if (!playerColor) return;
+    
+    console.log('🎲 Starting random setup...');
+    
+    // Get all valid setup positions for this player
+    const validPositions: [number, number][] = [];
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) {
+        if (isSetupArea(row, playerColor) && !isLakePosition(row, col) && !gameState.board[row][col]) {
+          validPositions.push([row, col]);
+        }
+      }
+    }
+    
+    console.log(`📍 Found ${validPositions.length} valid empty positions for random setup`);
+    
+    // Get remaining pieces that need to be placed
+    const remainingPieces: { rank: PieceRank; count: number }[] = [];
+    Object.entries(availablePieces).forEach(([rank, count]) => {
+      if (count > 0) {
+        remainingPieces.push({ rank: rank as PieceRank, count });
+      }
+    });
+    
+    console.log('🎲 Remaining pieces to place:', remainingPieces);
+    
+    if (remainingPieces.length === 0) {
+      setError('All pieces are already placed!');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
+    if (validPositions.length < remainingPieces.reduce((sum, { count }) => sum + count, 0)) {
+      setError('Not enough empty positions for all remaining pieces!');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    
+    // Shuffle valid positions for random placement
+    const shuffledPositions = [...validPositions].sort(() => Math.random() - 0.5);
+    
+    const newBoard = [...gameState.board];
+    const newAvailablePieces = { ...availablePieces };
+    const newUsedVariants = new Set(usedPieceVariants);
+    
+    let positionIndex = 0;
+    
+    // Place each remaining piece randomly
+    for (const { rank, count } of remainingPieces) {
+      for (let i = 0; i < count; i++) {
+        if (positionIndex >= shuffledPositions.length) {
+          console.error('❌ Ran out of valid positions for random setup!');
+          break;
+        }
+        
+        const [row, col] = shuffledPositions[positionIndex];
+        positionIndex++;
+        
+        // Generate random variant for pieces with multiple copies
+        let imagePath: string;
+        if (PIECE_COUNTS[rank] === 1) {
+          imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}.png`;
+        } else {
+          // Find an unused variant
+          let variantNumber = 1;
+          do {
+            imagePath = `/images/stratego/pieces/${playerColor}-${rank.toLowerCase()}-${variantNumber}.png`;
+            variantNumber++;
+          } while (newUsedVariants.has(imagePath) && variantNumber <= PIECE_COUNTS[rank]);
+        }
+        
+        // Place the piece
+        newBoard[row][col] = {
+          color: playerColor,
+          rank: rank,
+          isRevealed: false,
+          canMove: rank !== 'Bomb' && rank !== 'Flag',
+          imagePath: imagePath
+        };
+        
+        newUsedVariants.add(imagePath);
+        newAvailablePieces[rank]--;
+        
+        console.log(`🎲 Random placed ${rank} at [${row}, ${col}] with image ${imagePath}`);
+      }
+    }
+    
+    // Update state
+    const newState = {
+      ...gameState,
+      board: newBoard
+    };
+    
+    setGameState(newState);
+    setAvailablePieces(newAvailablePieces);
+    setUsedPieceVariants(newUsedVariants);
+    
+    // Save state to database
+    await saveGameState(newState);
+    
+    console.log('✅ Random setup complete!');
+    
+    const totalPlaced = remainingPieces.reduce((sum, { count }) => sum + count, 0);
+    setError(`🎲 Randomly placed ${totalPlaced} pieces! Ready to battle!`);
+    setTimeout(() => setError(null), 5000);
+    
+  }, [playerColor, gameState, availablePieces, usedPieceVariants, saveGameState]);
 
   // Mark player as ready
   const markPlayerReady = useCallback(async () => {
@@ -1397,42 +1551,6 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     }
   }, [gameState.gameStatus, gameState.setupPhase, gameId, gameState.board]);
 
-  // Remove piece from board
-  const removePiece = useCallback(async (row: number, col: number) => {
-    if (!gameState.board[row][col]) return;
-    
-    const piece = gameState.board[row][col]!;
-    const newBoard = [...gameState.board];
-    newBoard[row][col] = null;
-    
-    // Return piece to available pool
-    setAvailablePieces(prev => ({
-      ...prev,
-      [piece.rank]: prev[piece.rank] + 1
-    }));
-    
-    // Remove from used variants
-    if (piece.imagePath) {
-      setUsedPieceVariants(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(piece.imagePath!);
-        return newSet;
-      });
-    }
-    
-    const newState = {
-      ...gameState,
-      board: newBoard
-    };
-    
-    setGameState(newState);
-    
-    // IMMEDIATELY save to database like checkers
-    await saveGameState(newState);
-    
-    console.log(`Removed ${piece.rank} from [${row}, ${col}]`);
-  }, [gameState, saveGameState, setUsedPieceVariants]);
-
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
       {/* Game Info */}
@@ -1512,7 +1630,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               fontWeight: 'bold',
               mb: 2
             }}>
-              🏗️ Deploy Your Army! Place all pieces in your territory.
+              🏗️ Deploy Your Army! Click empty squares to place pieces, click pieces to remove them.
             </Typography>
             
             {/* READY STATUS DISPLAY */}
@@ -1525,21 +1643,43 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               </Typography>
             </Box>
             
-            {/* READY BUTTON */}
+            {/* SETUP BUTTONS */}
             {playerColor && !gameState[playerColor === 'red' ? 'redPlayerReady' : 'bluePlayerReady'] && (
-              <Button
-                variant="contained"
-                onClick={markPlayerReady}
-                sx={{ 
-                  bgcolor: '#4caf50', 
-                  '&:hover': { bgcolor: '#388e3c' },
-                  mb: 2,
-                  fontWeight: 'bold'
-                }}
-                size="large"
-              >
-                ✅ Ready to Battle!
-              </Button>
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mb: 2 }}>
+                {/* Random Setup Button */}
+                {Object.values(availablePieces).some(count => count > 0) && (
+                  <Button
+                    variant="outlined"
+                    onClick={randomSetup}
+                    sx={{ 
+                      borderColor: '#ff9800',
+                      color: '#ff9800',
+                      '&:hover': { 
+                        bgcolor: 'rgba(255, 152, 0, 0.1)',
+                        borderColor: '#f57c00'
+                      },
+                      fontWeight: 'bold'
+                    }}
+                    size="large"
+                  >
+                    🎲 Random Setup
+                  </Button>
+                )}
+                
+                {/* Ready Button */}
+                <Button
+                  variant="contained"
+                  onClick={markPlayerReady}
+                  sx={{ 
+                    bgcolor: '#4caf50', 
+                    '&:hover': { bgcolor: '#388e3c' },
+                    fontWeight: 'bold'
+                  }}
+                  size="large"
+                >
+                  ✅ Ready to Battle!
+                </Button>
+              </Box>
             )}
             
             {playerColor && gameState[playerColor === 'red' ? 'redPlayerReady' : 'bluePlayerReady'] && (
