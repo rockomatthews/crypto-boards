@@ -1173,7 +1173,13 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               if (savedState.board) {
                 restoredBoard = savedState.board;
                 
-                // Recalculate available pieces based on placed pieces
+                // Count ALL pieces on the board for debugging
+                const redPieces = restoredBoard.flat().filter(p => p && p.color === 'red').length;
+                const bluePieces = restoredBoard.flat().filter(p => p && p.color === 'blue').length;
+                console.log(`🔍 RESTORED BOARD: Red pieces: ${redPieces}, Blue pieces: ${bluePieces}, Total: ${redPieces + bluePieces}`);
+                
+                // Recalculate available pieces based ONLY on YOUR placed pieces
+                const yourColor = gameData.players[0]?.wallet_address === walletAddress ? 'red' : 'blue';
                 const placedPieces: Record<PieceRank, number> = {
                   'Marshal': 0,
                   'General': 0,
@@ -1189,11 +1195,11 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                   'Flag': 0
                 };
                 
-                // Count placed pieces and track used variants
+                // Count placed pieces and track used variants - ONLY FOR YOUR COLOR
                 for (let row = 0; row < 10; row++) {
                   for (let col = 0; col < 10; col++) {
                     const piece = restoredBoard[row][col];
-                    if (piece && piece.color === (gameData.players[0]?.wallet_address === walletAddress ? 'red' : 'blue')) {
+                    if (piece && piece.color === yourColor) {
                       placedPieces[piece.rank as PieceRank]++;
                       if (piece.imagePath) {
                         restoredUsedVariants.add(piece.imagePath);
@@ -1202,12 +1208,13 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                   }
                 }
                 
-                // Update available pieces
+                // Update available pieces - ONLY FOR YOUR COLOR
                 Object.keys(PIECE_COUNTS).forEach(rank => {
                   const rankKey = rank as PieceRank;
                   restoredAvailablePieces[rankKey] = PIECE_COUNTS[rankKey] - placedPieces[rankKey];
                 });
                 
+                console.log('✅ Restored YOUR pieces:', placedPieces);
                 console.log('✅ Restored available pieces:', restoredAvailablePieces);
                 console.log('✅ Restored used variants:', restoredUsedVariants);
               }
@@ -1283,6 +1290,48 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       initializeMagicBlockSession();
     }
   }, [gameState.gameStatus, publicKey, signTransaction, initializeMagicBlockSession]);
+
+  // Periodic board state refresh during active gameplay
+  useEffect(() => {
+    if (gameState.gameStatus === 'active' && !gameState.setupPhase) {
+      console.log('🔄 Setting up board state refresh for active gameplay');
+      
+      const refreshBoardState = async () => {
+        try {
+          console.log('🔄 Refreshing board state...');
+          const stateResponse = await fetch(`/api/games/${gameId}/state`);
+          if (stateResponse.ok) {
+            const savedState = await stateResponse.json();
+            if (savedState.board) {
+                             // Count pieces before update
+               const currentTotal = gameState.board.flat().filter((p: StrategoPiece | null) => p !== null).length;
+               const newTotal = savedState.board.flat().filter((p: StrategoPiece | null) => p !== null).length;
+              
+              if (newTotal !== currentTotal) {
+                console.log(`🔄 Board changed! Pieces: ${currentTotal} → ${newTotal}`);
+                
+                setGameState(prev => ({
+                  ...prev,
+                  board: savedState.board
+                }));
+              }
+            }
+          }
+        } catch (error) {
+          console.error('❌ Failed to refresh board state:', error);
+        }
+      };
+
+      // Refresh immediately and then every 5 seconds
+      refreshBoardState();
+      const interval = setInterval(refreshBoardState, 5000);
+
+      return () => {
+        console.log('🛑 Stopping board state refresh');
+        clearInterval(interval);
+      };
+    }
+  }, [gameState.gameStatus, gameState.setupPhase, gameId, gameState.board]);
 
   // Remove piece from board
   const removePiece = useCallback(async (row: number, col: number) => {
