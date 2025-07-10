@@ -37,6 +37,25 @@ export async function GET(request: NextRequest) {
       
       console.log(`✅ GET: Created new player:`, newPlayers[0]);
 
+      // Create initial player_stats record for new player
+      try {
+        const playerResult = await db`
+          SELECT id FROM players WHERE wallet_address = ${walletAddress}
+        `;
+
+        if (playerResult.length > 0) {
+          const playerId = playerResult[0].id;
+          
+          await db`
+            INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+            VALUES (${playerId}, 0, 0, 0)
+            ON CONFLICT (player_id) DO NOTHING
+          `;
+        }
+      } catch (statsError) {
+        console.warn('Error creating initial player stats:', statsError);
+      }
+
         return NextResponse.json({
         username: newPlayers[0].username,
         avatar_url: newPlayers[0].avatar_url || '',
@@ -51,14 +70,59 @@ export async function GET(request: NextRequest) {
     const player = players[0];
     console.log(`✅ GET: Found existing player - username=${player.username}, phone=${player.phone_number}`);
 
+    // Get player stats from player_stats table
+    let playerStats = {
+      games_played: 0,
+      games_won: 0,
+      total_winnings: 0
+    };
+
+    try {
+      const playerResult = await db`
+        SELECT id FROM players WHERE wallet_address = ${walletAddress}
+      `;
+
+      if (playerResult.length > 0) {
+        const playerId = playerResult[0].id;
+        
+        const statsResult = await db`
+          SELECT 
+            COALESCE(games_played, 0) as games_played,
+            COALESCE(games_won, 0) as games_won,
+            COALESCE(total_winnings, 0) as total_winnings
+          FROM player_stats
+          WHERE player_id = ${playerId}
+        `;
+
+        if (statsResult.length > 0) {
+          const stats = statsResult[0];
+          playerStats = {
+            games_played: parseInt(stats.games_played?.toString() || '0') || 0,
+            games_won: parseInt(stats.games_won?.toString() || '0') || 0,
+            total_winnings: parseFloat(stats.total_winnings?.toString() || '0') || 0
+          };
+        } else {
+          // Create initial player_stats record if it doesn't exist
+          await db`
+            INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+            VALUES (${playerId}, 0, 0, 0)
+            ON CONFLICT (player_id) DO NOTHING
+          `;
+        }
+      }
+    } catch (statsError) {
+      console.warn('Error fetching player stats:', statsError);
+      // Use default values if stats query fails
+    }
+
     return NextResponse.json({
       username: player.username,
       avatar_url: player.avatar_url || '',
       phone_number: player.phone_number,
       sms_notifications_enabled: false,
-      games_played: 0,
-      games_won: 0,
-      total_winnings: 0
+      games_played: playerStats.games_played,
+      games_won: playerStats.games_won,
+      total_winnings: playerStats.total_winnings
     });
 
   } catch (error) {
