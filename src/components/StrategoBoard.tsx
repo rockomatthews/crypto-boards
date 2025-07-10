@@ -740,7 +740,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       defendingPiece.isRevealed = true;
       
       // Wait for combat dialog to close before applying results
-      setTimeout(() => {
+      setTimeout(async () => {
         const updatedBoard = newBoard.map(row => [...row]);
         
         if (combatResult) {
@@ -761,18 +761,24 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         
         const gameWinner = checkWinner(updatedBoard);
         
-        setGameState(prev => ({
-          ...prev,
+        const newGameState = {
+          ...gameState,
           board: updatedBoard,
-          currentPlayer: prev.currentPlayer === 'red' ? 'blue' : 'red',
-          gameStatus: gameWinner ? 'finished' : 'active',
+          currentPlayer: gameState.currentPlayer === 'red' ? 'blue' as Player : 'red' as Player,
+          gameStatus: gameWinner ? 'finished' as const : 'active' as const,
           winner: gameWinner,
           lastMove: {
-            from: [fromRow, fromCol],
-            to: [toRow, toCol],
+            from: [fromRow, fromCol] as [number, number],
+            to: [toRow, toCol] as [number, number],
             combat: combatResult
           }
-        }));
+        };
+        
+        setGameState(newGameState);
+        
+        // FORCE IMMEDIATE SYNC after move
+        console.log('🔄 Forcing immediate sync after move...');
+        await saveGameState(newGameState);
         
         if (gameWinner) {
           setGameEndDialog(true);
@@ -791,17 +797,23 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       
       const winner = checkWinner(newBoard);
       
-      setGameState(prev => ({
-        ...prev,
+      const newGameState = {
+        ...gameState,
         board: newBoard,
-        currentPlayer: prev.currentPlayer === 'red' ? 'blue' : 'red',
-        gameStatus: winner ? 'finished' : 'active',
+        currentPlayer: gameState.currentPlayer === 'red' ? 'blue' as Player : 'red' as Player,
+        gameStatus: winner ? 'finished' as const : 'active' as const,
         winner,
         lastMove: {
-          from: [fromRow, fromCol],
-          to: [toRow, toCol]
+          from: [fromRow, fromCol] as [number, number],
+          to: [toRow, toCol] as [number, number]
         }
-      }));
+      };
+      
+      setGameState(newGameState);
+      
+      // FORCE IMMEDIATE SYNC after move
+      console.log('🔄 Forcing immediate sync after move...');
+      await saveGameState(newGameState);
       
       if (winner) {
         setGameEndDialog(true);
@@ -811,7 +823,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       
       setLoading(false);
     }
-  }, [gameState, checkWinner]);
+  }, [gameState, checkWinner, saveGameState]);
 
   // Get image for piece rank with cached numbered variants
   const getPieceImage = useCallback((rank: PieceRank, color: PieceColor, isRevealed: boolean): string => {
@@ -1148,13 +1160,25 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       return;
     }
     
+    const readyField = playerColor === 'red' ? 'redPlayerReady' : 'bluePlayerReady';
+    const opponentReadyField = playerColor === 'red' ? 'bluePlayerReady' : 'redPlayerReady';
+    
     const newState = {
       ...gameState,
-      [playerColor === 'red' ? 'redPlayerReady' : 'bluePlayerReady']: true
+      [readyField]: true
     };
     
+    // 🎯 DEBUG: Ready state before change
+    console.log('🎯 MARKING READY - BEFORE:', {
+      playerColor,
+      yourReadyBefore: gameState[readyField],
+      opponentReadyBefore: gameState[opponentReadyField],
+      gameStatus: gameState.gameStatus,
+      setupPhase: gameState.setupPhase
+    });
+    
     // Check if both players are ready
-    const bothReady = (playerColor === 'red' ? newState.bluePlayerReady : newState.redPlayerReady) && true;
+    const bothReady = newState[opponentReadyField] === true;
     
     if (bothReady) {
       // Start the game!
@@ -1163,8 +1187,45 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       console.log('🚀 Both players ready - starting game!');
     }
     
+    // 🎯 DEBUG: Ready state after change
+    console.log('🎯 MARKING READY - AFTER:', {
+      yourReadyAfter: newState[readyField],
+      opponentReadyAfter: newState[opponentReadyField],
+      bothReady,
+      newGameStatus: newState.gameStatus,
+      newSetupPhase: newState.setupPhase
+    });
+    
     setGameState(newState);
     await saveGameState(newState);
+    
+    // FORCE IMMEDIATE BOARD REFRESH to sync with opponent
+    console.log('🔄 Forcing immediate board refresh after marking ready...');
+    try {
+      const stateResponse = await fetch(`/api/games/${gameId}/state`);
+      if (stateResponse.ok) {
+        const refreshedData = await stateResponse.json();
+        const refreshedState = refreshedData.currentState;
+        if (refreshedState) {
+          console.log('🎯 FORCED REFRESH - Retrieved state:', {
+            redReady: refreshedState.redPlayerReady,
+            blueReady: refreshedState.bluePlayerReady,
+            gameStatus: refreshedState.gameStatus,
+            setupPhase: refreshedState.setupPhase
+          });
+          
+          setGameState(prev => ({
+            ...prev,
+            redPlayerReady: refreshedState.redPlayerReady || prev.redPlayerReady,
+            bluePlayerReady: refreshedState.bluePlayerReady || prev.bluePlayerReady,
+            gameStatus: refreshedState.gameStatus || prev.gameStatus,
+            setupPhase: refreshedState.setupPhase !== undefined ? refreshedState.setupPhase : prev.setupPhase
+          }));
+        }
+      }
+    } catch (refreshError) {
+      console.error('❌ Failed to force refresh after marking ready:', refreshError);
+    }
     
     if (bothReady) {
       setError('🎉 Both players ready - Battle begins!');
@@ -1173,7 +1234,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       setError(`✅ You are ready! Waiting for opponent...`);
       setTimeout(() => setError(null), 3000);
     }
-  }, [playerColor, gameState, saveGameState]);
+  }, [playerColor, gameState, saveGameState, gameId]);
 
   // Get symbol for piece rank (fallback if image fails)
   const getPieceSymbol = (rank: PieceRank): string => {
@@ -1385,7 +1446,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
           try {
             const stateResponse = await fetch(`/api/games/${gameId}/state`);
             if (stateResponse.ok) {
-              savedStateData = await stateResponse.json();
+              const stateData = await stateResponse.json();
+              savedStateData = stateData.currentState;
               console.log('🔄 Restoring saved game state:', savedStateData);
               
               if (savedStateData && savedStateData.board) {
@@ -1396,49 +1458,61 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                 const bluePieces = restoredBoard.flat().filter(p => p && p.color === 'blue').length;
                 console.log(`🔍 RESTORED BOARD: Red pieces: ${redPieces}, Blue pieces: ${bluePieces}, Total: ${redPieces + bluePieces}`);
                 
-                // Recalculate available pieces based ONLY on YOUR placed pieces
-                const yourColor = gameData.players[0]?.wallet_address === walletAddress ? 'red' : 'blue';
-                const placedPieces: Record<PieceRank, number> = {
-                  'Marshal': 0,
-                  'General': 0,
-                  'Colonel': 0,
-                  'Major': 0,
-                  'Captain': 0,
-                  'Lieutenant': 0,
-                  'Sergeant': 0,
-                  'Miner': 0,
-                  'Scout': 0,
-                  'Spy': 0,
-                  'Bomb': 0,
-                  'Flag': 0
-                };
-                
-                // Count placed pieces and track used variants - ONLY FOR YOUR COLOR
-                for (let row = 0; row < 10; row++) {
-                  for (let col = 0; col < 10; col++) {
-                    const piece = restoredBoard[row][col];
-                    if (piece && piece.color === yourColor) {
-                      placedPieces[piece.rank as PieceRank]++;
-                      if (piece.imagePath) {
-                        restoredUsedVariants.add(piece.imagePath);
+                // CRITICAL FIX: Only recalculate available pieces during SETUP phase
+                // During ACTIVE phase, keep opponent pieces on board!
+                if (savedStateData.setupPhase) {
+                  // SETUP PHASE: Only track YOUR pieces for available inventory
+                  const yourColor = gameData.players[0]?.wallet_address === walletAddress ? 'red' : 'blue';
+                  const placedPieces: Record<PieceRank, number> = {
+                    'Marshal': 0,
+                    'General': 0,
+                    'Colonel': 0,
+                    'Major': 0,
+                    'Captain': 0,
+                    'Lieutenant': 0,
+                    'Sergeant': 0,
+                    'Miner': 0,
+                    'Scout': 0,
+                    'Spy': 0,
+                    'Bomb': 0,
+                    'Flag': 0
+                  };
+                  
+                  // Count placed pieces and track used variants - ONLY FOR YOUR COLOR
+                  for (let row = 0; row < 10; row++) {
+                    for (let col = 0; col < 10; col++) {
+                      const piece = restoredBoard[row][col];
+                      if (piece && piece.color === yourColor) {
+                        placedPieces[piece.rank as PieceRank]++;
+                        if (piece.imagePath) {
+                          restoredUsedVariants.add(piece.imagePath);
+                        }
                       }
                     }
                   }
+                  
+                  // Update available pieces - ONLY FOR YOUR COLOR
+                  Object.keys(PIECE_COUNTS).forEach(rank => {
+                    const rankKey = rank as PieceRank;
+                    restoredAvailablePieces[rankKey] = PIECE_COUNTS[rankKey] - placedPieces[rankKey];
+                  });
+                  
+                  console.log('✅ Restored YOUR pieces (setup phase):', placedPieces);
+                  console.log('✅ Restored available pieces:', restoredAvailablePieces);
+                } else {
+                  // ACTIVE PHASE: No available pieces (all should be placed)
+                  Object.keys(PIECE_COUNTS).forEach(rank => {
+                    const rankKey = rank as PieceRank;
+                    restoredAvailablePieces[rankKey] = 0;
+                  });
+                  console.log('✅ Active phase - all pieces should be on board, no available pieces');
                 }
                 
-                // Update available pieces - ONLY FOR YOUR COLOR
-                Object.keys(PIECE_COUNTS).forEach(rank => {
-                  const rankKey = rank as PieceRank;
-                  restoredAvailablePieces[rankKey] = PIECE_COUNTS[rankKey] - placedPieces[rankKey];
-                });
-                
-                console.log('✅ Restored YOUR pieces:', placedPieces);
-                console.log('✅ Restored available pieces:', restoredAvailablePieces);
                 console.log('✅ Restored used variants:', restoredUsedVariants);
               }
             }
-          } catch {
-            console.log('No saved state found, starting fresh');
+          } catch (stateError) {
+            console.log('No saved state found, starting fresh. Error:', stateError);
           }
           
           const newState: GameState = {
@@ -1455,6 +1529,16 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             redPlayerReady: savedStateData?.redPlayerReady || false,
             bluePlayerReady: savedStateData?.bluePlayerReady || false,
           };
+          
+          // 🔍 DEBUG READY STATES LOADING
+          console.log('🎯 READY STATE DEBUG:', {
+            savedRedReady: savedStateData?.redPlayerReady,
+            savedBlueReady: savedStateData?.bluePlayerReady,
+            newStateRedReady: newState.redPlayerReady,
+            newStateBlueReady: newState.bluePlayerReady,
+            gameStatus: newState.gameStatus,
+            setupPhase: newState.setupPhase
+          });
           
           if (newState.gameStatus === 'setup' && !gameStartTime) {
             setGameStartTime(gameData.started_at ? new Date(gameData.started_at) : new Date());
@@ -1512,21 +1596,32 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     }
   }, [gameState.gameStatus, publicKey, signTransaction, initializeMagicBlockSession]);
 
-  // Periodic board state refresh during active gameplay
+  // Periodic board state refresh during setup and active gameplay
   useEffect(() => {
-    if (gameState.gameStatus === 'active' && !gameState.setupPhase) {
-      console.log('🔄 Setting up board state refresh for active gameplay');
+    if ((gameState.gameStatus === 'setup' && gameState.setupPhase) || (gameState.gameStatus === 'active' && !gameState.setupPhase)) {
+      console.log('🔄 Setting up board state refresh for', gameState.gameStatus, 'phase');
       
       const refreshBoardState = async () => {
         try {
           console.log('🔄 Refreshing board state...');
           const stateResponse = await fetch(`/api/games/${gameId}/state`);
           if (stateResponse.ok) {
-            const savedState = await stateResponse.json();
-            if (savedState.board) {
+            const stateData = await stateResponse.json();
+            const savedState = stateData.currentState;
+            if (savedState && savedState.board) {
               // Count pieces before update
               const currentTotal = gameState.board.flat().filter((p: StrategoPiece | null) => p !== null).length;
               const newTotal = savedState.board.flat().filter((p: StrategoPiece | null) => p !== null).length;
+              
+              // 🎯 DEBUG: Log all state changes
+              console.log('🔄 REFRESH DEBUG:', {
+                pieces: `${currentTotal} → ${newTotal}`,
+                currentPlayer: `${gameState.currentPlayer} → ${savedState.currentPlayer}`,
+                redReady: `${gameState.redPlayerReady} → ${savedState.redPlayerReady}`,
+                blueReady: `${gameState.bluePlayerReady} → ${savedState.bluePlayerReady}`,
+                setupPhase: `${gameState.setupPhase} → ${savedState.setupPhase}`,
+                gameStatus: `${gameState.gameStatus} → ${savedState.gameStatus}`
+              });
               
               // COMPREHENSIVE STATE UPDATE - sync ALL game state
               const stateChanged = (
@@ -1539,14 +1634,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
               );
               
               if (stateChanged) {
-                console.log(`🔄 Game state changed! Syncing all state...`, {
-                  pieces: `${currentTotal} → ${newTotal}`,
-                  currentPlayer: `${gameState.currentPlayer} → ${savedState.currentPlayer}`,
-                  redReady: `${gameState.redPlayerReady} → ${savedState.redPlayerReady}`,
-                  blueReady: `${gameState.bluePlayerReady} → ${savedState.bluePlayerReady}`,
-                  setupPhase: `${gameState.setupPhase} → ${savedState.setupPhase}`,
-                  gameStatus: `${gameState.gameStatus} → ${savedState.gameStatus}`
-                });
+                console.log(`🔄 Game state changed! Syncing all state...`);
                 
                 setGameState(prev => ({
                   ...prev,
@@ -1559,24 +1647,31 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                   turnTimeLeft: savedState.turnTimeLeft || prev.turnTimeLeft,
                   winner: savedState.winner || prev.winner
                 }));
+              } else {
+                console.log('🔄 No state changes detected during refresh');
               }
+            } else {
+              console.log('❌ No saved state or board data found during refresh');
             }
+          } else {
+            console.error('❌ Failed to fetch state during refresh:', stateResponse.status);
           }
         } catch (error) {
           console.error('❌ Failed to refresh board state:', error);
         }
       };
 
-      // Refresh immediately and then every 5 seconds
+      // Refresh immediately and then every 3 seconds for faster synchronization
       refreshBoardState();
-      const interval = setInterval(refreshBoardState, 5000);
+      const interval = setInterval(refreshBoardState, 3000);
 
       return () => {
         console.log('🛑 Stopping board state refresh');
         clearInterval(interval);
       };
     }
-  }, [gameState.gameStatus, gameState.setupPhase, gameId, gameState.board, gameState.currentPlayer, gameState.redPlayerReady, gameState.bluePlayerReady]);
+  },
+  [gameState.gameStatus, gameState.setupPhase, gameState.currentPlayer, gameState.redPlayerReady, gameState.bluePlayerReady, gameState.board, gameId]);
 
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
