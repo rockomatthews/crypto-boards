@@ -497,18 +497,56 @@ export async function POST(
     let playersResult;
     try {
       console.log(`🔍 Querying players for SMS notifications...`);
-      playersResult = await db`
-        SELECT 
-          p.wallet_address,
-          p.username,
-          p.phone_number,
-          p.sms_notifications_enabled,
-          gp.player_id
-        FROM game_players gp
-        JOIN players p ON gp.player_id = p.id
-        WHERE gp.game_id = ${gameId}
-      `;
-      console.log(`🔍 Found ${playersResult.length} players for SMS`);
+      
+      // Try the query with SMS columns first
+      try {
+        playersResult = await db`
+          SELECT 
+            p.wallet_address,
+            p.username,
+            p.phone_number,
+            p.sms_notifications_enabled,
+            gp.player_id
+          FROM game_players gp
+          JOIN players p ON gp.player_id = p.id
+          WHERE gp.game_id = ${gameId}
+        `;
+        console.log(`🔍 Found ${playersResult.length} players for SMS (with SMS columns)`);
+      } catch (smsColumnError) {
+        console.log(`⚠️ SMS columns not available, trying without SMS fields:`, smsColumnError);
+        
+        // Fallback query without SMS columns
+        try {
+          playersResult = await db`
+            SELECT 
+              p.wallet_address,
+              p.username,
+              p.phone_number,
+              false as sms_notifications_enabled,
+              gp.player_id
+            FROM game_players gp
+            JOIN players p ON gp.player_id = p.id
+            WHERE gp.game_id = ${gameId}
+          `;
+          console.log(`🔍 Found ${playersResult.length} players for SMS (without SMS columns)`);
+        } catch (phoneColumnError) {
+          console.log(`⚠️ Phone column not available, using minimal query:`, phoneColumnError);
+          
+          // Ultimate fallback - only essential columns
+          playersResult = await db`
+            SELECT 
+              p.wallet_address,
+              p.username,
+              null as phone_number,
+              false as sms_notifications_enabled,
+              gp.player_id
+            FROM game_players gp
+            JOIN players p ON gp.player_id = p.id
+            WHERE gp.game_id = ${gameId}
+          `;
+          console.log(`🔍 Found ${playersResult.length} players for SMS (minimal query)`);
+        }
+      }
     } catch (playersError) {
       console.error('❌ Error querying players for SMS:', playersError);
       return NextResponse.json({ 
@@ -568,21 +606,31 @@ export async function POST(
 
     // Send SMS notifications
     try {
+      console.log(`📱 Attempting to send SMS notifications to ${playersResult.length} players...`);
+      
       for (const player of playersResult) {
-        if (player.phone_number && player.sms_notifications_enabled) {
-          const isWinner = player.wallet_address === winnerWallet;
-          await smsService.sendGameCompleted(
-            player.phone_number,
-            game.game_type,
-            isWinner,
-            isWinner ? winnerAmount : undefined
-          );
-          console.log(`📱 Game completion SMS sent to ${player.username} (${isWinner ? 'winner' : 'loser'})`);
+        try {
+          // Only try to send SMS if we have all required data
+          if (player.phone_number && player.sms_notifications_enabled && smsService?.sendGameCompleted) {
+            const isWinner = player.wallet_address === winnerWallet;
+            await smsService.sendGameCompleted(
+              player.phone_number,
+              game.game_type,
+              isWinner,
+              isWinner ? winnerAmount : undefined
+            );
+            console.log(`📱 Game completion SMS sent to ${player.username} (${isWinner ? 'winner' : 'loser'})`);
+          } else {
+            console.log(`📱 Skipping SMS for ${player.username}: phone=${!!player.phone_number}, enabled=${player.sms_notifications_enabled}, service=${!!smsService?.sendGameCompleted}`);
+          }
+        } catch (individualSmsError) {
+          console.error(`📱 Failed to send SMS to ${player.username}:`, individualSmsError);
+          // Continue to next player even if one SMS fails
         }
       }
     } catch (smsError) {
-      console.error('Failed to send SMS notifications:', smsError);
-      // Don't fail the completion if SMS fails
+      console.error('📱 SMS notification section failed:', smsError);
+      // Don't fail the completion if SMS fails - game completion is more important
     }
 
     // Create game stats for both players
