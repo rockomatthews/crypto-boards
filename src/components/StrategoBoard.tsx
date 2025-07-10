@@ -1236,24 +1236,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     }
   }, [playerColor, gameState, saveGameState, gameId]);
 
-  // Get symbol for piece rank (fallback if image fails)
-  const getPieceSymbol = (rank: PieceRank): string => {
-    const symbols: Record<PieceRank, string> = {
-      'Marshal': '⭐',
-      'General': '🎖️',
-      'Colonel': '��',
-      'Major': '🎗️',
-      'Captain': '👑',
-      'Lieutenant': '🔰',
-      'Sergeant': '⚡',
-      'Miner': '⛏️',
-      'Scout': '👁️',
-      'Spy': '🕵️',
-      'Bomb': '💣',
-      'Flag': '🏴'
-    };
-    return symbols[rank];
-  };
+
 
   // Format time
   const formatTime = (milliseconds: number): string => {
@@ -2014,13 +1997,36 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             <Box sx={{ textAlign: 'center' }}>
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 4, mb: 3 }}>
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="h6" sx={{ color: '#DC143C', fontWeight: 'bold' }}>
+                  <Typography variant="h6" sx={{ color: '#DC143C', fontWeight: 'bold', mb: 2 }}>
                     🔴 ATTACKER
                   </Typography>
-                  <Typography variant="h3" sx={{ my: 2 }}>
-                    {getPieceSymbol(combatDialog.attacker.rank)}
-                  </Typography>
-                  <Typography variant="h6">
+                  {/* ATTACKER PIECE IMAGE */}
+                  <Box sx={{ 
+                    width: 120, 
+                    height: 160, 
+                    position: 'relative', 
+                    mx: 'auto', 
+                    mb: 2,
+                    border: '3px solid #DC143C',
+                    borderRadius: 2,
+                    bgcolor: '#f5f5f5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Image
+                      src={combatDialog.attacker.imagePath || getPieceImage(combatDialog.attacker.rank, combatDialog.attacker.color, true)}
+                      alt={combatDialog.attacker.rank}
+                      width={100}
+                      height={140}
+                      style={{
+                        objectFit: 'contain',
+                      }}
+                      priority={true}
+                      unoptimized={true}
+                    />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                     {combatDialog.attacker.rank}
                   </Typography>
                 </Box>
@@ -2030,13 +2036,36 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                 </Typography>
                 
                 <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="h6" sx={{ color: '#4169E1', fontWeight: 'bold' }}>
+                  <Typography variant="h6" sx={{ color: '#4169E1', fontWeight: 'bold', mb: 2 }}>
                     🔵 DEFENDER
                   </Typography>
-                  <Typography variant="h3" sx={{ my: 2 }}>
-                    {getPieceSymbol(combatDialog.defender.rank)}
-                  </Typography>
-                  <Typography variant="h6">
+                  {/* DEFENDER PIECE IMAGE */}
+                  <Box sx={{ 
+                    width: 120, 
+                    height: 160, 
+                    position: 'relative', 
+                    mx: 'auto', 
+                    mb: 2,
+                    border: '3px solid #4169E1',
+                    borderRadius: 2,
+                    bgcolor: '#f5f5f5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Image
+                      src={combatDialog.defender.imagePath || getPieceImage(combatDialog.defender.rank, combatDialog.defender.color, true)}
+                      alt={combatDialog.defender.rank}
+                      width={100}
+                      height={140}
+                      style={{
+                        objectFit: 'contain',
+                      }}
+                      priority={true}
+                      unoptimized={true}
+                    />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                     {combatDialog.defender.rank}
                   </Typography>
                 </Box>
