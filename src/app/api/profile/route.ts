@@ -3,12 +3,12 @@ import { db } from '@/lib/db/schema';
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const walletAddress = searchParams.get('walletAddress');
+  const { searchParams } = new URL(request.url);
+  const walletAddress = searchParams.get('walletAddress');
 
-    if (!walletAddress) {
+  if (!walletAddress) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 });
-    }
+  }
 
     console.log(`📡 GET: Fetching profile for wallet ${walletAddress.slice(0, 8)}`);
 
@@ -36,17 +36,17 @@ export async function GET(request: NextRequest) {
       `;
       
       console.log(`✅ GET: Created new player:`, newPlayers[0]);
-      
-      return NextResponse.json({
+
+        return NextResponse.json({
         username: newPlayers[0].username,
         avatar_url: newPlayers[0].avatar_url || '',
         phone_number: newPlayers[0].phone_number,
         sms_notifications_enabled: false,
-        games_played: 0,
-        games_won: 0,
+          games_played: 0,
+          games_won: 0,
         total_winnings: 0
-      });
-    }
+        });
+      }
 
     const player = players[0];
     console.log(`✅ GET: Found existing player - username=${player.username}, phone=${player.phone_number}`);
@@ -125,4 +125,4 @@ export async function PUT(request: NextRequest) {
     console.error('PUT Profile error:', error);
     return NextResponse.json({ error: 'Update failed' }, { status: 500 });
   }
-}
+} 

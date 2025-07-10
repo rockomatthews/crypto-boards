@@ -47,14 +47,14 @@ export async function GET(request: NextRequest) {
     };
 
     try {
-      const aggregatedStatsResult = await db`
-        SELECT 
+    const aggregatedStatsResult = await db`
+      SELECT 
           COALESCE(games_played, 0) as games_played,
           COALESCE(games_won, 0) as games_won,
           COALESCE(total_winnings, 0) as total_winnings
-        FROM player_stats
-        WHERE player_id = ${playerId}
-      `;
+      FROM player_stats
+      WHERE player_id = ${playerId}
+    `;
 
       if (aggregatedStatsResult.length > 0) {
         const result = aggregatedStatsResult[0];
@@ -72,21 +72,21 @@ export async function GET(request: NextRequest) {
     let gameStatsResult: GameStat[] = [];
     try {
       const result = await db`
-        SELECT 
-          gs.game_type,
-          gs.result,
-          gs.amount,
-          gs.created_at,
-          g.id as game_id,
-          opponent.username as opponent_username,
-          opponent.wallet_address as opponent_wallet
-        FROM game_stats gs
-        JOIN games g ON gs.game_id = g.id
-        JOIN players opponent ON gs.opponent_id = opponent.id
-        WHERE gs.player_id = ${playerId}
-        ORDER BY gs.created_at DESC
-        LIMIT 50
-      `;
+      SELECT 
+        gs.game_type,
+        gs.result,
+        gs.amount,
+        gs.created_at,
+        g.id as game_id,
+        opponent.username as opponent_username,
+        opponent.wallet_address as opponent_wallet
+      FROM game_stats gs
+      JOIN games g ON gs.game_id = g.id
+      JOIN players opponent ON gs.opponent_id = opponent.id
+      WHERE gs.player_id = ${playerId}
+      ORDER BY gs.created_at DESC
+      LIMIT 50
+    `;
       gameStatsResult = result as GameStat[];
     } catch (gameStatsError) {
       console.warn('Error fetching game stats, using empty array:', gameStatsError);

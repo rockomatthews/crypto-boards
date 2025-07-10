@@ -177,6 +177,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   
   // Game state management
   const [gameStartTime, setGameStartTime] = useState<Date | null>(null);
+  const [turnStartTime, setTurnStartTime] = useState<Date | null>(null);
+  const [lastTurnPlayer, setLastTurnPlayer] = useState<Player | null>(null);
   const [escrowStatus, setEscrowStatus] = useState<{
     escrows: {
       id: string;
@@ -249,7 +251,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     
     return variants;
   }, [playerColor, availablePieces, usedPieceVariants]);
-
+  
   // For demo purposes - log the game ID and wallet
   console.log('Game ID:', gameId, 'Wallet:', publicKey?.toString());
   
@@ -735,9 +737,17 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       // Show combat animation
       setCombatDialog(combatResult);
       
-      // Reveal both pieces after combat
+      // Reveal both pieces after combat and assign permanent image paths
       attackingPiece.isRevealed = true;
       defendingPiece.isRevealed = true;
+      
+      // CRITICAL FIX: Assign permanent image paths for revealed pieces
+      if (!attackingPiece.imagePath) {
+        attackingPiece.imagePath = getPieceImage(attackingPiece.rank, attackingPiece.color, true);
+      }
+      if (!defendingPiece.imagePath) {
+        defendingPiece.imagePath = getPieceImage(defendingPiece.rank, defendingPiece.color, true);
+      }
       
       // Wait for combat dialog to close before applying results
       setTimeout(async () => {
@@ -783,7 +793,10 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         if (gameWinner) {
           setGameEndDialog(true);
         } else {
-
+          // Reset turn timer for next player
+          setTimeout(() => {
+            resetTurnTimer();
+          }, 100);
         }
         
         setCombatDialog(null);
@@ -818,11 +831,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       if (winner) {
         setGameEndDialog(true);
       } else {
-
+        // Reset turn timer for next player
+        setTimeout(() => {
+          resetTurnTimer();
+        }, 100);
       }
       
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState, checkWinner, saveGameState]);
 
   // Get image for piece rank with cached numbered variants
@@ -877,8 +894,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
     } else {
       // Opponent piece: show hidden unless revealed through combat
       if (piece.isRevealed) {
-        const imagePath = getPieceImage(piece.rank, piece.color, true);
-        return imagePath;
+        // CRITICAL FIX: Use stored imagePath if available, otherwise generate once and store it
+        if (piece.imagePath) {
+          return piece.imagePath;
+        } else {
+          // Generate a consistent image for this revealed piece
+          const imagePath = getPieceImage(piece.rank, piece.color, true);
+          // Note: The imagePath should be set when the piece is revealed in combat
+          return imagePath;
+        }
       } else {
         const hiddenPath = `/images/stratego/pieces/${piece.color}-hidden.png`;
         return hiddenPath;
@@ -1238,6 +1262,70 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
 
 
 
+  // Get all possible moves for current player
+  const getAllPossibleMoves = useCallback((board: (StrategoPiece | null)[][], currentPlayer: Player): Array<{ from: [number, number], to: [number, number] }> => {
+    const allMoves: Array<{ from: [number, number], to: [number, number] }> = [];
+    
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) {
+        const piece = board[row][col];
+        if (piece && piece.color === currentPlayer && piece.canMove) {
+          const validMoves = getValidMoves(row, col, piece);
+          for (const [toRow, toCol] of validMoves) {
+            allMoves.push({ from: [row, col], to: [toRow, toCol] });
+          }
+        }
+      }
+    }
+    
+    return allMoves;
+  }, [getValidMoves]);
+
+  // Make random move when timer expires
+  const makeRandomMove = useCallback(async () => {
+    if (gameState.gameStatus !== 'active') return;
+    if (gameState.currentPlayer !== playerColor) return; // Only make random move for current player
+    
+    console.log(`⏰ Turn timer expired for ${gameState.currentPlayer}! Making random move...`);
+    
+    const possibleMoves = getAllPossibleMoves(gameState.board, gameState.currentPlayer);
+    
+    if (possibleMoves.length === 0) {
+      // Player has no moves, they lose
+      const winner = gameState.currentPlayer === 'red' ? 'blue' : 'red';
+      const newState: GameState = {
+        ...gameState,
+        gameStatus: 'finished',
+        winner
+      };
+      setGameState(newState);
+      await saveGameState(newState);
+      setGameEndDialog(true);
+      setGameEndWinner(winner);
+      await completeGame(winner);
+      return;
+    }
+    
+    // Pick a random move
+    const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+    const [fromRow, fromCol] = randomMove.from;
+    const [toRow, toCol] = randomMove.to;
+    
+    console.log(`🎲 Random move: ${gameState.currentPlayer} piece from (${fromRow}, ${fromCol}) to (${toRow}, ${toCol})`);
+    
+    await makeMove(fromRow, fromCol, toRow, toCol);
+  }, [gameState, getAllPossibleMoves, makeMove, saveGameState, completeGame, playerColor]);
+
+  // Reset turn timer
+  const resetTurnTimer = useCallback(() => {
+    setTurnStartTime(new Date());
+    setGameState(prev => ({
+      ...prev,
+      turnTimeLeft: TURN_TIME_LIMIT
+    }));
+    console.log(`⏰ Turn timer reset for ${gameState.currentPlayer}`);
+  }, [gameState.currentPlayer]);
+
   // Format time
   const formatTime = (milliseconds: number): string => {
     const minutes = Math.floor(milliseconds / 60000);
@@ -1506,8 +1594,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             gameStatus,
             winner: savedStateData?.winner || null,
             setupPhase: savedStateData?.setupPhase !== undefined ? savedStateData.setupPhase : (gameStatus === 'setup'),
-            setupTimeLeft: SETUP_TIME_LIMIT,
-            turnTimeLeft: TURN_TIME_LIMIT,
+            setupTimeLeft: savedStateData?.setupTimeLeft || SETUP_TIME_LIMIT,
+            turnTimeLeft: savedStateData?.turnTimeLeft || TURN_TIME_LIMIT,
             // LOAD READY STATES FROM SAVED DATA
             redPlayerReady: savedStateData?.redPlayerReady || false,
             bluePlayerReady: savedStateData?.bluePlayerReady || false,
@@ -1527,9 +1615,18 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
             setGameStartTime(gameData.started_at ? new Date(gameData.started_at) : new Date());
           }
           
+          // CRITICAL FIX: Properly restore turn timer state after page refresh
+          if (newState.gameStatus === 'active') {
+            console.log('🔄 Restoring active game - setting up turn timer...');
+            // Set the current player's turn start time to now so timer works correctly
+            setLastTurnPlayer(null); // This will trigger timer reset in useEffect
+          }
+          
           setGameState(newState);
           setAvailablePieces(restoredAvailablePieces);
           setUsedPieceVariants(restoredUsedVariants);
+          
+          console.log('✅ Game state initialization completed successfully');
           
           // Only save state if we're in setup and have no saved state
           if (gameStatus === 'setup' && restoredBoard.every(row => row.every(cell => cell === null))) {
@@ -1539,8 +1636,15 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         }
       }
     } catch (error) {
-      console.error('Error initializing game:', error);
+      console.error('❌ Error initializing game:', error);
+      setError('Failed to load game state. Please refresh the page.');
       setIsInitialized(false); // Reset on error
+      
+      // Clear error after 5 seconds and allow retry
+      setTimeout(() => {
+        setError(null);
+        setIsInitialized(false);
+      }, 5000);
     }
   }, [gameId, publicKey, gameStartTime, saveGameState, isInitialized]);
 
@@ -1556,7 +1660,17 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
   // Reset initialization when wallet changes
   useEffect(() => {
     setIsInitialized(false);
+    setTurnStartTime(null);
+    setLastTurnPlayer(null);
   }, [publicKey]);
+
+  // Safety mechanism: prevent infinite initialization loops
+  useEffect(() => {
+    if (isInitialized && gameState.gameStatus === 'waiting' && !publicKey) {
+      console.log('🔄 Wallet disconnected, resetting initialization...');
+      setIsInitialized(false);
+    }
+  }, [isInitialized, gameState.gameStatus, publicKey]);
 
   // Update game completion
   useEffect(() => {
@@ -1578,6 +1692,49 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       initializeMagicBlockSession();
     }
   }, [gameState.gameStatus, publicKey, signTransaction, initializeMagicBlockSession]);
+
+  // Initialize turn timer when game starts or turn changes
+  useEffect(() => {
+    if (gameState.gameStatus === 'active') {
+      if (lastTurnPlayer !== gameState.currentPlayer) {
+        setLastTurnPlayer(gameState.currentPlayer);
+        resetTurnTimer();
+      }
+    } else if (gameState.gameStatus === 'waiting' || gameState.gameStatus === 'setup') {
+      setTurnStartTime(null);
+      setLastTurnPlayer(null);
+    }
+  }, [gameState.gameStatus, gameState.currentPlayer, lastTurnPlayer, resetTurnTimer]);
+
+  // Turn timer countdown
+  useEffect(() => {
+    let timerInterval: NodeJS.Timeout;
+    
+    if (gameState.gameStatus === 'active' && turnStartTime) {
+      timerInterval = setInterval(() => {
+        const now = new Date();
+        const elapsed = now.getTime() - turnStartTime.getTime();
+        const remaining = Math.max(0, TURN_TIME_LIMIT - elapsed);
+        
+        setGameState(prev => ({
+          ...prev,
+          turnTimeLeft: remaining
+        }));
+        
+        if (remaining <= 0 && gameState.gameStatus === 'active') {
+          console.log(`⏰ Turn time up for ${gameState.currentPlayer}!`);
+          makeRandomMove();
+          clearInterval(timerInterval);
+        }
+      }, 1000);
+    }
+    
+    return () => {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    };
+  }, [gameState.gameStatus, gameState.currentPlayer, turnStartTime, makeRandomMove]);
 
   // Periodic board state refresh during setup and active gameplay
   useEffect(() => {
@@ -1662,8 +1819,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       <Paper sx={{ p: 2, mb: 3, bgcolor: '#2E4057', color: 'white', borderRadius: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="h4" align="center" sx={{ fontWeight: 'bold', flex: 1 }}>
-            🎖️ Stratego Battle 🎖️
-          </Typography>
+          🎖️ Stratego Battle 🎖️
+        </Typography>
           
           {/* Forfeit Button - Always visible during setup and active gameplay */}
           {(gameState.gameStatus === 'active' || gameState.setupPhase) && playerColor && (
@@ -1863,8 +2020,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
         <DialogContent>
           <Typography variant="body2" align="center" gutterBottom>
             {selectedSetupSquare && `Placing piece at position ${selectedSetupSquare[0]}, ${selectedSetupSquare[1]}`}
-          </Typography>
-          
+              </Typography>
+              
           {/* Piece Carousel - 5x3 GRID WITH PAGINATION */}
           <Box sx={{ position: 'relative', width: '100%' }}>
             {/* Page Navigation */}
@@ -1961,8 +2118,8 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                   </Box>
                 ))}
             </Box>
-          </Box>
-          
+              </Box>
+              
           <Box sx={{ mt: 3, p: 2, bgcolor: 'rgba(46, 64, 87, 0.1)', borderRadius: 1 }}>
             <Typography variant="h6" gutterBottom>
               🎖️ Remaining Pieces Summary
@@ -1980,7 +2137,7 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
                 ✅ Ready to Battle!
               </Button>
             )}
-          </Box>
+        </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setShowPieceSelector(false)}>Cancel</Button>
@@ -2245,4 +2402,4 @@ export const StrategoBoard: React.FC<StrategoBoardProps> = ({ gameId }) => {
       `}</style>
     </Box>
   );
-};
+}; 

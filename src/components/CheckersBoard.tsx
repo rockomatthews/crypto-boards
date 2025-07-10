@@ -1045,15 +1045,15 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
         {gameState.gameStatus === 'active' && (
           <Box sx={{ mt: 2 }}>
             <Box sx={{ p: 1, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 1, mb: 1 }}>
-              <Typography variant="caption" align="center" display="block">
-                ⏰ Each turn has 1 minute. No move = random move!
+            <Typography variant="caption" align="center" display="block">
+              ⏰ Each turn has 1 minute. No move = random move!
               </Typography>
             </Box>
             {multiJumpMode && (
               <Box sx={{ p: 1, bgcolor: 'rgba(255,152,0,0.2)', borderRadius: 1, mb: 1 }}>
                 <Typography variant="caption" align="center" display="block" sx={{ color: 'rgba(255,255,255,0.9)', fontWeight: 'bold' }}>
                   🚀 Multi-jump mode! You have 2 seconds to continue jumping or turn ends
-                </Typography>
+            </Typography>
               </Box>
             )}
             <Box sx={{ p: 1, bgcolor: 'rgba(255,193,7,0.1)', borderRadius: 1 }}>
@@ -1145,10 +1145,10 @@ export const CheckersBoard: React.FC<CheckersBoardProps> = ({ gameId }) => {
           </Typography>
           <Typography variant="body2" color="warning.main" sx={{ fontWeight: 'bold' }}>
             ⚠️ This will automatically give the win to your opponent and they will receive the full pot!
-          </Typography>
+            </Typography>
           <Typography variant="body2" sx={{ mt: 2, color: '#ccc' }}>
             You will lose your entry fee and this will count as a loss in your stats.
-          </Typography>
+              </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, bgcolor: '#2d2d2d' }}>
           <Button 

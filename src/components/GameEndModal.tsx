@@ -49,12 +49,12 @@ export default function GameEndModal({
   
   // Show automatic payout status instead of manual processing
   const payoutStatus = escrowReleased ? {
-    success: true,
+          success: true,
     message: `🎉 Automatic payout complete! Winner received ${calculatedWinnerShare} SOL.`,
     transactionSignature: escrowTransactionSignature,
     amount: calculatedWinnerShare
   } : {
-    success: false,
+          success: false,
     message: "⏳ Payout processing... This may take a moment.",
     transactionSignature: undefined,
     amount: calculatedWinnerShare
@@ -126,31 +126,31 @@ export default function GameEndModal({
               </Box>
             </Box>
 
-            <Alert 
+              <Alert 
               severity={payoutStatus.success ? 'success' : 'info'}
-              sx={{ mb: 2 }}
-            >
+                sx={{ mb: 2 }}
+              >
               {payoutStatus.message}
               {payoutStatus.transactionSignature && (
-                <Typography variant="caption" display="block" mt={1}>
+                  <Typography variant="caption" display="block" mt={1}>
                   Transaction: {payoutStatus.transactionSignature.slice(0, 20)}...
-                </Typography>
-              )}
-            </Alert>
+                  </Typography>
+                )}
+              </Alert>
 
             {escrowReleased && (
-              <Box textAlign="center">
-                <Button
-                  variant="contained"
-                  color="success"
-                  size="large"
+            <Box textAlign="center">
+              <Button
+                variant="contained"
+                color="success"
+                size="large"
                   startIcon={<CheckCircle />}
                   disabled
-                  sx={{ minWidth: 200 }}
-                >
+                sx={{ minWidth: 200 }}
+              >
                   ✅ Payout Complete
-                </Button>
-              </Box>
+              </Button>
+            </Box>
             )}
           </Box>
         ) : (
