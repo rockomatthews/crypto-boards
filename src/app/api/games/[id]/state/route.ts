@@ -46,6 +46,8 @@ interface StrategoGameState {
   setupPhase: boolean;
   setupTimeLeft: number;
   turnTimeLeft: number;
+  redPlayerReady: boolean;
+  bluePlayerReady: boolean;
   lastMove?: {
     from: [number, number];
     to: [number, number];
