@@ -9,7 +9,7 @@ export default function Home() {
       {/* Cosmic Hero Section */}
       <Box sx={{ 
         position: 'relative',
-        minHeight: '40vh',
+        minHeight: '30vh',
         background: `
           url('/images/cosmic-background.jpg') center/cover no-repeat,
           radial-gradient(ellipse at center, rgba(255,0,255,0.3) 0%, rgba(138,43,226,0.4) 40%, rgba(25,25,112,0.8) 70%, rgba(0,0,0,0.9) 100%),
