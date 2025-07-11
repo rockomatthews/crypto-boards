@@ -12,9 +12,23 @@ export async function GET(request: NextRequest) {
 
     console.log(`📡 GET: Fetching profile for wallet ${walletAddress.slice(0, 8)}`);
 
+    // Ensure SMS columns exist in the database
+    try {
+      await db`
+        ALTER TABLE players 
+        ADD COLUMN IF NOT EXISTS sms_notifications_enabled BOOLEAN NOT NULL DEFAULT false
+      `;
+      await db`
+        ALTER TABLE players 
+        ADD COLUMN IF NOT EXISTS sms_opted_in_at TIMESTAMP WITH TIME ZONE
+      `;
+    } catch (alterError) {
+      console.warn('⚠️ Could not add SMS columns (they might already exist):', alterError);
+    }
+
     // Get player data from players table
     const players = await db`
-      SELECT wallet_address, username, phone_number, avatar_url
+      SELECT wallet_address, username, phone_number, avatar_url, sms_notifications_enabled
       FROM players 
       WHERE wallet_address = ${walletAddress}
     `;
@@ -29,10 +43,10 @@ export async function GET(request: NextRequest) {
       
       // Create new player
       const newPlayers = await db`
-        INSERT INTO players (wallet_address, username, phone_number, avatar_url)
-        VALUES (${walletAddress}, ${defaultUsername}, null, '')
+        INSERT INTO players (wallet_address, username, phone_number, avatar_url, sms_notifications_enabled)
+        VALUES (${walletAddress}, ${defaultUsername}, null, '', false)
         ON CONFLICT (wallet_address) DO UPDATE SET username = ${defaultUsername}
-        RETURNING wallet_address, username, phone_number, avatar_url
+        RETURNING wallet_address, username, phone_number, avatar_url, sms_notifications_enabled
       `;
       
       console.log(`✅ GET: Created new player:`, newPlayers[0]);
@@ -60,7 +74,7 @@ export async function GET(request: NextRequest) {
         username: newPlayers[0].username,
         avatar_url: newPlayers[0].avatar_url || '',
         phone_number: newPlayers[0].phone_number,
-        sms_notifications_enabled: false,
+        sms_notifications_enabled: newPlayers[0].sms_notifications_enabled || false,
           games_played: 0,
           games_won: 0,
         total_winnings: 0
@@ -119,7 +133,7 @@ export async function GET(request: NextRequest) {
       username: player.username,
       avatar_url: player.avatar_url || '',
       phone_number: player.phone_number,
-      sms_notifications_enabled: false,
+      sms_notifications_enabled: player.sms_notifications_enabled || false,
       games_played: playerStats.games_played,
       games_won: playerStats.games_won,
       total_winnings: playerStats.total_winnings

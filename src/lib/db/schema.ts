@@ -290,6 +290,18 @@ export async function initializeDatabase() {
       );
     `;
 
+    // Create sms_invitations table
+    await db`
+      CREATE TABLE IF NOT EXISTS sms_invitations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        sender_wallet TEXT NOT NULL,
+        phone_number TEXT NOT NULL,
+        lobby_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);

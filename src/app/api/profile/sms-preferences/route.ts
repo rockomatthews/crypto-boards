@@ -15,6 +15,21 @@ export async function PUT(request: NextRequest) {
 
     console.log(`📱 Updating SMS preferences for ${walletAddress.slice(0, 8)}... to ${smsNotificationsEnabled}`);
 
+    // First, ensure SMS columns exist in the database
+    try {
+      await db`
+        ALTER TABLE players 
+        ADD COLUMN IF NOT EXISTS sms_notifications_enabled BOOLEAN NOT NULL DEFAULT false
+      `;
+      await db`
+        ALTER TABLE players 
+        ADD COLUMN IF NOT EXISTS sms_opted_in_at TIMESTAMP WITH TIME ZONE
+      `;
+      console.log('✅ Ensured SMS columns exist');
+    } catch (alterError) {
+      console.warn('⚠️ Could not add SMS columns (they might already exist):', alterError);
+    }
+
     // Check if player exists
     const playerResult = await db`
       SELECT id, phone_number FROM players WHERE wallet_address = ${walletAddress}
@@ -34,14 +49,23 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update SMS preferences
-    const updateResult = await db`
-      UPDATE players
-      SET 
-        sms_notifications_enabled = ${smsNotificationsEnabled},
-        sms_opted_in_at = ${smsNotificationsEnabled ? 'CURRENT_TIMESTAMP' : null}
-      WHERE wallet_address = ${walletAddress}
-      RETURNING sms_notifications_enabled, sms_opted_in_at
-    `;
+    const updateResult = smsNotificationsEnabled 
+      ? await db`
+          UPDATE players
+          SET 
+            sms_notifications_enabled = ${smsNotificationsEnabled},
+            sms_opted_in_at = CURRENT_TIMESTAMP
+          WHERE wallet_address = ${walletAddress}
+          RETURNING sms_notifications_enabled, sms_opted_in_at
+        `
+      : await db`
+          UPDATE players
+          SET 
+            sms_notifications_enabled = ${smsNotificationsEnabled},
+            sms_opted_in_at = NULL
+          WHERE wallet_address = ${walletAddress}
+          RETURNING sms_notifications_enabled, sms_opted_in_at
+        `;
 
     if (updateResult.length > 0) {
       console.log(`✅ SMS preferences updated successfully`);

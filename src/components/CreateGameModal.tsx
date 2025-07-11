@@ -23,8 +23,12 @@ import {
   Select,
   FormControl,
   InputLabel,
+  Tabs,
+  Tab,
+  Snackbar,
+  Alert,
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Sms as SmsIcon, People as PeopleIcon } from '@mui/icons-material';
 import { useWallet } from '@solana/wallet-adapter-react';
 
 interface CreateGameModalProps {
@@ -83,6 +87,12 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [selectedGameId, setSelectedGameId] = useState<number>(GAME_OPTIONS[0].id);
   const selectedGame = GAME_OPTIONS.find(g => g.id === selectedGameId)!;
+  
+  // SMS invitation state
+  const [inviteTab, setInviteTab] = useState(0); // 0 = Friends, 1 = SMS
+  const [phoneNumbers, setPhoneNumbers] = useState<string[]>(['']);
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [smsMessage, setSmsMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const fetchFriends = useCallback(async () => {
     if (!publicKey) return;
@@ -124,6 +134,13 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
 
       if (response.ok) {
         const lobby = await response.json();
+        
+        // Send SMS invitations if any phone numbers are provided
+        const validPhoneNumbers = phoneNumbers.filter(num => num.trim().length >= 10);
+        if (validPhoneNumbers.length > 0) {
+          await sendSMSInvitations(lobby.id);
+        }
+        
         onClose();
         // Navigate to the created lobby
         router.push(`/lobby/${lobby.id}`);
@@ -143,6 +160,71 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
         ? prev.filter(id => id !== friendId)
         : [...prev, friendId]
     );
+  };
+
+  const handlePhoneNumberChange = (index: number, value: string) => {
+    setPhoneNumbers(prev => {
+      const newNumbers = [...prev];
+      newNumbers[index] = value;
+      return newNumbers;
+    });
+  };
+
+  const addPhoneNumberField = () => {
+    setPhoneNumbers(prev => [...prev, '']);
+  };
+
+  const removePhoneNumberField = (index: number) => {
+    setPhoneNumbers(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const sendSMSInvitations = async (lobbyId: string) => {
+    const validPhoneNumbers = phoneNumbers.filter(num => num.trim().length >= 10);
+    if (validPhoneNumbers.length === 0) return;
+
+    setSmsLoading(true);
+    try {
+      const response = await fetch('/api/sms/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderWalletAddress: publicKey?.toString(),
+          phoneNumbers: validPhoneNumbers,
+          gameType: selectedGame.title.toLowerCase(),
+          entryFee: parseFloat(entryFee),
+          lobbyId
+        })
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        setSmsMessage({ 
+          type: 'success', 
+          text: result.message 
+        });
+      } else {
+        // Handle specific error cases
+        if (response.status === 503) {
+          setSmsMessage({ 
+            type: 'error', 
+            text: '📱 SMS service is not configured yet. Game lobby created successfully! Share the lobby link manually for now.' 
+          });
+        } else {
+          setSmsMessage({ 
+            type: 'error', 
+            text: result.error || 'Failed to send SMS invitations' 
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error sending SMS:', error);
+      setSmsMessage({ 
+        type: 'error', 
+        text: 'Failed to send SMS invitations' 
+      });
+    } finally {
+      setSmsLoading(false);
+    }
   };
 
   return (
@@ -190,37 +272,88 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
 
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" gutterBottom>
-            Invite Friends (Optional)
+            Invite Players (Optional)
           </Typography>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            Select friends to invite to this private game. Leave empty for a public lobby.
+            Invite friends or send SMS invitations. Leave empty for a public lobby.
           </Typography>
           
-          {friends.length > 0 ? (
-            <List dense>
-              {friends.map((friend) => (
-                <ListItem key={friend.id} onClick={() => handleFriendToggle(friend.id)}>
-                  <ListItemAvatar>
-                    <Avatar>{friend.username.charAt(0)}</Avatar>
-                  </ListItemAvatar>
-                  <ListItemText 
-                    primary={friend.username}
-                    secondary={friend.wallet_address.slice(0, 8) + '...'}
-                  />
-                  <ListItemSecondaryAction>
-                    <Chip 
-                      label={selectedFriends.includes(friend.id) ? "Invited" : "Invite"}
-                      color={selectedFriends.includes(friend.id) ? "primary" : "default"}
-                      size="small"
+          <Tabs value={inviteTab} onChange={(_, newValue) => setInviteTab(newValue)} sx={{ mb: 2 }}>
+            <Tab icon={<PeopleIcon />} label="Friends" />
+            <Tab icon={<SmsIcon />} label="SMS Invites" />
+          </Tabs>
+
+          {inviteTab === 0 ? (
+            // Friends Tab
+            friends.length > 0 ? (
+              <List dense>
+                {friends.map((friend) => (
+                  <ListItem key={friend.id} onClick={() => handleFriendToggle(friend.id)}>
+                    <ListItemAvatar>
+                      <Avatar>{friend.username.charAt(0)}</Avatar>
+                    </ListItemAvatar>
+                    <ListItemText 
+                      primary={friend.username}
+                      secondary={friend.wallet_address.slice(0, 8) + '...'}
                     />
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))}
-            </List>
+                    <ListItemSecondaryAction>
+                      <Chip 
+                        label={selectedFriends.includes(friend.id) ? "Invited" : "Invite"}
+                        color={selectedFriends.includes(friend.id) ? "primary" : "default"}
+                        size="small"
+                      />
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+              </List>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No friends found. Add friends to invite them to games.
+              </Typography>
+            )
           ) : (
-            <Typography variant="body2" color="text.secondary">
-              No friends found. This will be a public lobby.
-            </Typography>
+            // SMS Tab
+            <Box>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                📱 Enter phone numbers to send SMS invitations:
+              </Typography>
+              <Typography variant="caption" color="text.secondary" gutterBottom display="block" sx={{ mb: 2 }}>
+                💡 Note: Recipients will receive a text message with a link to join your game lobby
+              </Typography>
+              {phoneNumbers.map((phoneNumber, index) => (
+                <Box key={index} sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label={`Phone Number ${index + 1}`}
+                    value={phoneNumber}
+                    onChange={(e) => handlePhoneNumberChange(index, e.target.value)}
+                    placeholder="+1 (555) 123-4567"
+                    inputProps={{ 
+                      type: 'tel',
+                      pattern: '[0-9+()-\\s]*'
+                    }}
+                  />
+                  {phoneNumbers.length > 1 && (
+                    <IconButton 
+                      onClick={() => removePhoneNumberField(index)}
+                      size="small"
+                      color="error"
+                    >
+                      <CloseIcon />
+                    </IconButton>
+                  )}
+                </Box>
+              ))}
+              <Button 
+                onClick={addPhoneNumberField} 
+                size="small" 
+                variant="outlined"
+                sx={{ mt: 1 }}
+              >
+                + Add Phone Number
+              </Button>
+            </Box>
           )}
         </Box>
 
@@ -238,7 +371,13 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
             • Players: {selectedFriends.length + 1}/{selectedGame.maxPlayers}
           </Typography>
           <Typography variant="body2" sx={{ color: 'grey.300' }}>
-            • Type: {selectedFriends.length > 0 ? 'Private' : 'Public'}
+            • Friends Invited: {selectedFriends.length}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'grey.300' }}>
+            • SMS Invites: {phoneNumbers.filter(num => num.trim().length >= 10).length}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'grey.300' }}>
+            • Type: {selectedFriends.length > 0 || phoneNumbers.some(num => num.trim().length >= 10) ? 'Private' : 'Public'}
           </Typography>
         </Box>
       </DialogContent>
@@ -248,11 +387,27 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
         <Button 
           onClick={handleCreateLobby}
           variant="contained"
-          disabled={!entryFee || loading}
+          disabled={!entryFee || loading || smsLoading}
         >
-          {loading ? 'Creating...' : 'Create Lobby'}
+          {loading ? 'Creating...' : smsLoading ? 'Sending SMS...' : 'Create Lobby'}
         </Button>
       </DialogActions>
+
+      {/* SMS Status Snackbar */}
+      <Snackbar
+        open={!!smsMessage}
+        autoHideDuration={6000}
+        onClose={() => setSmsMessage(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setSmsMessage(null)} 
+          severity={smsMessage?.type || 'info'}
+          sx={{ width: '100%' }}
+        >
+          {smsMessage?.text}
+        </Alert>
+      </Snackbar>
     </Dialog>
   );
 }; 
