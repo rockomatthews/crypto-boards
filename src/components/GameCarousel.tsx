@@ -108,20 +108,6 @@ export default function GameCarousel() {
           mb: 4,
           px: 2 
         }}>
-          <Typography 
-            variant="h3" 
-            component="h1" 
-            sx={{ 
-              fontFamily: 'MK5Style, monospace',
-              fontSize: { xs: '1.8rem', sm: '2.5rem', md: '3rem' },
-              color: '#9c27b0',
-              textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
-              lineHeight: 1.2,
-              mb: 2
-            }}
-          >
-            In the land of no copyRIGHTS, will you bet your SOL?
-          </Typography>
         </Box>
       </Box>
 
