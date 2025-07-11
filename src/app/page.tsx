@@ -11,11 +11,10 @@ export default function Home() {
         position: 'relative',
         minHeight: '30vh',
         background: `
-          url('/images/cosmic-background.jpg') center/cover no-repeat,
           radial-gradient(ellipse at center, rgba(255,0,255,0.3) 0%, rgba(138,43,226,0.4) 40%, rgba(25,25,112,0.8) 70%, rgba(0,0,0,0.9) 100%),
           linear-gradient(45deg, #1a0033 0%, #330066 25%, #0d1421 50%, #2d1b69 75%, #000000 100%)
         `,
-        backgroundSize: 'cover, 400% 400%, 400% 400%',
+        backgroundSize: '400% 400%, 400% 400%',
         backgroundBlendMode: 'overlay, normal, normal',
         animation: 'cosmicPulse 8s ease-in-out infinite',
         display: 'flex',
