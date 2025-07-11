@@ -9,7 +9,7 @@ export default function Home() {
       {/* Cosmic Hero Section */}
       <Box sx={{ 
         position: 'relative',
-        minHeight: '60vh',
+        minHeight: '40vh',
         background: `
           url('/images/cosmic-background.jpg') center/cover no-repeat,
           radial-gradient(ellipse at center, rgba(255,0,255,0.3) 0%, rgba(138,43,226,0.4) 40%, rgba(25,25,112,0.8) 70%, rgba(0,0,0,0.9) 100%),
@@ -96,25 +96,9 @@ export default function Home() {
             animation: 'float 4s ease-in-out infinite',
           }}
         >
-          CLASSIC BOARD GAMES FOR GAMBLING CRYPTO
+          CLASSIC BOARD GAMES FOR GAMBLING SOLANA
         </Typography>
 
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            fontFamily: '"Roboto", sans-serif',
-            fontSize: { xs: '0.9rem', sm: '1rem', md: '1.1rem' },
-            color: '#ffffff',
-            textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-            opacity: 0.9,
-            position: 'relative',
-            zIndex: 2,
-            maxWidth: '600px',
-            mx: 'auto'
-          }}
-        >
-          Real SOL betting • Live stats • Global chat • 15-min games
-        </Typography>
       </Box>
 
       <GameCarousel />
