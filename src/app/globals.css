@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bangers&display=swap');
 
 @font-face {
   font-family: 'MK5';
@@ -410,4 +411,59 @@ a {
 .status-finished {
   background: linear-gradient(135deg, #DC143C, #8B0000);
   color: white;
+}
+
+/* Cosmic Homepage Animations */
+@keyframes cosmicPulse {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes stars {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-200px); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+@keyframes textGlow {
+  0%, 100% {
+    text-shadow: 
+      0 0 10px rgba(0,255,255,0.8),
+      0 0 20px rgba(255,0,255,0.6),
+      0 0 30px rgba(0,255,255,0.4),
+      3px 3px 0 rgba(0,0,0,0.8);
+  }
+  50% {
+    text-shadow: 
+      0 0 20px rgba(0,255,255,1),
+      0 0 30px rgba(255,0,255,0.8),
+      0 0 40px rgba(0,255,255,0.6),
+      3px 3px 0 rgba(0,0,0,0.8);
+  }
+}
+
+/* Responsive cosmic design */
+@media (max-width: 768px) {
+  .cosmic-hero h1 {
+    font-size: 3rem !important;
+  }
+  
+  .cosmic-hero h2 {
+    font-size: 1.5rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .cosmic-hero h1 {
+    font-size: 2.5rem !important;
+  }
+  
+  .cosmic-hero h2 {
+    font-size: 1.2rem !important;
+  }
 }
