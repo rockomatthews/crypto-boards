@@ -189,11 +189,15 @@ export default function HomepageChatSidebar() {
     <Paper
       sx={{
         width: 350,
-        height: '100vh',
+        height: 'calc(100vh - 64px)', // Account for header height
         display: 'flex',
         flexDirection: 'column',
         borderRadius: 0,
         borderLeft: '1px solid #e0e0e0',
+        position: 'fixed',
+        top: 64, // Position below header
+        right: 0,
+        zIndex: 1000,
       }}
     >
       {/* Header */}

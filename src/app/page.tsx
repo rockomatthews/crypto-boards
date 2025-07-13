@@ -6,9 +6,9 @@ import { Box, Typography } from '@mui/material';
 
 export default function Home() {
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#000000' }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#000000' }}>
       {/* Main Content */}
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
+      <Box sx={{ marginRight: '350px', paddingTop: '64px' }}>
         {/* Cosmic Hero Section */}
         <Box sx={{ 
           position: 'relative',
@@ -109,7 +109,7 @@ export default function Home() {
         <GameFeed />
       </Box>
 
-      {/* Chat Sidebar */}
+      {/* Chat Sidebar - Fixed position */}
       <HomepageChatSidebar />
     </Box>
   );
