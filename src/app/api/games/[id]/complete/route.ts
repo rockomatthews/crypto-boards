@@ -634,8 +634,20 @@ export async function POST(
     }
 
     // Create game stats for both players
+    console.log(`🔍 Looking for players in results...`);
+    console.log(`🔍 Winner wallet: ${winnerWallet}`);
+    console.log(`🔍 Loser wallet: ${loserWallet}`);
+    console.log(`🔍 Available players:`, playersResult.map(p => ({ 
+      wallet: p.wallet_address, 
+      username: p.username,
+      player_id: p.player_id 
+    })));
+
     const winnerPlayer = playersResult.find(p => p.wallet_address === winnerWallet);
     const loserPlayer = playersResult.find(p => p.wallet_address === loserWallet);
+
+    console.log(`🔍 Winner player found:`, !!winnerPlayer);
+    console.log(`🔍 Loser player found:`, !!loserPlayer);
 
     if (winnerPlayer && loserPlayer) {
       try {
@@ -673,6 +685,67 @@ export async function POST(
       } catch (statsError) {
         console.error('Failed to update game stats:', statsError);
         // Continue even if stats update fails
+      }
+    } else {
+      console.error(`❌ Could not find both players for stats recording!`);
+      console.error(`❌ Winner player found: ${!!winnerPlayer}, Loser player found: ${!!loserPlayer}`);
+      
+      // Try alternate approach - query players directly by wallet
+      try {
+        console.log(`🔄 Attempting alternate player lookup...`);
+        const alternateWinnerQuery = await db`
+          SELECT id as player_id, wallet_address, username 
+          FROM players 
+          WHERE wallet_address = ${winnerWallet}
+        `;
+        const alternateLoserQuery = await db`
+          SELECT id as player_id, wallet_address, username 
+          FROM players 
+          WHERE wallet_address = ${loserWallet}
+        `;
+        
+        if (alternateWinnerQuery.length > 0 && alternateLoserQuery.length > 0) {
+          const altWinner = alternateWinnerQuery[0];
+          const altLoser = alternateLoserQuery[0];
+          
+          console.log(`✅ Found players via alternate lookup!`);
+          
+          // Winner stats
+          await db`
+            INSERT INTO game_stats (game_id, player_id, game_type, result, amount, opponent_id)
+            VALUES (${gameId}, ${altWinner.player_id}, ${game.game_type}, 'win', ${winnerAmount}, ${altLoser.player_id})
+          `;
+
+          // Loser stats
+          await db`
+            INSERT INTO game_stats (game_id, player_id, game_type, result, amount, opponent_id)
+            VALUES (${gameId}, ${altLoser.player_id}, ${game.game_type}, 'loss', ${-parseFloat(game.entry_fee)}, ${altWinner.player_id})
+          `;
+
+          // Update player stats
+          await db`
+            INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+            VALUES (${altWinner.player_id}, 1, 1, ${winnerAmount})
+            ON CONFLICT (player_id) DO UPDATE SET
+              games_played = player_stats.games_played + 1,
+              games_won = player_stats.games_won + 1,
+              total_winnings = player_stats.total_winnings + ${winnerAmount}
+          `;
+
+          await db`
+            INSERT INTO player_stats (player_id, games_played, games_won, total_winnings)
+            VALUES (${altLoser.player_id}, 1, 0, ${-parseFloat(game.entry_fee)})
+            ON CONFLICT (player_id) DO UPDATE SET
+              games_played = player_stats.games_played + 1,
+              total_winnings = player_stats.total_winnings + ${-parseFloat(game.entry_fee)}
+          `;
+          
+          console.log(`📊 Stats updated via alternate method!`);
+        } else {
+          console.error(`❌ Alternate player lookup also failed!`);
+        }
+      } catch (alternateError) {
+        console.error(`❌ Alternate stats recording failed:`, alternateError);
       }
     }
 
