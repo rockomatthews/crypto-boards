@@ -96,19 +96,34 @@ export const GameFeed: React.FC = () => {
 
   if (loading) {
     return (
-      <Paper sx={{ p: 3, mt: 3 }}>
-        <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#8B4513' }}>
-          📺 Live Game Feed
-        </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-          <CircularProgress />
-        </Box>
-      </Paper>
+      <Box sx={{ 
+        width: '100%', 
+        maxWidth: '1600px', 
+        mx: 'auto', 
+        mt: 3,
+        px: { xs: 2, md: 6 }
+      }}>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#8B4513' }}>
+            📺 Live Game Feed
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+            <CircularProgress />
+          </Box>
+        </Paper>
+      </Box>
     );
   }
 
   return (
-    <Paper sx={{ p: 3, mt: 3, minHeight: '400px' }}>
+    <Box sx={{ 
+      width: '100%', 
+      maxWidth: '1600px', 
+      mx: 'auto', 
+      mt: 3,
+      px: { xs: 2, md: 6 }
+    }}>
+      <Paper sx={{ p: 3, minHeight: '400px' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#8B4513', flexGrow: 1 }}>
           📺 Live Game Feed
@@ -202,5 +217,6 @@ export const GameFeed: React.FC = () => {
         }
       `}</style>
     </Paper>
+    </Box>
   );
 }; 

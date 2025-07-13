@@ -15,6 +15,8 @@ import {
   DialogContent,
   Chip,
   ListItemButton,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -59,6 +61,8 @@ export default function GameChatModal({
   gamePlayers: propGamePlayers = []
 }: GameChatModalProps) {
   const { publicKey } = useWallet();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [selectedRoom, setSelectedRoom] = useState<string>('private');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -180,19 +184,44 @@ export default function GameChatModal({
       onClose={onClose}
       maxWidth="md"
       fullWidth
+      fullScreen={isMobile}
       PaperProps={{
         sx: {
-          height: '80vh',
-          maxHeight: '600px'
+          height: { xs: '100vh', md: '80vh' },
+          maxHeight: { xs: '100vh', md: '600px' },
+          m: { xs: 0, md: 2 }
         }
       }}
     >
-      <DialogContent sx={{ p: 0, display: 'flex', height: '100%' }}>
-        {/* Left Sidebar - Room Selection */}
+      <DialogContent sx={{ p: 0, display: 'flex', height: '100%', flexDirection: { xs: 'column', md: 'row' } }}>
+        {/* Mobile Room Selector */}
         <Box sx={{ 
-          width: 200, 
-          borderRight: '1px solid #e0e0e0',
-          display: 'flex',
+          display: { xs: 'flex', md: 'none' },
+          p: 1,
+          borderBottom: '1px solid #e0e0e0',
+          gap: 1,
+          alignItems: 'center',
+          bgcolor: 'grey.50'
+        }}>
+          {chatRooms.map((room) => (
+            <Chip
+              key={room.id}
+              label={room.name}
+              variant={selectedRoom === room.id ? "filled" : "outlined"}
+              color={selectedRoom === room.id ? "primary" : "default"}
+              onClick={() => setSelectedRoom(room.id)}
+              icon={room.type === 'private' ? <LockIcon /> : <PublicIcon />}
+              size="small"
+              sx={{ fontSize: '0.75rem' }}
+            />
+          ))}
+        </Box>
+
+        {/* Desktop Left Sidebar - Room Selection */}
+        <Box sx={{ 
+          width: { md: 200 }, 
+          borderRight: { md: '1px solid #e0e0e0' },
+          display: { xs: 'none', md: 'flex' },
           flexDirection: 'column'
         }}>
           <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
@@ -231,19 +260,20 @@ export default function GameChatModal({
           </List>
         </Box>
 
-        {/* Right Side - Chat Area */}
+        {/* Chat Area */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {/* Chat Header */}
           <Box sx={{ 
-            p: 2, 
+            p: { xs: 1, md: 2 }, 
             borderBottom: '1px solid #e0e0e0', 
             display: 'flex', 
             alignItems: 'center', 
-            justifyContent: 'space-between' 
+            justifyContent: 'space-between',
+            minHeight: { xs: '56px', md: 'auto' }
           }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {currentRoom?.type === 'private' ? <LockIcon color="success" /> : <PublicIcon color="primary" />}
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: { xs: '1rem', md: '1.25rem' } }}>
                 {currentRoom?.name}
               </Typography>
               {currentRoom?.type === 'private' && (
@@ -252,6 +282,7 @@ export default function GameChatModal({
                   label={`${currentRoom.participants?.length || 0} players`}
                   size="small"
                   color="success"
+                  sx={{ display: { xs: 'none', sm: 'flex' } }}
                 />
               )}
             </Box>
@@ -261,10 +292,16 @@ export default function GameChatModal({
           </Box>
 
           {/* Messages */}
-          <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
+          <Box sx={{ 
+            flex: 1, 
+            overflow: 'auto', 
+            p: { xs: 0.5, md: 1 },
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
             {messages.length === 0 ? (
               <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.875rem', md: '1rem' } }}>
                   {selectedRoom === 'private' 
                     ? `No messages yet in this game room. Start chatting with your opponent!`
                     : `No messages yet. Start the conversation!`
@@ -279,9 +316,9 @@ export default function GameChatModal({
                     key={message.id}
                     sx={{
                       mb: 1,
-                      p: 2,
+                      p: { xs: 1.5, md: 2 },
                       borderRadius: 2,
-                      maxWidth: '85%',
+                      maxWidth: { xs: '90%', md: '85%' },
                       alignSelf: isOwnMessage ? 'flex-end' : 'flex-start',
                       bgcolor: isOwnMessage 
                         ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
@@ -302,6 +339,7 @@ export default function GameChatModal({
                         borderLeft: '8px solid #764ba2',
                         borderTop: '8px solid transparent',
                         borderBottom: '8px solid transparent',
+                        display: { xs: 'none', md: 'block' }
                       } : {
                         content: '""',
                         position: 'absolute',
@@ -312,6 +350,7 @@ export default function GameChatModal({
                         borderRight: '8px solid #00f2fe',
                         borderTop: '8px solid transparent',
                         borderBottom: '8px solid transparent',
+                        display: { xs: 'none', md: 'block' }
                       }
                     }}
                   >
@@ -321,7 +360,8 @@ export default function GameChatModal({
                         color: 'rgba(255,255,255,0.9)',
                         fontWeight: 'bold',
                         display: 'block',
-                        mb: 0.5
+                        mb: 0.5,
+                        fontSize: { xs: '0.625rem', md: '0.75rem' }
                       }}
                     >
                       {message.sender_username} • {new Date(message.created_at).toLocaleTimeString()}
@@ -331,7 +371,8 @@ export default function GameChatModal({
                       sx={{ 
                         color: 'white',
                         fontWeight: '500',
-                        lineHeight: 1.4
+                        lineHeight: 1.4,
+                        fontSize: { xs: '0.875rem', md: '1rem' }
                       }}
                     >
                       {message.content}
@@ -344,21 +385,33 @@ export default function GameChatModal({
           </Box>
 
           {/* Message Input */}
-          <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
+          <Box sx={{ 
+            p: { xs: 1, md: 2 }, 
+            borderTop: '1px solid #e0e0e0',
+            backgroundColor: 'white'
+          }}>
             <TextField
               fullWidth
               size="small"
               placeholder={`Type a message in ${currentRoom?.name}...`}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+              multiline
+              maxRows={3}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontSize: { xs: '0.875rem', md: '1rem' }
+                }
+              }}
               InputProps={{
                 endAdornment: (
-                  <InputAdornment position="end">
+                  <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 0.5 }}>
                     <IconButton
                       onClick={handleSendMessage}
                       disabled={!newMessage.trim() || loading}
                       size="small"
+                      color="primary"
                     >
                       <SendIcon />
                     </IconButton>

@@ -30,24 +30,33 @@ export default function FloatingChatButton({
         onClick={onClick}
         sx={{
           position: 'fixed',
-          bottom: 24,
-          right: 24,
+          bottom: { xs: 16, md: 24 },
+          right: { xs: 16, md: 24 },
           zIndex: 1300,
-          width: 64,
-          height: 64,
+          width: { xs: 56, md: 64 },
+          height: { xs: 56, md: 64 },
           background: isOpen 
             ? 'linear-gradient(45deg, #f44336 30%, #ff5722 90%)'
             : 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
           color: 'white',
-          boxShadow: '0 8px 25px rgba(0,0,0,0.3)',
+          boxShadow: { 
+            xs: '0 4px 15px rgba(0,0,0,0.3)', 
+            md: '0 8px 25px rgba(0,0,0,0.3)' 
+          },
           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
           '&:hover': {
             background: isOpen
               ? 'linear-gradient(45deg, #d32f2f 30%, #f57c00 90%)'
               : 'linear-gradient(45deg, #1976D2 30%, #0288D1 90%)',
-            transform: isOpen ? 'rotate(180deg) scale(1.1)' : 'scale(1.1)',
-            boxShadow: '0 12px 35px rgba(0,0,0,0.4)',
+            transform: { 
+              xs: isOpen ? 'rotate(180deg) scale(1.05)' : 'scale(1.05)',
+              md: isOpen ? 'rotate(180deg) scale(1.1)' : 'scale(1.1)'
+            },
+            boxShadow: { 
+              xs: '0 6px 20px rgba(0,0,0,0.4)', 
+              md: '0 12px 35px rgba(0,0,0,0.4)' 
+            },
           },
           '&::before': {
             content: '""',
@@ -79,9 +88,9 @@ export default function FloatingChatButton({
           }}
         >
           {isOpen ? (
-            <CloseIcon sx={{ fontSize: 28 }} />
+            <CloseIcon sx={{ fontSize: { xs: 24, md: 28 } }} />
           ) : (
-            <ChatIcon sx={{ fontSize: 28 }} />
+            <ChatIcon sx={{ fontSize: { xs: 24, md: 28 } }} />
           )}
         </Badge>
       </Fab>

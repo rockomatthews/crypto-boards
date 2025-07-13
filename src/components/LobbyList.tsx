@@ -181,7 +181,14 @@ export const LobbyList: FC = () => {
 
   if (!publicKey) {
     return (
-      <Box sx={{ mt: 4, textAlign: 'center' }}>
+      <Box sx={{ 
+        width: '100%', 
+        maxWidth: '1600px', 
+        mx: 'auto', 
+        mt: 4, 
+        px: { xs: 2, md: 6 },
+        textAlign: 'center' 
+      }}>
         <Typography variant="h6" color="text.secondary">
           Connect your wallet to see available lobbies
         </Typography>
@@ -191,7 +198,15 @@ export const LobbyList: FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+      <Box sx={{ 
+        width: '100%', 
+        maxWidth: '1600px', 
+        mx: 'auto', 
+        mt: 4, 
+        px: { xs: 2, md: 6 },
+        display: 'flex', 
+        justifyContent: 'center' 
+      }}>
         <CircularProgress />
       </Box>
     );
@@ -199,7 +214,13 @@ export const LobbyList: FC = () => {
 
   if (error) {
     return (
-      <Box sx={{ mt: 4 }}>
+      <Box sx={{ 
+        width: '100%', 
+        maxWidth: '1600px', 
+        mx: 'auto', 
+        mt: 4, 
+        px: { xs: 2, md: 6 }
+      }}>
         <Alert severity="error" onClose={() => setError(null)}>
           {error}
         </Alert>
@@ -208,7 +229,14 @@ export const LobbyList: FC = () => {
   }
 
   return (
-    <Box sx={{ mt: 6, mb: 4 }}>
+    <Box sx={{ 
+      width: '100%', 
+      maxWidth: '1600px', 
+      mx: 'auto', 
+      mt: 6, 
+      mb: 4,
+      px: { xs: 2, md: 6 }
+    }}>
       <Typography variant="h4" gutterBottom align="center">
         Available Lobbies
       </Typography>
