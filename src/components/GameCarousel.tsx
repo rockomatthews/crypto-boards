@@ -40,13 +40,13 @@ const games = [
   },
   {
     id: 4,
-    title: 'Shoots & Ladders',
-    description: 'Stay tuned and plan to get vertical',
-    image: '/images/shootsAndLadders.png',
+    title: 'Battleship',
+    description: 'Deploy your fleet and engage in naval warfare! Sink all enemy ships to claim victory.',
+    image: '/images/battleship.png',
     minPlayers: 2,
-    maxPlayers: 6,
-    entryFee: '0.5 SOL',
-    route: '/poker'
+    maxPlayers: 2,
+    entryFee: '0.1 SOL',
+    route: '/battleship'
   }
 ];
 
