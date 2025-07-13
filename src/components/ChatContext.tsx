@@ -11,6 +11,8 @@ interface ChatContextType {
   setShowPhoneFinder: (show: boolean) => void;
   openChatToUsersTab: () => void;
   openFindAllFriends: () => void;
+  isGameChatVisible: boolean;
+  setIsGameChatVisible: (visible: boolean) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -31,6 +33,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const [isChatVisible, setIsChatVisible] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [showPhoneFinder, setShowPhoneFinder] = useState(false);
+  const [isGameChatVisible, setIsGameChatVisible] = useState(false);
 
   const openChatToUsersTab = () => {
     setActiveTab(1); // Users tab
@@ -55,6 +58,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     setShowPhoneFinder,
     openChatToUsersTab,
     openFindAllFriends,
+    isGameChatVisible,
+    setIsGameChatVisible,
   };
 
   return (
