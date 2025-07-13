@@ -66,12 +66,12 @@ const GAME_OPTIONS = [
   },
   {
     id: 4,
-    title: 'Shoots & Ladders',
-    description: 'Classic board game with crypto stakes. Climb to victory!',
-    image: '/images/shootsAndLadders.png',
+    title: 'Battleship',
+    description: 'Naval strategy game! Deploy your fleet and sink your opponent to claim victory!',
+    image: '/images/battleship.png',
     minPlayers: 2,
-    maxPlayers: 6,
-    route: '/shoots-ladders'
+    maxPlayers: 2,
+    route: '/battleship'
   }
 ];
 

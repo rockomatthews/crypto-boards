@@ -8,7 +8,7 @@ export default function Home() {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#000000' }}>
       {/* Main Content */}
-      <Box sx={{ marginRight: '350px', paddingTop: '64px' }}>
+      <Box sx={{ marginRight: '350px' }}>
         {/* Cosmic Hero Section */}
         <Box sx={{ 
           position: 'relative',

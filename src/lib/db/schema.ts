@@ -19,7 +19,7 @@ export interface Player {
 
 export interface Game {
   id: string;
-  game_type: 'checkers' | 'chess' | 'stratego' | 'shoots-ladders';
+  game_type: 'checkers' | 'chess' | 'stratego' | 'battleship';
   status: 'waiting' | 'in_progress' | 'completed';
   created_at: Date;
   started_at: Date | null;

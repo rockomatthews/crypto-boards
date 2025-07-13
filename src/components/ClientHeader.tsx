@@ -45,7 +45,7 @@ export default function ClientHeader() {
   const isHomepage = pathname === '/';
   
   // Check if we're in a game
-  const isInGame = pathname?.includes('/checkers/') || pathname?.includes('/chess/') || pathname?.includes('/stratego/');
+  const isInGame = pathname?.includes('/checkers/') || pathname?.includes('/chess/') || pathname?.includes('/stratego/') || pathname?.includes('/battleship/');
 
   return (
     <>
