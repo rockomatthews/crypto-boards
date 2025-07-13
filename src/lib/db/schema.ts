@@ -131,6 +131,18 @@ export interface PlatformFee {
   created_at: Date;
 }
 
+export interface PlayerStat {
+  id: string;
+  player_id: string;
+  games_played: number;
+  games_won: number;
+  total_winnings: number;
+  total_losses: number;
+  current_streak: number;
+  best_streak: number;
+  updated_at: Date;
+}
+
 // Database initialization
 export async function initializeDatabase() {
   try {
@@ -301,6 +313,24 @@ export async function initializeDatabase() {
         sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    // Create player_stats table
+    await db`
+      CREATE TABLE IF NOT EXISTS player_stats (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        player_id UUID UNIQUE REFERENCES players(id),
+        games_played INTEGER DEFAULT 0,
+        games_won INTEGER DEFAULT 0,
+        total_winnings DECIMAL NOT NULL DEFAULT 0,
+        total_losses DECIMAL NOT NULL DEFAULT 0,
+        current_streak INTEGER DEFAULT 0,
+        best_streak INTEGER DEFAULT 0,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Create indexes for player_stats
+    await db`CREATE INDEX IF NOT EXISTS idx_player_stats_player_id ON player_stats(player_id);`;
 
     console.log('Database initialized successfully');
   } catch (error) {
