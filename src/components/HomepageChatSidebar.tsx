@@ -20,6 +20,11 @@ import {
   Divider,
   Paper,
   InputAdornment,
+  Dialog,
+  DialogContent,
+  Fab,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -28,6 +33,7 @@ import {
   People as PeopleIcon,
   Search as SearchIcon,
   ContactPhone as ContactPhoneIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { useWallet } from '@solana/wallet-adapter-react';
 import dynamic from 'next/dynamic';
@@ -60,6 +66,8 @@ interface OnlineUser {
 
 export default function HomepageChatSidebar() {
   const { publicKey } = useWallet();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [activeTab, setActiveTab] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
@@ -67,6 +75,7 @@ export default function HomepageChatSidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPhoneFinder, setShowPhoneFinder] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -185,6 +194,286 @@ export default function HomepageChatSidebar() {
   // Don't show if wallet not connected
   if (!publicKey) return null;
 
+  // Mobile: Show floating button + modal
+  if (isMobile) {
+    return (
+      <>
+        {/* Mobile Chat Button */}
+        <Fab
+          color="primary"
+          onClick={() => setIsChatOpen(true)}
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            right: 16,
+            zIndex: 1300,
+            width: 56,
+            height: 56,
+            background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+            color: 'white',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+            '&:hover': {
+              background: 'linear-gradient(45deg, #1976D2 30%, #0288D1 90%)',
+              transform: 'scale(1.05)',
+            },
+          }}
+        >
+          <ChatIcon sx={{ fontSize: 24 }} />
+        </Fab>
+
+        {/* Mobile Chat Modal */}
+        <Dialog
+          open={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          fullScreen
+          PaperProps={{
+            sx: {
+              height: '100vh',
+              m: 0
+            }
+          }}
+        >
+          <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
+            {/* Mobile Header */}
+            <Box sx={{
+              p: 2,
+              borderBottom: '1px solid #e0e0e0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              bgcolor: 'primary.main',
+              color: 'white'
+            }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                💬 Community Chat
+              </Typography>
+              <IconButton onClick={() => setIsChatOpen(false)} sx={{ color: 'white' }}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
+
+            {/* Mobile Tabs */}
+            <Tabs
+              value={activeTab}
+              onChange={(_, newValue) => setActiveTab(newValue)}
+              variant="fullWidth"
+              sx={{ borderBottom: '1px solid #e0e0e0' }}
+            >
+              <Tab icon={<ChatIcon />} label="Chat" />
+              <Tab icon={<PeopleIcon />} label="Users" />
+            </Tabs>
+
+            {/* Mobile Content */}
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {activeTab === 0 ? (
+                // Chat Tab
+                <>
+                  {/* Messages */}
+                  <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+                    {messages.length === 0 ? (
+                      <Box sx={{ textAlign: 'center', py: 4 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          No messages yet. Start the conversation!
+                        </Typography>
+                      </Box>
+                    ) : (
+                      messages.map((message) => {
+                        const isOwnMessage = message.sender_id === publicKey?.toString();
+                        return (
+                          <Box
+                            key={message.id}
+                            sx={{
+                              mb: 2,
+                              p: 2,
+                              borderRadius: 2,
+                              maxWidth: '85%',
+                              alignSelf: isOwnMessage ? 'flex-end' : 'flex-start',
+                              bgcolor: isOwnMessage 
+                                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                                : 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                              color: 'white',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                            }}
+                          >
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: 'rgba(255,255,255,0.9)',
+                                fontWeight: 'bold',
+                                display: 'block',
+                                mb: 0.5,
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              {message.sender_username} • {new Date(message.created_at).toLocaleTimeString()}
+                            </Typography>
+                            <Typography 
+                              variant="body2" 
+                              sx={{ 
+                                color: 'white',
+                                fontWeight: '500',
+                                lineHeight: 1.4,
+                                fontSize: '1rem'
+                              }}
+                            >
+                              {message.content}
+                            </Typography>
+                          </Box>
+                        );
+                      })
+                    )}
+                    <div ref={messagesEndRef} />
+                  </Box>
+
+                  {/* Message Input */}
+                  <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
+                    <TextField
+                      fullWidth
+                      placeholder="Type a message..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                      multiline
+                      maxRows={3}
+                      InputProps={{
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              onClick={handleSendMessage}
+                              disabled={!newMessage.trim() || loading}
+                              color="primary"
+                            >
+                              <SendIcon />
+                            </IconButton>
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  </Box>
+                </>
+              ) : (
+                // Users Tab
+                <>
+                  {/* Search */}
+                  <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
+                    <TextField
+                      fullWidth
+                      placeholder="Search users..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchIcon />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      startIcon={<ContactPhoneIcon />}
+                      onClick={() => setShowPhoneFinder(true)}
+                      sx={{ mt: 1 }}
+                    >
+                      🔍 Find All Friends
+                    </Button>
+                  </Box>
+
+                  {/* Users List */}
+                  <Box sx={{ flex: 1, overflow: 'auto' }}>
+                    {/* Friends Section */}
+                    {friends.length > 0 && (
+                      <>
+                        <Typography variant="subtitle2" sx={{ p: 2, pb: 1, fontWeight: 'bold' }}>
+                          Friends ({friends.length})
+                        </Typography>
+                        <List dense>
+                          {friends.map((user) => (
+                            <ListItem key={user.id}>
+                              <ListItemAvatar>
+                                <Badge
+                                  color={user.is_online ? 'success' : 'default'}
+                                  variant="dot"
+                                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                                >
+                                  <Avatar src={user.avatar_url}>
+                                    {user.username.charAt(0)}
+                                  </Avatar>
+                                </Badge>
+                              </ListItemAvatar>
+                              <ListItemText
+                                primary={
+                                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                    {user.username}
+                                  </Typography>
+                                }
+                                secondary={user.wallet_address.slice(0, 8) + '...'}
+                              />
+                              <ListItemSecondaryAction>
+                                <Chip
+                                  label={user.is_online ? 'Online' : 'Offline'}
+                                  size="small"
+                                  color={user.is_online ? 'success' : 'default'}
+                                />
+                              </ListItemSecondaryAction>
+                            </ListItem>
+                          ))}
+                        </List>
+                        <Divider />
+                      </>
+                    )}
+
+                    {/* Other Users Section */}
+                    <Typography variant="subtitle2" sx={{ p: 2, pb: 1 }}>
+                      Other Players ({otherUsers.length})
+                    </Typography>
+                    <List dense>
+                      {otherUsers.map((user) => (
+                        <ListItem key={user.id}>
+                          <ListItemAvatar>
+                            <Badge
+                              color={user.is_online ? 'success' : 'default'}
+                              variant="dot"
+                              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                            >
+                              <Avatar src={user.avatar_url}>
+                                {user.username.charAt(0)}
+                              </Avatar>
+                            </Badge>
+                          </ListItemAvatar>
+                          <ListItemText
+                            primary={user.username}
+                            secondary={user.wallet_address.slice(0, 8) + '...'}
+                          />
+                          <ListItemSecondaryAction>
+                            <IconButton
+                              onClick={() => handleAddFriend(user.id)}
+                              size="small"
+                              color="primary"
+                            >
+                              <PersonAddIcon />
+                            </IconButton>
+                          </ListItemSecondaryAction>
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Box>
+                </>
+              )}
+            </Box>
+
+            <FindFriendsByPhone
+              open={showPhoneFinder}
+              onClose={() => setShowPhoneFinder(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
+
+  // Desktop: Show sidebar
   return (
     <Paper
       sx={{
