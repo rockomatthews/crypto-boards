@@ -244,7 +244,7 @@ export default function ChatSidebar({
       {/* Header */}
       <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-          Community Chat
+          Bark Box
         </Typography>
         <IconButton onClick={onClose} size="small">
           <CloseIcon />
