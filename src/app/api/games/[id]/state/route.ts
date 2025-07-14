@@ -284,21 +284,44 @@ export async function POST(
 
     // Get game players to determine player positions
     const playersResult = await db`
-      SELECT player_id, joined_at 
-      FROM game_players 
-      WHERE game_id = ${gameId} 
-      ORDER BY joined_at ASC
+      SELECT 
+        p.wallet_address,
+        gp.joined_at 
+      FROM game_players gp
+      JOIN players p ON gp.player_id = p.id
+      WHERE gp.game_id = ${gameId} 
+      ORDER BY gp.joined_at ASC
     `;
+
+    console.log(`🚢 Battleship Debug: Game ${gameId}`, {
+      playerWallet,
+      playersInGame: playersResult.map(p => ({ wallet: p.wallet_address, joined: p.joined_at })),
+      totalPlayers: playersResult.length
+    });
 
     if (playersResult.length === 0) {
       return NextResponse.json({ error: 'No players found for game' }, { status: 400 });
     }
 
-    const isPlayer1 = playersResult[0].player_id === playerWallet;
-    const isPlayer2 = playersResult.length > 1 && playersResult[1].player_id === playerWallet;
+    const isPlayer1 = playersResult[0].wallet_address === playerWallet;
+    const isPlayer2 = playersResult.length > 1 && playersResult[1].wallet_address === playerWallet;
+
+    console.log(`🚢 Player validation:`, {
+      playerWallet,
+      player1Wallet: playersResult[0].wallet_address,
+      player2Wallet: playersResult[1]?.wallet_address,
+      isPlayer1,
+      isPlayer2
+    });
 
     if (!isPlayer1 && !isPlayer2) {
-      return NextResponse.json({ error: 'Player not in this game' }, { status: 403 });
+      return NextResponse.json({ 
+        error: 'Player not in this game',
+        debug: {
+          playerWallet,
+          playersInGame: playersResult.map(p => p.wallet_address)
+        }
+      }, { status: 403 });
     }
 
     // Handle different actions
@@ -330,7 +353,7 @@ export async function POST(
         // Check if both players are ready
         if (currentState.player1Ready && currentState.player2Ready) {
           currentState.phase = 'playing';
-          currentState.currentPlayer = playersResult[0].player_id; // Player 1 goes first
+          currentState.currentPlayer = playersResult[0].wallet_address; // Player 1 goes first
         } else if (currentState.player1Ready || currentState.player2Ready) {
           currentState.phase = 'waiting';
         }
@@ -370,13 +393,13 @@ export async function POST(
 
         if (!player1HasShips) {
           currentState.phase = 'completed';
-          currentState.winner = playersResult[1]?.player_id || null;
+          currentState.winner = playersResult[1]?.wallet_address || null;
         } else if (!player2HasShips) {
           currentState.phase = 'completed';
-          currentState.winner = playersResult[0].player_id;
+          currentState.winner = playersResult[0].wallet_address;
         } else {
           // Switch turns
-          currentState.currentPlayer = isPlayer1 ? playersResult[1]?.player_id || '' : playersResult[0].player_id;
+          currentState.currentPlayer = isPlayer1 ? playersResult[1]?.wallet_address || '' : playersResult[0].wallet_address;
         }
         break;
 
