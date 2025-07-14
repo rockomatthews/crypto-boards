@@ -13,6 +13,9 @@ interface ChatContextType {
   openFindAllFriends: () => void;
   isGameChatVisible: boolean;
   setIsGameChatVisible: (visible: boolean) => void;
+  unreadGameMessages: number;
+  setUnreadGameMessages: (count: number) => void;
+  markGameMessagesAsRead: () => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -34,6 +37,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [showPhoneFinder, setShowPhoneFinder] = useState(false);
   const [isGameChatVisible, setIsGameChatVisible] = useState(false);
+  const [unreadGameMessages, setUnreadGameMessages] = useState(0);
 
   const openChatToUsersTab = () => {
     setActiveTab(1); // Users tab
@@ -49,6 +53,10 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     }, 100);
   };
 
+  const markGameMessagesAsRead = () => {
+    setUnreadGameMessages(0);
+  };
+
   const value: ChatContextType = {
     isChatVisible,
     setIsChatVisible,
@@ -60,6 +68,9 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     openFindAllFriends,
     isGameChatVisible,
     setIsGameChatVisible,
+    unreadGameMessages,
+    setUnreadGameMessages,
+    markGameMessagesAsRead,
   };
 
   return (

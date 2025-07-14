@@ -30,7 +30,9 @@ export default function ClientHeader() {
     showPhoneFinder,
     setShowPhoneFinder,
     isGameChatVisible,
-    setIsGameChatVisible
+    setIsGameChatVisible,
+    unreadGameMessages,
+    markGameMessagesAsRead
   } = useChatContext();
 
   const handleChatToggle = () => {
@@ -38,6 +40,10 @@ export default function ClientHeader() {
   };
 
   const handleGameChatToggle = () => {
+    if (!isGameChatVisible) {
+      // Mark messages as read when opening chat
+      markGameMessagesAsRead();
+    }
     setIsGameChatVisible(!isGameChatVisible);
   };
 
@@ -77,7 +83,7 @@ export default function ClientHeader() {
         <FloatingChatButton
           isOpen={isInGame ? isGameChatVisible : isChatVisible}
           onClick={isInGame ? handleGameChatToggle : handleChatToggle}
-          unreadCount={0} // TODO: Implement unread message count
+          unreadCount={isInGame ? unreadGameMessages : 0}
         />
       )}
     </>

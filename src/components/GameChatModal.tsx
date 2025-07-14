@@ -26,6 +26,7 @@ import {
   Group as GroupIcon,
 } from '@mui/icons-material';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useChatContext } from './ChatContext';
 
 interface ChatMessage {
   id: string;
@@ -61,6 +62,7 @@ export default function GameChatModal({
   gamePlayers: propGamePlayers = []
 }: GameChatModalProps) {
   const { publicKey } = useWallet();
+  const { setUnreadGameMessages } = useChatContext();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [selectedRoom, setSelectedRoom] = useState<string>('private');
@@ -68,6 +70,7 @@ export default function GameChatModal({
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [gamePlayers, setGamePlayers] = useState(propGamePlayers);
+  const [lastMessageCount, setLastMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Define available chat rooms
@@ -141,6 +144,20 @@ export default function GameChatModal({
     scrollToBottom();
   }, [messages]);
 
+  // Track new messages for unread counter
+  useEffect(() => {
+    if (!isVisible && messages.length > lastMessageCount) {
+      // Only count messages from other users
+      const newMessages = messages.slice(lastMessageCount).filter(
+        msg => msg.sender_id !== publicKey?.toString()
+      );
+      if (newMessages.length > 0) {
+        setUnreadGameMessages(newMessages.length);
+      }
+    }
+    setLastMessageCount(messages.length);
+  }, [messages, isVisible, lastMessageCount, publicKey, setUnreadGameMessages]);
+
   const handleSendMessage = async () => {
     if (!publicKey || !newMessage.trim()) return;
 
@@ -197,11 +214,12 @@ export default function GameChatModal({
         {/* Mobile Room Selector */}
         <Box sx={{ 
           display: { xs: 'flex', md: 'none' },
-          p: 1,
+          p: 2,
           borderBottom: '1px solid #e0e0e0',
-          gap: 1,
+          gap: 2,
           alignItems: 'center',
-          bgcolor: 'grey.50'
+          bgcolor: 'grey.50',
+          justifyContent: 'center'
         }}>
           {chatRooms.map((room) => (
             <Chip
@@ -211,8 +229,11 @@ export default function GameChatModal({
               color={selectedRoom === room.id ? "primary" : "default"}
               onClick={() => setSelectedRoom(room.id)}
               icon={room.type === 'private' ? <LockIcon /> : <PublicIcon />}
-              size="small"
-              sx={{ fontSize: '0.75rem' }}
+              sx={{ 
+                fontSize: '0.875rem',
+                height: '36px',
+                minWidth: '120px'
+              }}
             />
           ))}
         </Box>
@@ -264,29 +285,52 @@ export default function GameChatModal({
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {/* Chat Header */}
           <Box sx={{ 
-            p: { xs: 1, md: 2 }, 
+            p: { xs: 2, md: 2 }, 
             borderBottom: '1px solid #e0e0e0', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'space-between',
-            minHeight: { xs: '56px', md: 'auto' }
+            bgcolor: { xs: 'primary.main', md: 'transparent' },
+            color: { xs: 'white', md: 'inherit' }
           }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {currentRoom?.type === 'private' ? <LockIcon color="success" /> : <PublicIcon color="primary" />}
-              <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: { xs: '1rem', md: '1.25rem' } }}>
+              {currentRoom?.type === 'private' ? (
+                <LockIcon 
+                  sx={{ 
+                    fontSize: { xs: 20, md: 20 },
+                    color: { xs: 'white', md: 'success.main' }
+                  }} 
+                />
+              ) : (
+                <PublicIcon 
+                  sx={{ 
+                    fontSize: { xs: 20, md: 20 },
+                    color: { xs: 'white', md: 'primary.main' }
+                  }} 
+                />
+              )}
+              <Typography variant="h6" sx={{ 
+                fontWeight: 'bold', 
+                fontSize: { xs: '1.125rem', md: '1.25rem' } 
+              }}>
                 {currentRoom?.name}
               </Typography>
-              {currentRoom?.type === 'private' && (
+              {currentRoom?.type === 'private' && !isMobile && (
                 <Chip 
                   icon={<GroupIcon />} 
                   label={`${currentRoom.participants?.length || 0} players`}
                   size="small"
                   color="success"
-                  sx={{ display: { xs: 'none', sm: 'flex' } }}
                 />
               )}
             </Box>
-            <IconButton onClick={onClose} size="small">
+            <IconButton 
+              onClick={onClose} 
+              sx={{ 
+                color: { xs: 'white', md: 'inherit' },
+                p: 1
+              }}
+            >
               <CloseIcon />
             </IconButton>
           </Box>
@@ -295,13 +339,13 @@ export default function GameChatModal({
           <Box sx={{ 
             flex: 1, 
             overflow: 'auto', 
-            p: { xs: 0.5, md: 1 },
+            p: { xs: 2, md: 1 },
             display: 'flex',
             flexDirection: 'column'
           }}>
             {messages.length === 0 ? (
               <Box sx={{ textAlign: 'center', py: 4 }}>
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.875rem', md: '1rem' } }}>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '1rem', md: '1rem' } }}>
                   {selectedRoom === 'private' 
                     ? `No messages yet in this game room. Start chatting with your opponent!`
                     : `No messages yet. Start the conversation!`
@@ -315,10 +359,10 @@ export default function GameChatModal({
                   <Box
                     key={message.id}
                     sx={{
-                      mb: 1,
-                      p: { xs: 1.5, md: 2 },
+                      mb: { xs: 2, md: 1 },
+                      p: { xs: 2, md: 2 },
                       borderRadius: 2,
-                      maxWidth: { xs: '90%', md: '85%' },
+                      maxWidth: { xs: '85%', md: '85%' },
                       alignSelf: isOwnMessage ? 'flex-end' : 'flex-start',
                       bgcolor: isOwnMessage 
                         ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
@@ -361,7 +405,7 @@ export default function GameChatModal({
                         fontWeight: 'bold',
                         display: 'block',
                         mb: 0.5,
-                        fontSize: { xs: '0.625rem', md: '0.75rem' }
+                        fontSize: { xs: '0.75rem', md: '0.75rem' }
                       }}
                     >
                       {message.sender_username} • {new Date(message.created_at).toLocaleTimeString()}
@@ -372,7 +416,7 @@ export default function GameChatModal({
                         color: 'white',
                         fontWeight: '500',
                         lineHeight: 1.4,
-                        fontSize: { xs: '0.875rem', md: '1rem' }
+                        fontSize: { xs: '1rem', md: '1rem' }
                       }}
                     >
                       {message.content}
@@ -386,13 +430,13 @@ export default function GameChatModal({
 
           {/* Message Input */}
           <Box sx={{ 
-            p: { xs: 1, md: 2 }, 
+            p: { xs: 2, md: 2 }, 
             borderTop: '1px solid #e0e0e0',
             backgroundColor: 'white'
           }}>
             <TextField
               fullWidth
-              size="small"
+              size={isMobile ? "medium" : "small"}
               placeholder={`Type a message in ${currentRoom?.name}...`}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
@@ -401,7 +445,7 @@ export default function GameChatModal({
               maxRows={3}
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  fontSize: { xs: '0.875rem', md: '1rem' }
+                  fontSize: { xs: '1rem', md: '1rem' }
                 }
               }}
               InputProps={{
@@ -410,8 +454,8 @@ export default function GameChatModal({
                     <IconButton
                       onClick={handleSendMessage}
                       disabled={!newMessage.trim() || loading}
-                      size="small"
                       color="primary"
+                      sx={{ p: 1 }}
                     >
                       <SendIcon />
                     </IconButton>
