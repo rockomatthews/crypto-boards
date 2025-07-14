@@ -295,12 +295,14 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
       const response = await fetch(`/api/games/${gameId}/state`);
       if (response.ok) {
         const data = await response.json();
-        setGameState(data.gameState || gameState);
+        if (data.gameState) {
+          setGameState(data.gameState);
+        }
       }
     } catch (error) {
       console.error('Error fetching game state:', error);
     }
-  }, [gameId, gameState]);
+  }, [gameId]);
 
   // Fetch game info
   const fetchGameInfo = useCallback(async () => {
@@ -322,16 +324,18 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     if (gameId) {
       fetchGameInfo();
       fetchGameState();
-      
-      // Initialize ships if not already initialized
-      if (gameState.player1Ships.length === 0) {
-        setGameState(prev => ({
-          ...prev,
-          player1Ships: initializeShips(),
-        }));
-      }
     }
-  }, [gameId, fetchGameInfo, fetchGameState, initializeShips, gameState.player1Ships.length]);
+  }, [gameId, fetchGameInfo, fetchGameState]);
+
+  // Initialize ships separately to avoid infinite loop
+  useEffect(() => {
+    if (gameState.player1Ships.length === 0) {
+      setGameState(prev => ({
+        ...prev,
+        player1Ships: initializeShips(),
+      }));
+    }
+  }, [initializeShips]); // Only depend on initializeShips, not gameState
 
   // Poll for game state updates during gameplay
   useEffect(() => {
