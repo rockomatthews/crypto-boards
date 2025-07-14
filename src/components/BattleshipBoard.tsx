@@ -134,7 +134,17 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
   // Place ship on board
   const placeShip = (ship: Ship, startRow: number, startCol: number) => {
-    if (!isValidPlacement(ship, startRow, startCol, shipDirection === 'horizontal')) return;
+    const isHorizontal = shipDirection === 'horizontal';
+    const isValid = isValidPlacement(ship, startRow, startCol, isHorizontal);
+    console.log('🚢 Place Ship:', { 
+      ship: ship.name, 
+      startRow, 
+      startCol, 
+      isHorizontal, 
+      isValid 
+    });
+    
+    if (!isValid) return;
 
     const newBoard = gameState.player1Board.map(row => [...row]);
     const positions: CellPosition[] = [];
@@ -168,6 +178,7 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
   // Handle cell click during setup
   const handleSetupCellClick = (row: number, col: number) => {
+    console.log('🚢 Setup Click:', { row, col, selectedShip: selectedShip?.name, isPlaced: selectedShip?.isPlaced });
     if (!selectedShip || selectedShip.isPlaced) return;
     placeShip(selectedShip, row, col);
   };
@@ -203,6 +214,13 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
   // Ready up after ship placement
   const handleReady = async () => {
     const allShipsPlaced = gameState.player1Ships.every(ship => ship.isPlaced);
+    console.log('🚢 Ready Debug:', {
+      totalShips: gameState.player1Ships.length,
+      placedShips: gameState.player1Ships.filter(ship => ship.isPlaced).length,
+      allShipsPlaced,
+      ships: gameState.player1Ships.map(ship => ({ name: ship.name, isPlaced: ship.isPlaced }))
+    });
+    
     if (!allShipsPlaced) {
       setError('Please place all ships before readying up!');
       return;
