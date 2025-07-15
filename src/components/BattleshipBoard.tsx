@@ -21,6 +21,7 @@ import {
   DirectionsBoat as ShipIcon,
   Whatshot as HitIcon,
   Clear as MissIcon,
+  Dangerous as SkullIcon,
 } from '@mui/icons-material';
 
 // Ship definitions
@@ -105,6 +106,31 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
   
   // Determine if current user is player 1 or player 2
   const isCurrentUserPlayer1 = gameInfo?.players?.[0]?.wallet_address === publicKey?.toString();
+
+  // Update board to show sunk ships with skull icons
+  // For enemy shots board, we need to check hits against opponent's ships
+  const updateSunkShips = (shotsBoard: CellStatus[][], ships: Ship[], targetBoard?: CellStatus[][]) => {
+    const newBoard = shotsBoard.map(row => [...row]);
+    
+    ships.forEach(ship => {
+      if (ship.isPlaced && ship.positions.length > 0) {
+        // Check if all ship positions are hit on the target board (or shots board for my own ships)
+        const allHit = ship.positions.every(pos => {
+          const checkBoard = targetBoard || shotsBoard;
+          return checkBoard[pos.row][pos.col] === 'hit';
+        });
+        
+        if (allHit) {
+          // Mark as sunk on the shots board
+          ship.positions.forEach(pos => {
+            newBoard[pos.row][pos.col] = 'sunk';
+          });
+        }
+      }
+    });
+    
+    return newBoard;
+  };
 
   // Initialize empty ships for setup
   const initializeShips = useCallback((): Ship[] => {
@@ -601,7 +627,7 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     let cellColor = '#f5f5f5';
 
     if (isEnemyBoard) {
-      // Enemy board - only show hits and misses
+      // Enemy board - only show hits, misses, and sunk ships
       if (cellStatus === 'hit') {
         cellContent = <HitIcon style={{ color: '#d32f2f', fontSize: '20px' }} />;
         cellColor = '#ffcdd2';
@@ -609,11 +635,11 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
         cellContent = <MissIcon style={{ color: '#1976d2', fontSize: '20px' }} />;
         cellColor = '#e3f2fd';
       } else if (cellStatus === 'sunk') {
-        cellContent = <ShipIcon style={{ color: '#000', fontSize: '20px' }} />;
-        cellColor = '#424242';
+        cellContent = <SkullIcon style={{ color: '#000000', fontSize: '24px' }} />;
+        cellColor = '#757575';
       }
     } else {
-      // My board - show ships, hits, and misses
+      // My board - show ships, hits, misses, and sunk ships
       if (cellStatus === 'ship') {
         cellContent = <ShipIcon style={{ color: '#4caf50', fontSize: '20px' }} />;
         cellColor = '#c8e6c9';
@@ -624,8 +650,8 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
         cellContent = <MissIcon style={{ color: '#1976d2', fontSize: '20px' }} />;
         cellColor = '#e3f2fd';
       } else if (cellStatus === 'sunk') {
-        cellContent = <ShipIcon style={{ color: '#000', fontSize: '20px' }} />;
-        cellColor = '#424242';
+        cellContent = <SkullIcon style={{ color: '#000000', fontSize: '24px' }} />;
+        cellColor = '#757575';
       }
     }
 
@@ -659,6 +685,7 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
   // Render game board
   const renderBoard = (isEnemyBoard: boolean = false) => {
     let board;
+    let ships;
     
     console.log('🚢 Rendering board:', {
       isEnemyBoard,
@@ -671,9 +698,21 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     if (isEnemyBoard) {
       // Enemy board: show shots I've taken
       board = isCurrentUserPlayer1 ? gameState.player1Shots : gameState.player2Shots;
+      // For enemy board, we need to check opponent's ships for sunk status
+      ships = isCurrentUserPlayer1 ? gameState.player2Ships : gameState.player1Ships;
+      // Apply sunk ship detection to enemy shots board using opponent's board as reference
+      if (ships.length > 0) {
+        const opponentBoard = isCurrentUserPlayer1 ? gameState.player2Board : gameState.player1Board;
+        board = updateSunkShips(board, ships.filter(ship => ship.isPlaced), opponentBoard);
+      }
     } else {
       // My board: show my ships and enemy shots against me
       board = isCurrentUserPlayer1 ? gameState.player1Board : gameState.player2Board;
+      ships = isCurrentUserPlayer1 ? gameState.player1Ships : gameState.player2Ships;
+      // Apply sunk ship detection to my board (target board is same as shots board)
+      if (ships.length > 0) {
+        board = updateSunkShips(board, ships.filter(ship => ship.isPlaced));
+      }
     }
     
     // Safety check for board existence
