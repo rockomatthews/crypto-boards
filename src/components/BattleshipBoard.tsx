@@ -337,13 +337,25 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
           hasGameState: !!data.gameState,
           phase: data.currentState?.phase || data.gameState?.phase,
           player1Ready: data.currentState?.player1Ready || data.gameState?.player1Ready,
-          player2Ready: data.currentState?.player2Ready || data.gameState?.player2Ready
+          player2Ready: data.currentState?.player2Ready || data.gameState?.player2Ready,
+          hasPlayer1Shots: !!(data.currentState?.player1Shots || data.gameState?.player1Shots),
+          hasPlayer2Shots: !!(data.currentState?.player2Shots || data.gameState?.player2Shots),
+          hasPlayer1Board: !!(data.currentState?.player1Board || data.gameState?.player1Board),
+          hasPlayer2Board: !!(data.currentState?.player2Board || data.gameState?.player2Board)
         });
         
         // The GET endpoint returns 'currentState', POST returns 'gameState'
         const gameState = data.currentState || data.gameState;
         if (gameState) {
-          setGameState(gameState);
+          // Ensure shot boards are initialized if missing
+          const normalizedState = {
+            ...gameState,
+            player1Shots: gameState.player1Shots || Array(10).fill(null).map(() => Array(10).fill('empty')),
+            player2Shots: gameState.player2Shots || Array(10).fill(null).map(() => Array(10).fill('empty')),
+            player1Board: gameState.player1Board || Array(10).fill(null).map(() => Array(10).fill('empty')),
+            player2Board: gameState.player2Board || Array(10).fill(null).map(() => Array(10).fill('empty'))
+          };
+          setGameState(normalizedState);
         }
       } else {
         console.log('🚢 Fetch error:', response.status, response.statusText);
