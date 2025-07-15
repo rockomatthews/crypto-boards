@@ -226,6 +226,12 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
       return;
     }
 
+    console.log('🚢 Sending ready request...', {
+      gameId,
+      playerWallet: publicKey?.toString(),
+      ships: gameState.player1Ships.length
+    });
+
     try {
       const response = await fetch(`/api/games/${gameId}/state`, {
         method: 'POST',
@@ -237,13 +243,23 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
         }),
       });
 
+      console.log('🚢 Ready response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       if (response.ok) {
+        const data = await response.json();
+        console.log('🚢 Ready success:', data);
         fetchGameState();
       } else {
-        setError('Failed to ready up');
+        const errorData = await response.text();
+        console.log('🚢 Ready error:', errorData);
+        setError(`Failed to ready up: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
-      console.error('Error readying up:', error);
+      console.error('🚢 Ready exception:', error);
       setError('Failed to ready up');
     }
   };
