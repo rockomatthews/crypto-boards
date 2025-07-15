@@ -361,11 +361,32 @@ export async function POST(
 
       case 'shoot':
         const { position } = body;
+        console.log(`🚢 Shoot action:`, {
+          phase: currentState.phase,
+          currentPlayer: currentState.currentPlayer,
+          playerWallet,
+          position,
+          hasPlayer1Board: !!currentState.player1Board,
+          hasPlayer2Board: !!currentState.player2Board,
+          hasPlayer1Shots: !!currentState.player1Shots,
+          hasPlayer2Shots: !!currentState.player2Shots
+        });
+        
         if (currentState.phase !== 'playing' || currentState.currentPlayer !== playerWallet) {
           return NextResponse.json({ error: 'Not your turn' }, { status: 400 });
         }
 
         const { row, col } = position;
+
+        // Ensure boards exist before accessing them
+        if (!currentState.player1Board || !currentState.player2Board || 
+            !currentState.player1Shots || !currentState.player2Shots) {
+          console.log('🚢 Missing boards, initializing...');
+          currentState.player1Board = currentState.player1Board || Array(10).fill(null).map(() => Array(10).fill('empty'));
+          currentState.player2Board = currentState.player2Board || Array(10).fill(null).map(() => Array(10).fill('empty'));
+          currentState.player1Shots = currentState.player1Shots || Array(10).fill(null).map(() => Array(10).fill('empty'));
+          currentState.player2Shots = currentState.player2Shots || Array(10).fill(null).map(() => Array(10).fill('empty'));
+        }
 
         if (isPlayer1) {
           // Player 1 shooting at Player 2's board
