@@ -87,6 +87,12 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
   const [gameEndDialog, setGameEndDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // We need to fetch game info to determine player order
+  const [gameInfo, setGameInfo] = useState<{players: {wallet_address: string}[]} | null>(null);
+  
+  // Determine if current user is player 1 or player 2
+  const isCurrentUserPlayer1 = gameInfo?.players?.[0]?.wallet_address === publicKey?.toString();
 
   // Initialize empty ships for setup
   const initializeShips = useCallback((): Ship[] => {
@@ -102,7 +108,8 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
   // Check if ship placement is valid
   const isValidPlacement = (ship: Ship, startRow: number, startCol: number, isHorizontal: boolean): boolean => {
-    const board = gameState.player1Board; // Always check against own board during setup
+    // Use the correct board for this player
+    const board = isCurrentUserPlayer1 ? gameState.player1Board : gameState.player2Board;
     
     for (let i = 0; i < ship.length; i++) {
       const row = isHorizontal ? startRow : startRow + i;
@@ -143,7 +150,9 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     
     if (!isValid) return;
 
-    const newBoard = gameState.player1Board.map(row => [...row]);
+    // Use the correct board for this player
+    const currentBoard = isCurrentUserPlayer1 ? gameState.player1Board : gameState.player2Board;
+    const newBoard = currentBoard.map(row => [...row]);
     const positions: CellPosition[] = [];
 
     for (let i = 0; i < ship.length; i++) {
@@ -160,15 +169,25 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
       isPlaced: true,
     };
 
-    const newShips = gameState.player1Ships.map(s => 
+    // Update the correct player's ships and board
+    const currentShips = isCurrentUserPlayer1 ? gameState.player1Ships : gameState.player2Ships;
+    const newShips = currentShips.map(s => 
       s.name === ship.name ? updatedShip : s
     );
 
-    setGameState(prev => ({
-      ...prev,
-      player1Board: newBoard,
-      player1Ships: newShips,
-    }));
+    if (isCurrentUserPlayer1) {
+      setGameState(prev => ({
+        ...prev,
+        player1Board: newBoard,
+        player1Ships: newShips,
+      }));
+    } else {
+      setGameState(prev => ({
+        ...prev,
+        player2Board: newBoard,
+        player2Ships: newShips,
+      }));
+    }
 
     setSelectedShip(null);
   };
@@ -210,12 +229,14 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
   // Ready up after ship placement
   const handleReady = async () => {
-    const allShipsPlaced = gameState.player1Ships.every(ship => ship.isPlaced);
+    const currentShips = isCurrentUserPlayer1 ? gameState.player1Ships : gameState.player2Ships;
+    const allShipsPlaced = currentShips.every(ship => ship.isPlaced);
     console.log('🚢 Ready Debug:', {
-      totalShips: gameState.player1Ships.length,
-      placedShips: gameState.player1Ships.filter(ship => ship.isPlaced).length,
+      isCurrentUserPlayer1,
+      totalShips: currentShips.length,
+      placedShips: currentShips.filter(ship => ship.isPlaced).length,
       allShipsPlaced,
-      ships: gameState.player1Ships.map(ship => ({ name: ship.name, isPlaced: ship.isPlaced }))
+      ships: currentShips.map(ship => ({ name: ship.name, isPlaced: ship.isPlaced }))
     });
     
     if (!allShipsPlaced) {
@@ -235,7 +256,7 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'ready',
-          ships: gameState.player1Ships,
+          ships: currentShips,
           playerWallet: publicKey?.toString(),
         }),
       });
@@ -264,7 +285,8 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
   // Auto-place ships randomly
   const autoPlaceShips = () => {
     const newBoard = Array(10).fill(null).map(() => Array(10).fill('empty'));
-    const newShips = [...gameState.player1Ships];
+    const currentShips = isCurrentUserPlayer1 ? gameState.player1Ships : gameState.player2Ships;
+    const newShips = [...currentShips];
 
     for (let shipIndex = 0; shipIndex < SHIPS.length; shipIndex++) {
       const ship = newShips[shipIndex];
@@ -313,11 +335,19 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
       }
     }
 
-    setGameState(prev => ({
-      ...prev,
-      player1Board: newBoard,
-      player1Ships: newShips,
-    }));
+    if (isCurrentUserPlayer1) {
+      setGameState(prev => ({
+        ...prev,
+        player1Board: newBoard,
+        player1Ships: newShips,
+      }));
+    } else {
+      setGameState(prev => ({
+        ...prev,
+        player2Board: newBoard,
+        player2Ships: newShips,
+      }));
+    }
   };
 
   // Fetch game state
@@ -370,8 +400,9 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     try {
       const response = await fetch(`/api/games/${gameId}`);
       if (response.ok) {
-        // const data = await response.json();
-        // setGameInfo(data);
+        const data = await response.json();
+        console.log('🚢 Game Info:', data);
+        setGameInfo(data);
       }
     } catch (error) {
       console.error('Error fetching game info:', error);
@@ -390,13 +421,23 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
   // Initialize ships separately to avoid infinite loop
   useEffect(() => {
-    if (gameState.player1Ships.length === 0) {
-      setGameState(prev => ({
-        ...prev,
-        player1Ships: initializeShips(),
-      }));
+    if (gameInfo && isCurrentUserPlayer1 !== undefined) {
+      const currentShips = isCurrentUserPlayer1 ? gameState.player1Ships : gameState.player2Ships;
+      if (currentShips.length === 0) {
+        if (isCurrentUserPlayer1) {
+          setGameState(prev => ({
+            ...prev,
+            player1Ships: initializeShips(),
+          }));
+        } else {
+          setGameState(prev => ({
+            ...prev,
+            player2Ships: initializeShips(),
+          }));
+        }
+      }
     }
-  }, [initializeShips]); // Only depend on initializeShips, not gameState
+  }, [initializeShips, gameInfo, isCurrentUserPlayer1, gameState.player1Ships.length, gameState.player2Ships.length]);
 
   // Poll for game state updates during gameplay
   useEffect(() => {
@@ -484,7 +525,23 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
   // Render game board
   const renderBoard = (isEnemyBoard: boolean = false) => {
-    const board = isEnemyBoard ? gameState.player1Shots : gameState.player1Board;
+    let board;
+    
+    console.log('🚢 Rendering board:', {
+      isEnemyBoard,
+      isCurrentUserPlayer1,
+      myWallet: publicKey?.toString(),
+      player1Wallet: gameInfo?.players?.[0]?.wallet_address,
+      player2Wallet: gameInfo?.players?.[1]?.wallet_address
+    });
+    
+    if (isEnemyBoard) {
+      // Enemy board: show shots I've taken
+      board = isCurrentUserPlayer1 ? gameState.player1Shots : gameState.player2Shots;
+    } else {
+      // My board: show my ships and enemy shots against me
+      board = isCurrentUserPlayer1 ? gameState.player1Board : gameState.player2Board;
+    }
     
     // Safety check for board existence
     if (!board || !Array.isArray(board) || board.length !== 10) {
@@ -575,7 +632,7 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
                   variant="contained" 
                   color="primary"
                   onClick={handleReady}
-                  disabled={!gameState.player1Ships.every(ship => ship.isPlaced)}
+                  disabled={!(isCurrentUserPlayer1 ? gameState.player1Ships : gameState.player2Ships).every(ship => ship.isPlaced)}
                 >
                   ✅ Ready!
                 </Button>
@@ -583,7 +640,7 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
               {/* Ship Selection */}
               <Box sx={{ mb: 2 }}>
-                {gameState.player1Ships.map(ship => (
+                {(isCurrentUserPlayer1 ? gameState.player1Ships : gameState.player2Ships).map(ship => (
                   <Chip
                     key={ship.name}
                     label={`${ship.name} (${ship.length})`}
