@@ -15,6 +15,7 @@ import {
   DialogContent,
   DialogActions,
   LinearProgress,
+  CircularProgress,
 } from '@mui/material';
 import {
   DirectionsBoat as ShipIcon,
@@ -30,6 +31,10 @@ const SHIPS = [
   { name: 'Submarine', length: 3, count: 1 },
   { name: 'Destroyer', length: 2, count: 1 },
 ];
+
+// Time limits
+const SETUP_TIME_LIMIT = 3 * 60 * 1000; // 3 minutes for setup
+const TURN_TIME_LIMIT = 30 * 1000; // 30 seconds per turn
 
 type CellStatus = 'empty' | 'ship' | 'hit' | 'miss' | 'sunk';
 type GamePhase = 'setup' | 'waiting' | 'playing' | 'completed';
@@ -57,6 +62,9 @@ interface BattleshipGameState {
   lastShot?: CellPosition;
   player1Ready: boolean;
   player2Ready: boolean;
+  setupTimeLeft?: number;  // 3 minutes for setup
+  turnTimeLeft?: number;   // 30 seconds per turn
+  gameStartTime?: number;
 }
 
 interface BattleshipBoardProps {
@@ -87,6 +95,10 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
   const [gameEndDialog, setGameEndDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Timer states
+  const [timeLeft, setTimeLeft] = useState<number>(SETUP_TIME_LIMIT);
+  const [isMyTurn, setIsMyTurn] = useState(false);
   
   // We need to fetch game info to determine player order
   const [gameInfo, setGameInfo] = useState<{players: {wallet_address: string}[]} | null>(null);
@@ -192,9 +204,60 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     setSelectedShip(null);
   };
 
+  // Remove ship from board
+  const removeShip = (row: number, col: number) => {
+    const currentShips = isCurrentUserPlayer1 ? gameState.player1Ships : gameState.player2Ships;
+    const currentBoard = isCurrentUserPlayer1 ? gameState.player1Board : gameState.player2Board;
+    
+    // Find which ship is at this position
+    const shipToRemove = currentShips.find(ship => 
+      ship.positions.some(pos => pos.row === row && pos.col === col)
+    );
+    
+    if (!shipToRemove) return;
+    
+    // Clear the ship from the board
+    const newBoard = currentBoard.map(row => [...row]);
+    shipToRemove.positions.forEach(pos => {
+      newBoard[pos.row][pos.col] = 'empty';
+    });
+    
+    // Reset the ship state
+    const newShips = currentShips.map(ship => 
+      ship.name === shipToRemove.name 
+        ? { ...ship, positions: [], isPlaced: false }
+        : ship
+    );
+    
+    // Update state
+    if (isCurrentUserPlayer1) {
+      setGameState(prev => ({
+        ...prev,
+        player1Board: newBoard,
+        player1Ships: newShips,
+      }));
+    } else {
+      setGameState(prev => ({
+        ...prev,
+        player2Board: newBoard,
+        player2Ships: newShips,
+      }));
+    }
+  };
+
   // Handle cell click during setup
   const handleSetupCellClick = (row: number, col: number) => {
     console.log('🚢 Setup Click:', { row, col, selectedShip: selectedShip?.name, isPlaced: selectedShip?.isPlaced });
+    
+    const currentBoard = isCurrentUserPlayer1 ? gameState.player1Board : gameState.player2Board;
+    
+    // If there's a ship at this position, remove it
+    if (currentBoard[row][col] === 'ship') {
+      removeShip(row, col);
+      return;
+    }
+    
+    // Otherwise, try to place a ship
     if (!selectedShip || selectedShip.isPlaced) return;
     placeShip(selectedShip, row, col);
   };
@@ -279,6 +342,39 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     } catch (error) {
       console.error('🚢 Ready exception:', error);
       setError('Failed to ready up');
+    }
+  };
+
+  // Handle forfeit
+  const handleForfeit = async () => {
+    if (!publicKey) return;
+
+    try {
+      const response = await fetch(`/api/games/${gameId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId,
+          winner: isCurrentUserPlayer1 ? 
+            (gameInfo?.players?.[1]?.wallet_address || 'opponent') :
+            (gameInfo?.players?.[0]?.wallet_address || 'opponent'),
+          reason: 'forfeit',
+          playerWallet: publicKey.toString()
+        })
+      });
+
+      if (response.ok) {
+        setGameState(prev => ({
+          ...prev,
+          phase: 'completed',
+          winner: isCurrentUserPlayer1 ? 
+            gameInfo?.players?.[1]?.wallet_address || 'opponent' :
+            gameInfo?.players?.[0]?.wallet_address || 'opponent'
+        }));
+      }
+    } catch (error) {
+      console.error('Error forfeiting game:', error);
+      setError('Failed to forfeit game');
     }
   };
 
@@ -439,6 +535,43 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     }
   }, [initializeShips, gameInfo, isCurrentUserPlayer1, gameState.player1Ships.length, gameState.player2Ships.length]);
 
+  // Timer management
+  useEffect(() => {
+    if (gameState.phase === 'setup') {
+      setTimeLeft(SETUP_TIME_LIMIT);
+      setIsMyTurn(true);
+    } else if (gameState.phase === 'playing') {
+      setTimeLeft(TURN_TIME_LIMIT);
+      setIsMyTurn(gameState.currentPlayer === publicKey?.toString());
+    }
+  }, [gameState.phase, gameState.currentPlayer, publicKey]);
+
+  // Timer countdown
+  useEffect(() => {
+    if ((gameState.phase === 'setup' || (gameState.phase === 'playing' && isMyTurn)) && timeLeft > 0) {
+      const timer = setInterval(() => {
+        setTimeLeft(prev => {
+          const newTime = prev - 1000;
+          if (newTime <= 0) {
+            // Time's up - handle timeout
+            if (gameState.phase === 'setup') {
+              // Auto-place remaining ships and ready up
+              autoPlaceShips();
+              setTimeout(() => handleReady(), 1000);
+            } else if (gameState.phase === 'playing' && isMyTurn) {
+              // Skip turn - opponent's turn now
+              // The game will automatically switch turns when the API polling detects no action
+            }
+            return 0;
+          }
+          return newTime;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [gameState.phase, isMyTurn, timeLeft, autoPlaceShips, handleReady]);
+
   // Poll for game state updates during gameplay
   useEffect(() => {
     if (gameState.phase === 'playing' || gameState.phase === 'waiting') {
@@ -562,6 +695,49 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     );
   };
 
+  // Format time display
+  const formatTime = (milliseconds: number) => {
+    const totalSeconds = Math.ceil(milliseconds / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Timer display component
+  const renderTimer = () => {
+    if (gameState.phase === 'setup') {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <CircularProgress 
+            variant="determinate" 
+            value={(timeLeft / SETUP_TIME_LIMIT) * 100}
+            size={40}
+            color={timeLeft < 30000 ? "error" : "primary"}
+          />
+          <Typography variant="h6" color={timeLeft < 30000 ? "error" : "primary"}>
+            Setup: {formatTime(timeLeft)}
+          </Typography>
+        </Box>
+      );
+    } else if (gameState.phase === 'playing') {
+      const isActive = isMyTurn;
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <CircularProgress 
+            variant="determinate" 
+            value={isActive ? (timeLeft / TURN_TIME_LIMIT) * 100 : 100}
+            size={40}
+            color={isActive && timeLeft < 10000 ? "error" : "primary"}
+          />
+          <Typography variant="h6" color={isActive && timeLeft < 10000 ? "error" : "primary"}>
+            {isActive ? `Your Turn: ${formatTime(timeLeft)}` : "Opponent's Turn"}
+          </Typography>
+        </Box>
+      );
+    }
+    return null;
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
@@ -574,9 +750,25 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
     <Box sx={{ p: 3, maxWidth: '1200px', margin: '0 auto' }}>
       {/* Game Header */}
       <Paper sx={{ p: 2, mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          ⚓ Battleship - Game {gameId}
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Typography variant="h4" gutterBottom>
+            ⚓ Battleship - Game {gameId}
+          </Typography>
+          
+          {(gameState.phase === 'setup' || gameState.phase === 'playing') && (
+            <Button 
+              variant="outlined" 
+              color="error" 
+              onClick={handleForfeit}
+              size="small"
+            >
+              Forfeit
+            </Button>
+          )}
+        </Box>
+        
+        {/* Timer Display */}
+        {renderTimer()}
         
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
           <Chip 
@@ -670,14 +862,21 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
                 3. Click on your board to place the ship
               </Typography>
               <Typography variant="body2" paragraph>
-                4. Repeat for all ships
+                4. Click placed ships to remove them
               </Typography>
               <Typography variant="body2" paragraph>
-                5. Click &quot;Ready!&quot; when all ships are placed
+                5. Repeat for all ships
+              </Typography>
+              <Typography variant="body2" paragraph>
+                6. Click &quot;Ready!&quot; when all ships are placed
               </Typography>
               
               <Alert severity="info" sx={{ mt: 2 }}>
                 Ships cannot touch each other (including diagonally)
+              </Alert>
+              
+              <Alert severity="warning" sx={{ mt: 1 }}>
+                ⏰ You have 3 minutes to place all ships!
               </Alert>
             </Paper>
           </Box>
