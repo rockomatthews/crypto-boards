@@ -15,8 +15,6 @@ import {
   DialogContent,
   DialogActions,
   LinearProgress,
-  Tabs,
-  Tab,
 } from '@mui/material';
 import {
   DirectionsBoat as ShipIcon,
@@ -86,7 +84,6 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
   // const [gameInfo, setGameInfo] = useState(null);
   const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
   const [shipDirection, setShipDirection] = useState<'horizontal' | 'vertical'>('horizontal');
-  const [activeTab, setActiveTab] = useState(0); // 0 = My Board, 1 = Enemy Board
   const [gameEndDialog, setGameEndDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -477,12 +474,18 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
   const renderBoard = (isEnemyBoard: boolean = false) => {
     const board = isEnemyBoard ? gameState.player1Shots : gameState.player1Board;
     
+    // Safety check for board existence
+    if (!board || !Array.isArray(board) || board.length !== 10) {
+      console.log('🚢 Board not ready:', { isEnemyBoard, boardLength: board?.length });
+      return <Box>Loading board...</Box>;
+    }
+    
     return (
       <Box sx={{ display: 'inline-block', border: '2px solid #333', p: 1 }}>
         {Array.from({ length: 10 }, (_, row) => (
           <Box key={row} sx={{ display: 'flex' }}>
             {Array.from({ length: 10 }, (_, col) => 
-              renderCell(row, col, isEnemyBoard, board[row][col])
+              renderCell(row, col, isEnemyBoard, board[row]?.[col] || 'empty')
             )}
           </Box>
         ))}
@@ -624,56 +627,51 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
       {/* Playing Phase */}
       {gameState.phase === 'playing' && (
-        <Box>
-          <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)} sx={{ mb: 2 }}>
-            <Tab label="🛡️ My Fleet" />
-            <Tab label="🎯 Enemy Waters" />
-          </Tabs>
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+          {/* Boards Section */}
+          <Box sx={{ flex: 1, minWidth: '350px' }}>
+            {/* Enemy Board - Top */}
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                🎯 Enemy Waters - Click to shoot!
+              </Typography>
+              {renderBoard(true)}
+            </Paper>
 
-          <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-            <Box sx={{ flex: 1, minWidth: '300px' }}>
-              {activeTab === 0 ? (
-                <Paper sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom>
-                    🛡️ Your Board
-                  </Typography>
-                  {renderBoard(false)}
-                </Paper>
+            {/* Your Board - Bottom */}
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                🛡️ Your Fleet
+              </Typography>
+              {renderBoard(false)}
+            </Paper>
+          </Box>
+
+          {/* Status Section */}
+          <Box sx={{ flex: 1, minWidth: '300px' }}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                📊 Game Status
+              </Typography>
+              
+              <Typography variant="body2" paragraph>
+                Your Ships Remaining: {gameState.player1Ships.filter(ship => !ship.isSunk).length}/{gameState.player1Ships.length}
+              </Typography>
+              
+              <Typography variant="body2" paragraph>
+                Enemy Ships Sunk: {gameState.player2Ships.filter(ship => ship.isSunk).length}/{SHIPS.length}
+              </Typography>
+
+              {gameState.currentPlayer === publicKey?.toString() ? (
+                <Alert severity="info">
+                  Your turn! Click on the enemy board to shoot.
+                </Alert>
               ) : (
-                <Paper sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom>
-                    🎯 Enemy Board - Click to shoot!
-                  </Typography>
-                  {renderBoard(true)}
-                </Paper>
+                <Alert severity="warning">
+                  Opponent&apos;s turn. Wait for them to shoot.
+                </Alert>
               )}
-            </Box>
-
-            <Box sx={{ flex: 1, minWidth: '300px' }}>
-              <Paper sx={{ p: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  📊 Game Status
-                </Typography>
-                
-                <Typography variant="body2" paragraph>
-                  Your Ships Remaining: {gameState.player1Ships.filter(ship => !ship.isSunk).length}/{gameState.player1Ships.length}
-                </Typography>
-                
-                <Typography variant="body2" paragraph>
-                  Enemy Ships Sunk: {gameState.player2Ships.filter(ship => ship.isSunk).length}/{SHIPS.length}
-                </Typography>
-
-                {gameState.currentPlayer === publicKey?.toString() ? (
-                  <Alert severity="info">
-                    Your turn! Click on the enemy board to shoot.
-                  </Alert>
-                ) : (
-                  <Alert severity="warning">
-                    Opponent&apos;s turn. Wait for them to shoot.
-                  </Alert>
-                )}
-              </Paper>
-            </Box>
+            </Paper>
           </Box>
         </Box>
       )}
