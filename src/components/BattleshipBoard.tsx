@@ -325,16 +325,31 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
 
   // Fetch game state
   const fetchGameState = useCallback(async () => {
+    console.log('🚢 Fetching game state...');
     try {
       const response = await fetch(`/api/games/${gameId}/state`);
+      console.log('🚢 Fetch response:', {
+        status: response.status,
+        ok: response.ok
+      });
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('🚢 Fetched game state:', {
+          hasGameState: !!data.gameState,
+          phase: data.gameState?.phase,
+          player1Ready: data.gameState?.player1Ready,
+          player2Ready: data.gameState?.player2Ready
+        });
+        
         if (data.gameState) {
           setGameState(data.gameState);
         }
+      } else {
+        console.log('🚢 Fetch error:', response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Error fetching game state:', error);
+      console.error('🚢 Fetch exception:', error);
     }
   }, [gameId]);
 
