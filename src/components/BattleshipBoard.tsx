@@ -336,14 +336,17 @@ export default function BattleshipBoard({ gameId }: BattleshipBoardProps) {
       if (response.ok) {
         const data = await response.json();
         console.log('🚢 Fetched game state:', {
+          hasCurrentState: !!data.currentState,
           hasGameState: !!data.gameState,
-          phase: data.gameState?.phase,
-          player1Ready: data.gameState?.player1Ready,
-          player2Ready: data.gameState?.player2Ready
+          phase: data.currentState?.phase || data.gameState?.phase,
+          player1Ready: data.currentState?.player1Ready || data.gameState?.player1Ready,
+          player2Ready: data.currentState?.player2Ready || data.gameState?.player2Ready
         });
         
-        if (data.gameState) {
-          setGameState(data.gameState);
+        // The GET endpoint returns 'currentState', POST returns 'gameState'
+        const gameState = data.currentState || data.gameState;
+        if (gameState) {
+          setGameState(gameState);
         }
       } else {
         console.log('🚢 Fetch error:', response.status, response.statusText);
