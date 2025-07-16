@@ -27,6 +27,8 @@ import {
   Tab,
   Snackbar,
   Alert,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import { Close as CloseIcon, Sms as SmsIcon, People as PeopleIcon } from '@mui/icons-material';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -81,6 +83,8 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
 }) => {
   const { publicKey } = useWallet();
   const router = useRouter();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [entryFee, setEntryFee] = useState('');
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [friends, setFriends] = useState<Array<{ id: string; username: string; wallet_address: string }>>([]);
@@ -228,7 +232,19 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="sm" 
+      fullWidth
+      fullScreen={isMobile}
+      sx={{
+        '& .MuiDialog-paper': {
+          minHeight: isMobile ? '100vh' : 'auto',
+          margin: isMobile ? 0 : '32px',
+        }
+      }}
+    >
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">
@@ -382,12 +398,38 @@ export const CreateGameModal: FC<CreateGameModalProps> = ({
         </Box>
       </DialogContent>
 
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+      <DialogActions sx={{ 
+        p: 2, 
+        gap: 2,
+        flexDirection: isMobile ? 'column' : 'row',
+        '& > *': {
+          minHeight: '48px',
+        }
+      }}>
+        <Button 
+          onClick={onClose}
+          sx={{ 
+            minWidth: isMobile ? '100%' : 'auto',
+            py: 1.5,
+          }}
+        >
+          Cancel
+        </Button>
         <Button 
           onClick={handleCreateLobby}
           variant="contained"
           disabled={!entryFee || loading || smsLoading}
+          sx={{ 
+            minWidth: isMobile ? '100%' : 'auto',
+            py: 1.5,
+            '&:active': {
+              transform: 'scale(0.98)',
+            },
+            '&:focus': {
+              outline: '2px solid #00e676',
+              outlineOffset: '2px',
+            }
+          }}
         >
           {loading ? 'Creating...' : smsLoading ? 'Sending SMS...' : 'Create Lobby'}
         </Button>

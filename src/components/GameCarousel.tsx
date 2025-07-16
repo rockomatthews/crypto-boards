@@ -200,16 +200,25 @@ export default function GameCarousel() {
                   </Typography>
                   <Button 
                     variant="contained" 
-                    size="medium"
+                    size="large"
                     onClick={() => handlePlayNow()}
                     sx={{ 
                       alignSelf: 'flex-start',
                       px: 3,
-                      py: 1,
+                      py: 1.5,
+                      minHeight: '48px',
                       borderRadius: 2,
                       background: 'linear-gradient(45deg, #9c27b0 30%, #00e676 90%)',
                       '&:hover': {
                         background: 'linear-gradient(45deg, #7b1fa2 30%, #00c853 90%)',
+                      },
+                      '&:active': {
+                        transform: 'scale(0.98)',
+                        background: 'linear-gradient(45deg, #6a1b9a 30%, #00a645 90%)',
+                      },
+                      '&:focus': {
+                        outline: '2px solid #00e676',
+                        outlineOffset: '2px',
                       }
                     }}
                   >
