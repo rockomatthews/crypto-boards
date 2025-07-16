@@ -6,6 +6,7 @@ import { WalletProviders } from '../components/WalletProviders';
 import ThemeRegistry from '../components/ThemeRegistry';
 import ClientHeader from '../components/ClientHeader';
 import { ChatProvider } from '../components/ChatContext';
+import { generateWebsiteSchema, generateOrganizationSchema } from '../lib/structured-data';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,9 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Crypto Boards - Play & Earn SOL",
-  description: "The ultimate crypto-powered board games platform. Play checkers, chess, and more with SOL betting. Winners take all in real-time multiplayer games on Solana.",
-  keywords: ["crypto games", "solana", "SOL", "board games", "checkers", "chess", "multiplayer", "web3", "betting", "esports"],
+  title: "Crypto Boards - Bet SOL on Classic Board Games | Solana Gaming",
+  description: "Bet SOL on classic board games against friends or strangers! Play Checkers, Battleship & Stratego with real crypto rewards on Solana. Fast, secure, winner-takes-all gaming.",
+  keywords: ["crypto board games", "solana betting", "SOL gambling", "blockchain gaming", "play to earn", "web3 games", "crypto checkers", "solana battleship", "stratego betting", "P2P gaming", "decentralized gaming", "NFT games", "crypto esports", "solana games 2024", "board game betting", "crypto gambling", "SOL casino", "multiplayer crypto games", "real money gaming"],
   authors: [{ name: "Crypto Boards" }],
   creator: "Crypto Boards",
   publisher: "Crypto Boards",
@@ -32,8 +33,8 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: '/',
     siteName: 'Crypto Boards',
-    title: 'Crypto Boards - Play & Earn SOL',
-    description: 'The ultimate crypto-powered board games platform. Play checkers, chess, and more with SOL betting. Winners take all in real-time multiplayer games on Solana.',
+    title: 'Crypto Boards - Bet SOL on Classic Board Games',
+    description: 'Bet SOL on classic board games! Play Checkers, Battleship & Stratego against friends or strangers with real crypto rewards. Winner takes all on Solana blockchain.',
     images: [
       {
         url: '/images/checkers.png',
@@ -57,8 +58,8 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     site: '@CryptoBoards',
     creator: '@CryptoBoards',
-    title: 'Crypto Boards - Play & Earn SOL',
-    description: 'Play checkers, chess & more with SOL betting. Winners take all! 🏆',
+    title: 'Crypto Boards - Bet SOL on Classic Board Games',
+    description: 'Bet SOL on Checkers, Battleship & Stratego! Play against friends or strangers with real crypto rewards. Winner takes all! 🏆💰',
     images: ['/images/checkers.png'],
   },
   
@@ -95,8 +96,25 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const websiteSchema = generateWebsiteSchema();
+  const organizationSchema = generateOrganizationSchema();
+
   return (
     <html lang="en">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(websiteSchema)
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(organizationSchema)
+          }}
+        />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <ThemeRegistry>
           <WalletProviders>
